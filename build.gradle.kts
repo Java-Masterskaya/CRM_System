@@ -1,7 +1,13 @@
+import com.github.spotbugs.snom.Confidence
+import com.github.spotbugs.snom.Effort
+import com.github.spotbugs.snom.SpotBugsTask
+import org.springframework.boot.gradle.plugin.SpringBootPlugin
+
 plugins {
 	java
+	checkstyle
 	id("org.springframework.boot") version "3.3.3"
-	id("io.spring.dependency-management") version "1.1.6"
+	id("com.github.spotbugs") version "6.5.11"
 }
 
 group = "ru.practicum"
@@ -18,6 +24,10 @@ repositories {
 }
 
 dependencies {
+	implementation(platform(SpringBootPlugin.BOM_COORDINATES))
+	annotationProcessor(platform(SpringBootPlugin.BOM_COORDINATES))
+	testAnnotationProcessor(platform(SpringBootPlugin.BOM_COORDINATES))
+
 	implementation("org.springframework.boot:spring-boot-starter-web")
 
 	compileOnly("org.projectlombok:lombok")
@@ -31,6 +41,28 @@ dependencies {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+}
+
+checkstyle {
+	toolVersion = "14.1.0"
+	configFile = file("config/checkstyle/checkstyle.xml")
+	configProperties = mapOf("org.checkstyle.google.severity" to "error")
+}
+
+spotbugs {
+	toolVersion = "4.10.4"
+	effort = Effort.MAX
+	reportLevel = Confidence.MEDIUM
+	excludeFilter = file("config/spotbugs/exclude.xml")
+}
+
+tasks.withType<SpotBugsTask> {
+	reports.create("html") {
+		required = true
+	}
+	reports.create("text") {
+		required = true
+	}
 }
 
 tasks.jar {
