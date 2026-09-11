@@ -5,6 +5,7 @@ import org.springframework.boot.gradle.plugin.SpringBootPlugin
 
 plugins {
 	java
+	jacoco
 	checkstyle
 	id("org.springframework.boot") version "3.3.3"
 	id("com.github.spotbugs") version "6.5.11"
@@ -63,6 +64,44 @@ tasks.withType<SpotBugsTask> {
 	reports.create("text") {
 		required = true
 	}
+}
+
+jacoco {
+	toolVersion = "0.8.15"
+}
+
+val coverageExclusions = listOf("ru/practicum/crm/CrmApplication.class")
+
+tasks.withType<JacocoReportBase> {
+	classDirectories.setFrom(classDirectories.files.map { fileTree(it) { exclude(coverageExclusions) } })
+}
+
+tasks.test {
+	finalizedBy(tasks.jacocoTestReport)
+}
+
+tasks.jacocoTestReport {
+	dependsOn(tasks.test)
+	reports {
+		xml.required = true
+		html.required = true
+	}
+}
+
+tasks.jacocoTestCoverageVerification {
+	dependsOn(tasks.test)
+	violationRules {
+		rule {
+			limit {
+				counter = "LINE"
+				minimum = "0.80".toBigDecimal()
+			}
+		}
+	}
+}
+
+tasks.check {
+	dependsOn(tasks.jacocoTestCoverageVerification)
 }
 
 tasks.jar {
