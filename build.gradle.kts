@@ -9,6 +9,7 @@ plugins {
 	checkstyle
 	id("org.springframework.boot") version "3.3.3"
 	id("com.github.spotbugs") version "6.5.11"
+	id("org.owasp.dependencycheck") version "13.0.0"
 }
 
 group = "ru.practicum"
@@ -102,6 +103,17 @@ tasks.jacocoTestCoverageVerification {
 
 tasks.check {
 	dependsOn(tasks.jacocoTestCoverageVerification)
+}
+
+dependencyCheck {
+	failBuildOnCVSS = 7.0f
+	suppressionFile = "config/dependency-check/suppressions.xml"
+	nvd {
+		apiKey = System.getenv("NVD_API_KEY")
+	}
+	analyzers {
+		assemblyEnabled = false
+	}
 }
 
 tasks.jar {
