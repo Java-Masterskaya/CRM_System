@@ -1,4 +1,4 @@
-package ru.practicum.crm.global.health;
+package ru.practicum.crm.common.health;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -3,7 +3,7 @@ spring:
     name: crm
     docker:
       compose:
-        enabled: false
+        enabled: true
 
 server:
   port: 8080

@@ -1,4 +1,4 @@
-package ru.practicum.crm.global.health;
+package ru.practicum.crm.common.health;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
