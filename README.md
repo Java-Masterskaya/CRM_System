@@ -57,7 +57,8 @@ SpotBugs — статический анализ
 ```
 
 ### CI
-`.github/workflows/ci.yaml` — запускается на PR и push в `main`.
+`.github/workflows/ci.yaml` — запускается на PR и push в `main`: Checkstyle, SpotBugs, тесты, покрытие.
+`.github/workflows/dependency-check.yaml` — OWASP Dependency-Check, по понедельникам в 06:00 UTC и вручную через workflow_dispatch. PR не блокирует.
 
 ### Запуск приложения
 ```bash
