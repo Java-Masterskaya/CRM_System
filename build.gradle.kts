@@ -43,6 +43,10 @@ dependencies {
 
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 	runtimeOnly("org.postgresql:postgresql")
+
+	testImplementation("com.tngtech.archunit:archunit-junit5:1.5.0")
+	testImplementation(platform("org.testcontainers:testcontainers-bom:2.0.5"))
+	testImplementation("org.testcontainers:postgresql")
 }
 
 tasks.withType<Test> {
