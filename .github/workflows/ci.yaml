@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          java-version: '21'
+          distribution: temurin
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Checkstyle
+        run: ./gradlew checkstyleMain checkstyleTest
+
+      - name: SpotBugs
+        if: ${{ !cancelled() }}
+        run: ./gradlew spotbugsMain spotbugsTest || { cat build/reports/spotbugs/*.txt; exit 1; }
+
+      - name: Build & Test
+        id: test
+        if: ${{ !cancelled() }}
+        run: ./gradlew assemble test
+
+      - name: Coverage
+        if: ${{ !cancelled() && steps.test.outcome == 'success' }}
+        run: ./gradlew jacocoTestCoverageVerification
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: reports
+          path: build/reports/
+          if-no-files-found: ignore
+          retention-days: 3
