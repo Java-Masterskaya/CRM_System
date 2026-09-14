@@ -18,7 +18,7 @@ class HealthControllerTest {
     private MockMvc mockMvc;
 
     @Test
-    void healthShouldReturnUpStatus() throws Exception {
+    void givenApplicationIsRunning_whenCheckHealth_thenStatusIsUp() throws Exception {
         mockMvc.perform(get("/health"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"));
