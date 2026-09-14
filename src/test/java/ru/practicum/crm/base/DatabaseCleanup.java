@@ -4,11 +4,10 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Table;
 import jakarta.persistence.metamodel.EntityType;
+import java.util.List;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Component
 public class DatabaseCleanup implements InitializingBean {
@@ -44,7 +43,9 @@ public class DatabaseCleanup implements InitializingBean {
             entityManager.flush();
             entityManager.createNativeQuery("SET CONSTRAINTS ALL DEFERRED").executeUpdate();
             for (String tableName : tableNames) {
-                entityManager.createNativeQuery("TRUNCATE TABLE %s RESTART IDENTITY CASCADE".formatted(tableName)).executeUpdate();
+                entityManager.createNativeQuery(
+                        "TRUNCATE TABLE %s RESTART IDENTITY CASCADE".formatted(tableName)
+                ).executeUpdate();
             }
         }
     }

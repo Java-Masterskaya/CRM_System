@@ -1,5 +1,8 @@
 package ru.practicum.crm.architecture;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.junit.AnalyzeClasses;
@@ -11,19 +14,20 @@ import com.tngtech.archunit.lang.SimpleConditionEvent;
 import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition;
 import org.junit.jupiter.api.Test;
 
-import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
-import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
-
 @AnalyzeClasses(packages = "ru.practicum.crm")
 public class ArchitectureRulesTest {
+
+    private static final String BUSINESS_LAYERS =
+            "ru.practicum.crm\\.(?!\\1\\b)[^.]+\\.(domain|repository|service\\.impl)\\..*";
 
     @ArchTest
     static final ArchRule packages_should_only_expose_api_and_events = noClasses()
             .that().resideInAPackage("crm.(*)..")
             .should().dependOnClassesThat()
-            .haveNameMatching("crm\\.(?!\\1\\b)[^.]+\\.(domain|repository|service\\.impl)\\..*")
+            .haveNameMatching(BUSINESS_LAYERS)
             .allowEmptyShould(true)
-            .because("Пакет предоставляет наружу только свой публичный сервис-интерфейс и DTO. Сущности, репозитории и внутренние классы наружу не выходят.");
+            .because("Пакет предоставляет наружу только свой публичный сервис-интерфейс и"
+                    + " DTO. Сущности, репозитории и внутренние классы наружу не выходят.");
 
     @ArchTest
     static final ArchRule controllers_must_not_access_repositories = noClasses()
@@ -50,27 +54,31 @@ public class ArchitectureRulesTest {
     @ArchTest
     static final ArchRule event_should_not_depend_on_heavy_layers = noClasses()
             .that().resideInAPackage("..event..")
-            .should().dependOnClassesThat().resideInAnyPackage("..api..", "..service..", "..repository..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "..api..", "..service..", "..repository..")
             .allowEmptyShould(true)
-            .because("события (events) должны быть изолированными и легковесными. " +
-                    "Они не могут знать о существовании бизнес-логики, контроллеров или баз данных.");
+            .because("события (events) должны быть изолированными и легковесными. "
+                    + "Они не могут знать о существовании бизнес-логики, "
+                    + "контроллеров или баз данных.");
 
     @ArchTest
     static final ArchRule test_methods_must_follow_naming_convention = classes()
-            .should(new ArchCondition<>("содержать только методы тестирования, описывающие сценарий и результат") {
+            .should(new ArchCondition<>("описывающие сценарий и результат") {
                 @Override
                 public void check(JavaClass javaClass, ConditionEvents events) {
                     for (JavaMethod method : javaClass.getMethods()) {
                         if (method.isAnnotatedWith(Test.class)) {
                             String methodName = method.getName();
 
-                            if ("contextLoads".equals(methodName)) continue;
+                            if ("contextLoads".equals(methodName)) {
+                                continue;
+                            }
 
                             if (!methodName.contains("_")) {
-                                String message = String.format(
-                                        "Тест %s.%s() оформлен не по конвенции! " +
-                                                "Имя должно описывать БИЗНЕС-СЦЕНАРИЙ и ОЖИДАЕМЫЙ РЕЗУЛЬТАТ через '_', а не имя метода.",
-                                        javaClass.getSimpleName(), methodName);
+                                String message =
+                                        String.format("Тест %s.%s() должен содержать '_'",
+                                                javaClass.getSimpleName(),
+                                                methodName);
                                 events.add(SimpleConditionEvent.violated(method, message));
                             }
                         }
@@ -78,6 +86,6 @@ public class ArchitectureRulesTest {
                 }
             })
             .allowEmptyShould(true)
-            .because("Имена тестовых методов должны строиться по паттерну 'given_when_then' " +
-                    "или 'сценарий_ожидаемыйРезультат' через нижнее подчеркивание для генерации понятных отчетов.");
+            .because("мы зафиксировали соглашение: имена тестовых методов "
+                    + "должны строиться по паттерну 'given_when_then'.");
 }
