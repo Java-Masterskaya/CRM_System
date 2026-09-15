@@ -15,7 +15,7 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
-      ddl-auto: none
+      ddl-auto: validate
     show-sql: false
 
   mail:
@@ -27,7 +27,6 @@ spring:
           auth: false
           starttls:
             enable: false
-
 server:
   port: ${SERVER_PORT:8080}
   servlet:
