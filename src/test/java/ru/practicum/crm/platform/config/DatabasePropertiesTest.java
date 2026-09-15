@@ -1,12 +1,11 @@
 package ru.practicum.crm.platform.config;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import ru.practicum.crm.platform.config.DatabaseProperties;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class DatabasePropertiesTest {
 

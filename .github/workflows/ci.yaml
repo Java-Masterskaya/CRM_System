@@ -42,6 +42,8 @@ jobs:
         id: test
         if: ${{ !cancelled() }}
         run: ./gradlew assemble test
+        env:
+          SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
 
       - name: Coverage
         if: ${{ !cancelled() && steps.test.outcome == 'success' }}
