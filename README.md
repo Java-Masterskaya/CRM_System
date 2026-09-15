@@ -74,6 +74,39 @@ SpotBugs — статический анализ
 ```bash
 cp .env.example .env
 ```
+Профили Spring: `local` (по умолчанию), `test`, `prod`.
+
+`local` используется для разработки и запускается вместе с локальными PostgreSQL и MailHog.
+
+`test` используется для автотестов.
+
+`prod` предназначен для запуска с внешними сервисами и требует полного набора
+обязательных переменных окружения.
+
+Чувствительные значения, включая пароли базы данных и SMTP, не хранятся
+в конфигурационных файлах и передаются через переменные окружения.
+
+Обязательные настройки валидируются при старте приложения. При отсутствии
+необходимого значения запуск завершается с ошибкой, содержащей имя недостающей
+настройки.
+### Переменные окружения
+
+| Переменная | Назначение |
+|---|---|
+| `POSTGRES_DB` | Имя базы PostgreSQL для локального Docker Compose |
+| `POSTGRES_USER` | Пользователь PostgreSQL для локального Docker Compose |
+| `POSTGRES_PASSWORD` | Пароль PostgreSQL для локального Docker Compose |
+| `POSTGRES_PORT` | Порт PostgreSQL на хосте |
+| `SERVER_PORT` | Порт HTTP-сервера CRM |
+| `SMTP_HOST` | Хост почтовой заглушки для локальной среды |
+| `SMTP_PORT` | Порт почтовой заглушки |
+| `SPRING_DATASOURCE_URL` | JDBC-адрес PostgreSQL |
+| `SPRING_DATASOURCE_USERNAME` | Пользователь PostgreSQL |
+| `SPRING_DATASOURCE_PASSWORD` | Пароль PostgreSQL |
+| `SPRING_MAIL_HOST` | SMTP-сервер |
+| `SPRING_MAIL_PORT` | SMTP-порт |
+| `SPRING_MAIL_USERNAME` | Пользователь SMTP |
+| `SPRING_MAIL_PASSWORD` | Пароль SMTP |
 
 ### Эндпоинты API
 Базовый префикс всех эндпоинтов: /api/v1
