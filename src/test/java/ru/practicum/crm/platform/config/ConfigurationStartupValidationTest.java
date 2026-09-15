@@ -1,13 +1,11 @@
 package ru.practicum.crm.platform.config;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
-import ru.practicum.crm.platform.config.DatabaseProperties;
-import ru.practicum.crm.platform.config.MailProperties;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class ConfigurationStartupValidationTest {
 
