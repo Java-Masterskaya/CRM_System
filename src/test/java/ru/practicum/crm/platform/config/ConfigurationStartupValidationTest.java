@@ -1,0 +1,80 @@
+package ru.practicum.crm.platform.config;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Configuration;
+import ru.practicum.crm.platform.config.DatabaseProperties;
+import ru.practicum.crm.platform.config.MailProperties;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class ConfigurationStartupValidationTest {
+
+    @Configuration(proxyBeanMethods = false)
+    @EnableConfigurationProperties({DatabaseProperties.class, MailProperties.class})
+    static class PropertiesConfig {
+    }
+
+    private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+            .withUserConfiguration(PropertiesConfig.class)
+            .withPropertyValues(
+                    "app.mail.host=localhost",
+                    "app.mail.port=1025",
+                    "app.mail.auth=false"
+            );
+
+    @Test
+    void contextFailsNamingMissingDatabaseUrl() {
+        contextRunner
+                .withPropertyValues(
+                        "app.database.username=crm_user",
+                        "app.database.password=secret")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("app.database.url");
+                });
+    }
+
+    @Test
+    void contextFailsNamingMissingDatabasePassword() {
+        contextRunner
+                .withPropertyValues(
+                        "app.database.url=jdbc:postgresql://localhost:5432/crm_db",
+                        "app.database.username=crm_user")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("app.database.password");
+                });
+    }
+
+    @Test
+    void contextFailsWhenSmtpAuthEnabledWithoutCredentials() {
+        contextRunner
+                .withPropertyValues(
+                        "app.database.url=jdbc:postgresql://localhost:5432/crm_db",
+                        "app.database.username=crm_user",
+                        "app.database.password=secret",
+                        "app.mail.auth=true")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("username and password are required");
+                });
+    }
+
+    @Test
+    void contextStartsWithCompleteConfiguration() {
+        contextRunner
+                .withPropertyValues(
+                        "app.database.url=jdbc:postgresql://localhost:5432/crm_db",
+                        "app.database.username=crm_user",
+                        "app.database.password=secret")
+                .run(context -> assertThat(context).hasNotFailed());
+    }
+}

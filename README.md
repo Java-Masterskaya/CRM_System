@@ -74,6 +74,31 @@ SpotBugs — статический анализ
 ```bash
 cp .env.example .env
 ```
+Профили Spring: `local` (по умолчанию), `test`, `prod`. Local и test имеют
+дефолты для БД и почты (test использует БД `crm_test_db`); prod стартует только
+при полностью заданном окружении — отсутствие обязательной переменной приводит
+к ошибке с указанием недостающей настройки.
+
+Переменные без дефолтов и их проверка описаны в `application-*.yaml`
+(префиксы `app.database.*` и `app.mail.*`) и валидируются на старте.
+### Переменные окружения
+
+| Переменная | Назначение |
+|---|---|
+| `POSTGRES_DB` | Имя базы PostgreSQL для локального Docker Compose |
+| `POSTGRES_USER` | Пользователь PostgreSQL для локального Docker Compose |
+| `POSTGRES_PASSWORD` | Пароль PostgreSQL для локального Docker Compose |
+| `POSTGRES_PORT` | Порт PostgreSQL на хосте |
+| `SERVER_PORT` | Порт HTTP-сервера CRM |
+| `SMTP_HOST` | Хост почтовой заглушки для локальной среды |
+| `SMTP_PORT` | Порт почтовой заглушки |
+| `SPRING_DATASOURCE_URL` | JDBC-адрес PostgreSQL |
+| `SPRING_DATASOURCE_USERNAME` | Пользователь PostgreSQL |
+| `SPRING_DATASOURCE_PASSWORD` | Пароль PostgreSQL |
+| `SPRING_MAIL_HOST` | SMTP-сервер |
+| `SPRING_MAIL_PORT` | SMTP-порт |
+| `SPRING_MAIL_USERNAME` | Пользователь SMTP |
+| `SPRING_MAIL_PASSWORD` | Пароль SMTP |
 
 ### Эндпоинты API
 Базовый префикс всех эндпоинтов: /api/v1
