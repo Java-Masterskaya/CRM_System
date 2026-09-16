@@ -25,7 +25,6 @@ public class ArchitectureRulesTest {
     static final ArchRule packages_should_only_expose_api_and_events =
             SlicesRuleDefinition.slices().matching(getBasePackage(".(*).."))
                     .should().notDependOnEachOther()
-                    .allowEmptyShould(true)
                     .because("Пакет предоставляет наружу только свой публичный сервис-интерфейс и"
                             + " DTO. Сущности, репозитории и внутренние классы наружу не выходят.");
 
@@ -44,14 +43,12 @@ public class ArchitectureRulesTest {
                             .and(JavaClass.Predicates.resideOutsideOfPackage(
                                     getBasePackage(".common..")))
             )
-            .allowEmptyShould(true)
             .because("Модуль common не должен зависить ни от одного функционального пакета.");
 
     @ArchTest
     static final ArchRule no_cyclic_dependencies_between_packages = SlicesRuleDefinition.slices()
             .matching(getBasePackage(".(*).."))
             .should().beFreeOfCycles()
-            .allowEmptyShould(true)
             .because("Между функциональными пакетами не должно быть циклических зависимостей.");
 
     @ArchTest
@@ -89,7 +86,6 @@ public class ArchitectureRulesTest {
                     }
                 }
             })
-            .allowEmptyShould(true)
             .because("мы зафиксировали соглашение: имена тестовых методов "
                     + "должны строиться по паттерну 'given_when_then'.");
 }
