@@ -18,12 +18,12 @@ class PageRequestsTest {
     private static final Set<String> ALLOWED = Set.of("createdAt", "status");
 
     @Test
-    void toPageable_whenNoParameters_usesDefaults() {
+    void toPageable_whenNoParameters_usesDefaultsAndOrdersById() {
         Pageable pageable = PageRequests.toPageable(null, null, null, ALLOWED);
 
         assertThat(pageable.getPageNumber()).isEqualTo(PageRequests.DEFAULT_PAGE);
         assertThat(pageable.getPageSize()).isEqualTo(PageRequests.DEFAULT_SIZE);
-        assertThat(pageable.getSort().isSorted()).isFalse();
+        assertThat(pageable.getSort().toList()).containsExactly(Sort.Order.asc("id"));
     }
 
     @Test
@@ -77,14 +77,22 @@ class PageRequestsTest {
     }
 
     @Test
-    void toPageable_whenSortIsValid_buildsOrders() {
+    void toPageable_whenSortIsValid_appendsIdAsLastKey() {
         Pageable pageable = PageRequests.toPageable(1, 50,
                 List.of("status", "createdAt,desc"), ALLOWED);
 
         assertThat(pageable.getPageNumber()).isEqualTo(1);
         assertThat(pageable.getPageSize()).isEqualTo(50);
         assertThat(pageable.getSort().toList()).containsExactly(
-                Sort.Order.asc("status"), Sort.Order.desc("createdAt"));
+                Sort.Order.asc("status"), Sort.Order.desc("createdAt"), Sort.Order.asc("id"));
+    }
+
+    @Test
+    void toPageable_whenClientSortsById_doesNotDuplicateTieBreaker() {
+        Pageable pageable = PageRequests.toPageable(0, 20, List.of("id,desc"),
+                Set.of("id", "status"));
+
+        assertThat(pageable.getSort().toList()).containsExactly(Sort.Order.desc("id"));
     }
 
     @Test

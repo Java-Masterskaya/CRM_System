@@ -16,6 +16,7 @@ public final class PageRequests {
     public static final int DEFAULT_PAGE = 0;
     public static final int DEFAULT_SIZE = 20;
     public static final int MAX_SIZE = 100;
+    public static final String TIE_BREAKER_FIELD = "id";
 
     private static final String PAGE_PARAM = "page";
     private static final String SIZE_PARAM = "size";
@@ -43,12 +44,19 @@ public final class PageRequests {
                     "должно быть не больше " + MAX_SIZE));
         }
 
-        Sort resolvedSort = parseSort(sort, allowedSortFields, errors);
+        Sort resolvedSort = withTieBreaker(parseSort(sort, allowedSortFields, errors));
 
         if (!errors.isEmpty()) {
             throw new ApiException(ErrorCode.VALIDATION_FAILED, null, errors);
         }
         return PageRequest.of(resolvedPage, resolvedSize, resolvedSort);
+    }
+
+    private static Sort withTieBreaker(Sort sort) {
+        if (sort.getOrderFor(TIE_BREAKER_FIELD) != null) {
+            return sort;
+        }
+        return sort.and(Sort.by(Sort.Order.asc(TIE_BREAKER_FIELD)));
     }
 
     private static Sort parseSort(List<String> sort, Set<String> allowedSortFields,
