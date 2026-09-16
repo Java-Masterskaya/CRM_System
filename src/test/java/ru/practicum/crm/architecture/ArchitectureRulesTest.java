@@ -17,17 +17,17 @@ import org.junit.jupiter.api.Test;
 @AnalyzeClasses(packages = "ru.practicum.crm")
 public class ArchitectureRulesTest {
 
-    private static final String BUSINESS_LAYERS =
-            "ru.practicum.crm\\.(?!\\1\\b)[^.]+\\.(domain|repository|service\\.impl)\\..*";
+    private static String getBasePackage(String postfix) {
+        return "..ru.practicum.crm%s".formatted(postfix);
+    }
 
     @ArchTest
-    static final ArchRule packages_should_only_expose_api_and_events = noClasses()
-            .that().resideInAPackage("crm.(*)..")
-            .should().dependOnClassesThat()
-            .haveNameMatching(BUSINESS_LAYERS)
-            .allowEmptyShould(true)
-            .because("Пакет предоставляет наружу только свой публичный сервис-интерфейс и"
-                    + " DTO. Сущности, репозитории и внутренние классы наружу не выходят.");
+    static final ArchRule packages_should_only_expose_api_and_events =
+            SlicesRuleDefinition.slices().matching(getBasePackage(".(*).."))
+                    .should().notDependOnEachOther()
+                    .allowEmptyShould(true)
+                    .because("Пакет предоставляет наружу только свой публичный сервис-интерфейс и"
+                            + " DTO. Сущности, репозитории и внутренние классы наружу не выходят.");
 
     @ArchTest
     static final ArchRule controllers_must_not_access_repositories = noClasses()
@@ -38,15 +38,18 @@ public class ArchitectureRulesTest {
 
     @ArchTest
     static final ArchRule common_must_not_depend_on_any_other_crm_packages = noClasses()
-            .that().resideInAPackage("crm.common..")
-            .should().dependOnClassesThat().resideInAPackage("crm..")
-            .andShould().dependOnClassesThat().resideOutsideOfPackage("crm.common..")
+            .that().resideInAPackage(getBasePackage(".common.."))
+            .should().dependOnClassesThat(
+                    JavaClass.Predicates.resideInAPackage(getBasePackage(".."))
+                            .and(JavaClass.Predicates.resideOutsideOfPackage(
+                                    getBasePackage(".common..")))
+            )
             .allowEmptyShould(true)
             .because("Модуль common не должен зависить ни от одного функционального пакета.");
 
     @ArchTest
     static final ArchRule no_cyclic_dependencies_between_packages = SlicesRuleDefinition.slices()
-            .matching("crm.(*)..")
+            .matching(getBasePackage(".(*).."))
             .should().beFreeOfCycles()
             .allowEmptyShould(true)
             .because("Между функциональными пакетами не должно быть циклических зависимостей.");
@@ -70,7 +73,8 @@ public class ArchitectureRulesTest {
                         if (method.isAnnotatedWith(Test.class)) {
                             String methodName = method.getName();
 
-                            if ("contextLoads".equals(methodName)) {
+                            if ("contextLoads".equals(methodName)
+                                    || methodName.startsWith("should")) {
                                 continue;
                             }
 

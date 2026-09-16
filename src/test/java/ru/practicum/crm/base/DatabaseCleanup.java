@@ -20,14 +20,13 @@ public class DatabaseCleanup implements InitializingBean {
     @Override
     public void afterPropertiesSet() {
         tableNames = entityManager.getMetamodel().getEntities().stream()
-                .filter(entity -> entity.getJavaType().isAnnotationPresent(Table.class))
                 .map(this::getTableName)
                 .toList();
     }
 
     private String getTableName(EntityType<?> entity) {
         Class<?> javaType = entity.getJavaType();
-        if (javaType.isAnnotationPresent(Table.class)) {
+        if (javaType != null && javaType.isAnnotationPresent(Table.class)) {
             String tableName = javaType.getAnnotation(Table.class).name();
             if (!tableName.isBlank()) {
                 return tableName;
@@ -43,9 +42,8 @@ public class DatabaseCleanup implements InitializingBean {
             entityManager.flush();
             entityManager.createNativeQuery("SET CONSTRAINTS ALL DEFERRED").executeUpdate();
             for (String tableName : tableNames) {
-                entityManager.createNativeQuery(
-                        "TRUNCATE TABLE %s RESTART IDENTITY CASCADE".formatted(tableName)
-                ).executeUpdate();
+                String sql = "TRUNCATE TABLE %s RESTART IDENTITY CASCADE".formatted(tableName);
+                entityManager.createNativeQuery(sql).executeUpdate();
             }
         }
     }

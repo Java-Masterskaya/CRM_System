@@ -86,11 +86,25 @@ tasks.withType<JacocoReportBase> {
 }
 
 tasks.test {
+	useJUnitPlatform()
+	include("**/*Test.class")
+	exclude("**/*IT.class")
 	finalizedBy(tasks.jacocoTestReport)
 }
 
+val itTest = tasks.register<Test>("itTest") {
+	description = "Runs integration tests with Testcontainers."
+	group = "verification"
+
+	useJUnitPlatform()
+	include("**/*IT.class")   // Запускает только файлы, заканчивающиеся на IT
+
+	shouldRunAfter(tasks.test) // Интеграционные тесты запускаются после быстрых
+}
+
+
 tasks.jacocoTestReport {
-	dependsOn(tasks.test)
+	dependsOn(tasks.test, itTest)
 	reports {
 		xml.required = true
 		html.required = true
