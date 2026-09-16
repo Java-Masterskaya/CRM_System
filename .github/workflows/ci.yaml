@@ -18,6 +18,20 @@ jobs:
     name: Build & Test
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: crm_db
+          POSTGRES_USER: crm_user
+          POSTGRES_PASSWORD: crm_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U crm_user -d crm_db"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     steps:
       - name: Checkout
         uses: actions/checkout@v7
