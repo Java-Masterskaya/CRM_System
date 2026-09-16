@@ -42,6 +42,8 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-mail")
 
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+	implementation("org.flywaydb:flyway-core")
+	implementation("org.flywaydb:flyway-database-postgresql")
 	runtimeOnly("org.postgresql:postgresql")
 
 	testImplementation("com.tngtech.archunit:archunit-junit5:1.5.0")
