@@ -2,18 +2,11 @@ spring:
   application:
     name: crm
 
-  docker:
-    compose:
-      enabled: true
+  profiles:
+    default: local
 
   flyway:
     out-of-order: true
-
-  datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/crm_db}
-    username: ${SPRING_DATASOURCE_USERNAME:crm_user}
-    password: ${SPRING_DATASOURCE_PASSWORD:crm_password}
-    driver-class-name: org.postgresql.Driver
 
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
@@ -21,16 +14,8 @@ spring:
       ddl-auto: validate
     show-sql: false
 
-  mail:
-    host: ${SPRING_MAIL_HOST:localhost}
-    port: ${SPRING_MAIL_PORT:1025}
-    properties:
-      mail:
-        smtp:
-          auth: false
-          starttls:
-            enable: false
 server:
   port: ${SERVER_PORT:8080}
+
   servlet:
     context-path: /api/v1
