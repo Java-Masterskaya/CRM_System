@@ -1,7 +1,10 @@
 spring:
-  docker:
-    compose:
-      enabled: true
+
+  sql:
+    init:
+      mode: always
+      data-locations: classpath:db/seed/dev-data.sql
+      defer-datasource-initialization: true
 
   datasource:
     url: ${app.database.url}
