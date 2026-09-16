@@ -6,6 +6,9 @@ spring:
     compose:
       enabled: true
 
+  flyway:
+    out-of-order: true
+
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/crm_db}
     username: ${SPRING_DATASOURCE_USERNAME:crm_user}
