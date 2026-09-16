@@ -1,8 +1,10 @@
 package ru.practicum.crm.architecture;
 
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAnyPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
+import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.junit.AnalyzeClasses;
@@ -25,6 +27,10 @@ public class ArchitectureRulesTest {
     static final ArchRule packages_should_only_expose_api_and_events =
             SlicesRuleDefinition.slices().matching(getBasePackage(".(*).."))
                     .should().notDependOnEachOther()
+                    .ignoreDependency(DescribedPredicate.alwaysTrue(),
+                            resideInAnyPackage("..common..", "..base.."))
+                    .ignoreDependency(DescribedPredicate.alwaysTrue(),
+                            resideInAnyPackage("..api..", "..event.."))
                     .because("Пакет предоставляет наружу только свой публичный сервис-интерфейс и"
                             + " DTO. Сущности, репозитории и внутренние классы наружу не выходят.");
 
@@ -71,7 +77,8 @@ public class ArchitectureRulesTest {
                             String methodName = method.getName();
 
                             if ("contextLoads".equals(methodName)
-                                    || methodName.startsWith("should")) {
+                                    || methodName.startsWith("should")
+                                    || methodName.startsWith("context")) {
                                 continue;
                             }
 

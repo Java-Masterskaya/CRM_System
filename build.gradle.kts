@@ -97,14 +97,16 @@ val itTest = tasks.register<Test>("itTest") {
 	group = "verification"
 
 	useJUnitPlatform()
-	include("**/*IT.class")   // Запускает только файлы, заканчивающиеся на IT
+	include("**/*IT.class")
 
-	shouldRunAfter(tasks.test) // Интеграционные тесты запускаются после быстрых
+	shouldRunAfter(tasks.test)
+
+	finalizedBy(tasks.jacocoTestReport)
 }
 
 
 tasks.jacocoTestReport {
-	dependsOn(tasks.test, itTest)
+	dependsOn(tasks.test)
 	reports {
 		xml.required = true
 		html.required = true

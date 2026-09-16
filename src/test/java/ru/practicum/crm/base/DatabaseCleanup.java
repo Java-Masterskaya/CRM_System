@@ -26,14 +26,20 @@ public class DatabaseCleanup implements InitializingBean {
 
     private String getTableName(EntityType<?> entity) {
         Class<?> javaType = entity.getJavaType();
-        if (javaType != null && javaType.isAnnotationPresent(Table.class)) {
-            String tableName = javaType.getAnnotation(Table.class).name();
-            if (!tableName.isBlank()) {
-                return tableName;
+        if (javaType != null) {
+            Table annotation = javaType.getAnnotation(Table.class);
+            if (annotation != null && !annotation.name().isBlank()) {
+                return annotation.name();
             }
+
+            return transformName(javaType.getSimpleName());
         }
 
-        return entity.getName().toLowerCase();
+        return transformName(entity.getName());
+    }
+
+    private String transformName(String name) {
+        return name.replaceAll("(?<!^)(?=[A-Z])", "_").toLowerCase();
     }
 
     @Transactional
