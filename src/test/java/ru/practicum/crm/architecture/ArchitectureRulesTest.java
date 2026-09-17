@@ -77,8 +77,7 @@ public class ArchitectureRulesTest {
                             String methodName = method.getName();
 
                             if ("contextLoads".equals(methodName)
-                                    || methodName.startsWith("should")
-                                    || methodName.startsWith("context")) {
+                                    || methodName.startsWith("should")) {
                                 continue;
                             }
 
