@@ -19,3 +19,15 @@ server:
 
   servlet:
     context-path: /api/v1
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

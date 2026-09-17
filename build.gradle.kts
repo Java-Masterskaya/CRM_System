@@ -50,6 +50,7 @@ dependencies {
 	testImplementation("com.tngtech.archunit:archunit-junit5:1.5.0")
 	testImplementation(platform("org.testcontainers:testcontainers-bom:2.0.5"))
 	testImplementation("org.testcontainers:postgresql")
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
 }
 
 tasks.withType<Test> {
