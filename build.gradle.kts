@@ -92,7 +92,6 @@ tasks.withType<JacocoReportBase> {
 
 tasks.test {
 	useJUnitPlatform()
-	include("**/*Test.class")
 	exclude("**/*IT.class")
 	finalizedBy(tasks.jacocoTestReport)
 }
