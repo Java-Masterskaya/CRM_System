@@ -31,6 +31,7 @@ dependencies {
 	testAnnotationProcessor(platform(SpringBootPlugin.BOM_COORDINATES))
 
 	implementation("org.springframework.boot:spring-boot-starter-web")
+	implementation("org.springframework.boot:spring-boot-starter-validation")
 
 	compileOnly("org.projectlombok:lombok")
 	annotationProcessor("org.projectlombok:lombok")
@@ -53,6 +54,7 @@ dependencies {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+	environment("SPRING_PROFILES_ACTIVE", "test")
 }
 
 checkstyle {

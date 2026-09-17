@@ -22,13 +22,13 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: crm_db
-          POSTGRES_USER: crm_user
-          POSTGRES_PASSWORD: crm_password
+          POSTGRES_DB: crm_test_db
+          POSTGRES_USER: crm_test_user
+          POSTGRES_PASSWORD: test_password
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U crm_user -d crm_db"
+          --health-cmd="pg_isready -U crm_test_user -d crm_test_db"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
