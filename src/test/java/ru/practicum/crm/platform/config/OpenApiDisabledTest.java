@@ -14,13 +14,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.env.PropertySource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.test.web.servlet.MockMvc;
+import ru.practicum.crm.base.BaseIntegrationTest;
 
 @SpringBootTest(properties = {
     "springdoc.api-docs.enabled=false",
     "springdoc.swagger-ui.enabled=false"
 })
 @AutoConfigureMockMvc
-class OpenApiDisabledTest {
+class OpenApiDisabledTest extends BaseIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;

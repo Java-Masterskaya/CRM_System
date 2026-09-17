@@ -47,6 +47,9 @@ dependencies {
 	implementation("org.flywaydb:flyway-database-postgresql")
 	runtimeOnly("org.postgresql:postgresql")
 
+	testImplementation("com.tngtech.archunit:archunit-junit5:1.5.0")
+	testImplementation(platform("org.testcontainers:testcontainers-bom:2.0.5"))
+	testImplementation("org.testcontainers:postgresql")
 	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
 }
 
@@ -88,8 +91,23 @@ tasks.withType<JacocoReportBase> {
 }
 
 tasks.test {
+	useJUnitPlatform()
+	exclude("**/*IT.class")
 	finalizedBy(tasks.jacocoTestReport)
 }
+
+val itTest = tasks.register<Test>("itTest") {
+	description = "Runs integration tests with Testcontainers."
+	group = "verification"
+
+	useJUnitPlatform()
+	include("**/*IT.class")
+
+	shouldRunAfter(tasks.test)
+
+	finalizedBy(tasks.jacocoTestReport)
+}
+
 
 tasks.jacocoTestReport {
 	dependsOn(tasks.test)

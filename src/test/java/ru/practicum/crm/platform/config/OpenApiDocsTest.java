@@ -11,10 +11,11 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import ru.practicum.crm.base.BaseIntegrationTest;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class OpenApiDocsTest {
+class OpenApiDocsTest extends BaseIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
