@@ -1,0 +1,31 @@
+spring:
+  docker:
+    compose:
+      enabled: false
+
+  datasource:
+    url: ${app.database.url}
+    username: ${app.database.username}
+    password: ${app.database.password}
+    driver-class-name: org.postgresql.Driver
+
+  mail:
+    host: ${app.mail.host}
+    port: ${app.mail.port}
+    properties:
+      mail:
+        smtp:
+          auth: ${app.mail.auth}
+          starttls:
+            enable: false
+
+app:
+  database:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/crm_test_db}
+    username: ${SPRING_DATASOURCE_USERNAME:crm_test_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:test_password}
+
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+    auth: false

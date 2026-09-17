@@ -31,6 +31,7 @@ dependencies {
 	testAnnotationProcessor(platform(SpringBootPlugin.BOM_COORDINATES))
 
 	implementation("org.springframework.boot:spring-boot-starter-web")
+	implementation("org.springframework.boot:spring-boot-starter-validation")
 
 	compileOnly("org.projectlombok:lombok")
 	annotationProcessor("org.projectlombok:lombok")
@@ -42,6 +43,8 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-mail")
 
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+	implementation("org.flywaydb:flyway-core")
+	implementation("org.flywaydb:flyway-database-postgresql")
 	runtimeOnly("org.postgresql:postgresql")
 
 	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
@@ -49,6 +52,7 @@ dependencies {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+	environment("SPRING_PROFILES_ACTIVE", "test")
 }
 
 checkstyle {
