@@ -1,7 +1,9 @@
 package ru.practicum.crm.common.error;
 
 import java.net.URI;
+import java.util.EnumSet;
 import java.util.Locale;
+import java.util.Set;
 import org.springframework.http.HttpStatus;
 
 public enum ErrorCode {
@@ -20,6 +22,8 @@ public enum ErrorCode {
             "Запрошенный объект не найден."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "Метод не поддерживается",
             "Этот HTTP-метод недоступен для указанного адреса."),
+    NOT_ACCEPTABLE(HttpStatus.NOT_ACCEPTABLE, "Формат ответа не поддерживается",
+            "Сервис не может вернуть ответ в запрошенном формате. Запросите JSON."),
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Неподдерживаемый формат данных",
             "Отправьте тело запроса в формате JSON."),
     INVALID_TRANSITION(HttpStatus.CONFLICT, "Недопустимый переход статуса",
@@ -34,9 +38,18 @@ public enum ErrorCode {
             "Слишком много попыток. Повторите позже."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Внутренняя ошибка сервиса",
             "Непредвиденная ошибка. Если она повторяется, сообщите идентификатор запроса "
-                    + "в поддержку.");
+                    + "в поддержку."),
+    SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Сервис временно недоступен",
+            "Сервис временно не может обработать запрос. Повторите позже."),
+    CLIENT_ERROR(HttpStatus.BAD_REQUEST, "Ошибка запроса",
+            "Запрос не может быть выполнен.");
 
     private static final String TYPE_BASE = "https://crm.example/problems/";
+
+    private static final Set<ErrorCode> DOMAIN_SPECIFIC = EnumSet.of(VALIDATION_FAILED,
+            INVALID_CREDENTIALS, INVALID_TRANSITION, STALE_VERSION, ALREADY_EXISTS);
+
+    private static final Set<ErrorCode> FALLBACK_ONLY = EnumSet.of(CLIENT_ERROR);
 
     private final HttpStatus status;
     private final String title;
@@ -51,17 +64,13 @@ public enum ErrorCode {
     }
 
     public static ErrorCode byStatus(int statusValue) {
-        if (statusValue >= 500) {
-            return INTERNAL_ERROR;
-        }
         for (ErrorCode candidate : values()) {
-            if (candidate != VALIDATION_FAILED && candidate != INVALID_CREDENTIALS
-                    && candidate != INVALID_TRANSITION && candidate != STALE_VERSION
-                    && candidate != ALREADY_EXISTS && candidate.status.value() == statusValue) {
+            if (!DOMAIN_SPECIFIC.contains(candidate) && !FALLBACK_ONLY.contains(candidate)
+                    && candidate.status.value() == statusValue) {
                 return candidate;
             }
         }
-        return null;
+        return statusValue >= 500 ? INTERNAL_ERROR : CLIENT_ERROR;
     }
 
     public HttpStatus getStatus() {
