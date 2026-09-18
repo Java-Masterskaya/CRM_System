@@ -35,6 +35,7 @@ services:
     container_name: crm-app
     ports:
       - "${SERVER_PORT:-8080}:8080"
+      - "8081:8081"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-crm_db}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-crm_user}

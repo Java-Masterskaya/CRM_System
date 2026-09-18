@@ -19,6 +19,13 @@ spring:
           starttls:
             enable: false
 
+management:
+  server:
+    port: 0
+  endpoint:
+    health:
+      show-details: never
+
 app:
   database:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/crm_test_db}
