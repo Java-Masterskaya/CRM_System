@@ -23,7 +23,7 @@ class ConfigurationStartupValidationTest {
             );
 
     @Test
-    void contextFailsNamingMissingDatabaseUrl() {
+    void shouldFailContextWhenDatabaseUrlIsMissing() {
         contextRunner
                 .withPropertyValues(
                         "app.database.username=crm_user",
@@ -37,7 +37,7 @@ class ConfigurationStartupValidationTest {
     }
 
     @Test
-    void contextFailsNamingMissingDatabasePassword() {
+    void shouldFailContextWhenDatabasePasswordIsMissing() {
         contextRunner
                 .withPropertyValues(
                         "app.database.url=jdbc:postgresql://localhost:5432/crm_db",
@@ -51,7 +51,7 @@ class ConfigurationStartupValidationTest {
     }
 
     @Test
-    void contextFailsWhenSmtpAuthEnabledWithoutCredentials() {
+    void shouldFailContextWhenSmtpAuthEnabledWithoutCredentials() {
         contextRunner
                 .withPropertyValues(
                         "app.database.url=jdbc:postgresql://localhost:5432/crm_db",
@@ -67,7 +67,7 @@ class ConfigurationStartupValidationTest {
     }
 
     @Test
-    void contextStartsWithCompleteConfiguration() {
+    void shouldStartContextWithCompleteConfiguration() {
         contextRunner
                 .withPropertyValues(
                         "app.database.url=jdbc:postgresql://localhost:5432/crm_db",
