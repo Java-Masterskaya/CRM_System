@@ -40,12 +40,16 @@ public enum ErrorCode {
             "Непредвиденная ошибка. Если она повторяется, сообщите идентификатор запроса "
                     + "в поддержку."),
     SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Сервис временно недоступен",
-            "Сервис временно не может обработать запрос. Повторите позже.");
+            "Сервис временно не может обработать запрос. Повторите позже."),
+    CLIENT_ERROR(HttpStatus.BAD_REQUEST, "Ошибка запроса",
+            "Запрос не может быть выполнен.");
 
     private static final String TYPE_BASE = "https://crm.example/problems/";
 
     private static final Set<ErrorCode> DOMAIN_SPECIFIC = EnumSet.of(VALIDATION_FAILED,
             INVALID_CREDENTIALS, INVALID_TRANSITION, STALE_VERSION, ALREADY_EXISTS);
+
+    private static final Set<ErrorCode> FALLBACK_ONLY = EnumSet.of(CLIENT_ERROR);
 
     private final HttpStatus status;
     private final String title;
@@ -61,11 +65,12 @@ public enum ErrorCode {
 
     public static ErrorCode byStatus(int statusValue) {
         for (ErrorCode candidate : values()) {
-            if (!DOMAIN_SPECIFIC.contains(candidate) && candidate.status.value() == statusValue) {
+            if (!DOMAIN_SPECIFIC.contains(candidate) && !FALLBACK_ONLY.contains(candidate)
+                    && candidate.status.value() == statusValue) {
                 return candidate;
             }
         }
-        return statusValue >= 500 ? INTERNAL_ERROR : MALFORMED_REQUEST;
+        return statusValue >= 500 ? INTERNAL_ERROR : CLIENT_ERROR;
     }
 
     public HttpStatus getStatus() {

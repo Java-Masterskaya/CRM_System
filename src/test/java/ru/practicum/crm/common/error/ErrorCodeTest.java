@@ -28,9 +28,23 @@ class ErrorCodeTest {
         assertThat(ErrorCode.byStatus(502)).isEqualTo(ErrorCode.INTERNAL_ERROR);
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {409, 418, 422})
+    void byStatus_whenUnknownClientError_returnsNeutralClientError(int status) {
+        assertThat(ErrorCode.byStatus(status)).isEqualTo(ErrorCode.CLIENT_ERROR);
+    }
+
     @Test
-    void byStatus_whenUnknownClientError_returnsMalformedRequest() {
-        assertThat(ErrorCode.byStatus(418)).isEqualTo(ErrorCode.MALFORMED_REQUEST);
+    void clientError_whenUsedAsFallback_doesNotClaimAnyStatus() {
+        assertThat(ErrorCode.CLIENT_ERROR.getTitle()).isEqualTo("Ошибка запроса");
+        assertThat(ErrorCode.CLIENT_ERROR.getDefaultDetail())
+                .doesNotContain("400").doesNotContain("Некорректный запрос");
+    }
+
+    @Test
+    void byStatus_whenStatusHasOwnCode_neverReturnsFallback() {
+        assertThat(ErrorCode.byStatus(400)).isEqualTo(ErrorCode.MALFORMED_REQUEST);
+        assertThat(ErrorCode.byStatus(404)).isEqualTo(ErrorCode.NOT_FOUND);
     }
 
     @ParameterizedTest
