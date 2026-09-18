@@ -3,10 +3,9 @@ package ru.practicum.crm.platform.observability;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-
-import java.util.function.Supplier;
 
 @Component
 @RequiredArgsConstructor
