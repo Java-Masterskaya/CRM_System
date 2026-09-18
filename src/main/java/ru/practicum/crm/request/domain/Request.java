@@ -1,0 +1,160 @@
+package ru.practicum.crm.request.domain;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
+import lombok.Getter;
+import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+/**
+ * Заявка на обработку данных — главная сущность продукта (ТЗ §4.2).
+ *
+ * <p>Состав полей зафиксирован в T-033 (#34). Правила переходов статусов (T-043),
+ * подстановка приоритета из типа заявки (T-035) и расчёт сроков по SLA (T-049)
+ * находятся за пределами сущности: здесь только хранение состояния.
+ */
+@Entity
+@Table(name = "requests")
+@Getter
+public class Request {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", nullable = false, updatable = false)
+    private UUID id;
+
+    @Column(name = "tenant_id", nullable = false, updatable = false)
+    private UUID tenantId;
+
+    @Setter
+    @Column(name = "type_id")
+    private UUID typeId;
+
+    @Setter
+    @Column(name = "subject", nullable = false)
+    private String subject;
+
+    @Setter
+    @Column(name = "description", nullable = false)
+    private String description;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "data_params")
+    private Map<String, Object> dataParams;
+
+    @Setter
+    @Column(name = "priority", length = 20)
+    private String priority;
+
+    @Setter
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    private RequestStatus status;
+
+    @Column(name = "author_id", nullable = false, updatable = false)
+    private UUID authorId;
+
+    @Setter
+    @Column(name = "assignee_id")
+    private UUID assigneeId;
+
+    @Setter
+    @Column(name = "desired_due_at")
+    private Instant desiredDueAt;
+
+    @Setter
+    @Column(name = "first_response_due_at")
+    private Instant firstResponseDueAt;
+
+    @Setter
+    @Column(name = "resolution_due_at")
+    private Instant resolutionDueAt;
+
+    @Setter
+    @Column(name = "overdue", nullable = false)
+    private boolean overdue;
+
+    @Setter
+    @Column(name = "deleted", nullable = false)
+    private boolean deleted;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
+    protected Request() {
+        // Конструктор без аргументов нужен Hibernate; прикладной код использует конструктор ниже.
+    }
+
+    /**
+     * Создаёт заявку с полями, без которых её существование бессмысленно.
+     *
+     * <p>Остальные поля заполняются сеттерами по мере того, как их источники появятся:
+     * тип и приоритет — при создании из клиентского API, сроки — из SLA-политики,
+     * исполнитель — при назначении.
+     */
+    public Request(UUID tenantId, UUID authorId, String subject, String description,
+            RequestStatus status) {
+        this.tenantId = tenantId;
+        this.authorId = authorId;
+        this.subject = subject;
+        this.description = description;
+        this.status = status;
+    }
+
+    public Map<String, Object> getDataParams() {
+        return dataParams == null ? null : new LinkedHashMap<>(dataParams);
+    }
+
+    public void setDataParams(Map<String, Object> dataParams) {
+        this.dataParams = dataParams == null ? null : new LinkedHashMap<>(dataParams);
+    }
+
+    @PrePersist
+    void onCreate() {
+        Instant now = Instant.now();
+        createdAt = now;
+        updatedAt = now;
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        updatedAt = Instant.now();
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof Request request)) {
+            return false;
+        }
+        return id != null && id.equals(request.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Request.class.hashCode();
+    }
+}
