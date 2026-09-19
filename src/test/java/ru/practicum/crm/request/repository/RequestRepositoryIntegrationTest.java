@@ -1,6 +1,7 @@
 package ru.practicum.crm.request.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.List;
@@ -9,6 +10,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -60,7 +62,7 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
         request.setResolutionDueAt(Instant.parse("2026-09-25T12:00:00Z"));
         request.setOverdue(true);
 
-        UUID id = repository.saveAndFlush(request).getId();
+        UUID id = repository.save(request).getId();
         Request saved = repository.findByIdAndTenantIdAndDeletedFalse(id, tenantA).orElseThrow();
 
         assertThat(saved.getId()).isNotNull();
@@ -89,7 +91,7 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
         Request request = newRequest(tenantA, "Срок в UTC");
         request.setResolutionDueAt(Instant.parse("2026-09-25T12:00:00Z"));
 
-        UUID id = repository.saveAndFlush(request).getId();
+        UUID id = repository.save(request).getId();
 
         String stored = jdbcTemplate.queryForObject(
                 "SELECT to_char(resolution_due_at AT TIME ZONE 'UTC',"
@@ -101,7 +103,7 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void findById_whenRequestBelongsToAnotherTenant_returnsNothing() {
-        UUID id = repository.saveAndFlush(newRequest(tenantA, "Заявка арендатора А")).getId();
+        UUID id = repository.save(newRequest(tenantA, "Заявка арендатора А")).getId();
 
         assertThat(repository.findByIdAndTenantIdAndDeletedFalse(id, tenantB)).isEmpty();
         assertThat(repository.existsByIdAndTenantIdAndDeletedFalse(id, tenantB)).isFalse();
@@ -110,8 +112,8 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void findByTenant_whenAnotherTenantHasRequests_returnsOnlyOwn() {
-        repository.saveAndFlush(newRequest(tenantA, "Заявка А"));
-        repository.saveAndFlush(newRequest(tenantB, "Заявка Б"));
+        repository.save(newRequest(tenantA, "Заявка А"));
+        repository.save(newRequest(tenantB, "Заявка Б"));
 
         Page<Request> page = repository.findByTenantIdAndDeletedFalse(tenantA,
                 PageRequest.of(0, 10));
@@ -122,10 +124,10 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void findByStatus_whenStatusesDiffer_returnsOnlyRequestedStatus() {
-        repository.saveAndFlush(newRequest(tenantA, "Новая"));
+        repository.save(newRequest(tenantA, "Новая"));
         Request inProgress = newRequest(tenantA, "В работе");
         inProgress.setStatus(RequestStatus.IN_PROGRESS);
-        repository.saveAndFlush(inProgress);
+        repository.save(inProgress);
 
         Page<Request> page = repository.findByTenantIdAndStatusAndDeletedFalse(tenantA,
                 RequestStatus.IN_PROGRESS, PageRequest.of(0, 10));
@@ -137,24 +139,43 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
     void findByTenant_whenRequestMarkedDeleted_isNotReturned() {
         Request request = newRequest(tenantA, "Удалённая");
         request.setDeleted(true);
-        UUID id = repository.saveAndFlush(request).getId();
+        UUID id = repository.save(request).getId();
 
         assertThat(repository.findByTenantIdAndDeletedFalse(tenantA, PageRequest.of(0, 10)))
                 .isEmpty();
         assertThat(repository.findByIdAndTenantIdAndDeletedFalse(id, tenantA)).isEmpty();
-        assertThat(repository.findById(id)).isPresent();
+
+        Integer rowsInTable = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM requests WHERE id = ?", Integer.class, id);
+
+        assertThat(rowsInTable).isEqualTo(1);
     }
 
     @Test
     void save_whenRequestChangedAndStoredAgain_raisesVersion() {
-        Request request = repository.saveAndFlush(newRequest(tenantA, "Первая версия"));
+        Request request = repository.save(newRequest(tenantA, "Первая версия"));
         long initialVersion = request.getVersion();
 
         request.setSubject("Вторая версия");
-        Request updated = repository.saveAndFlush(request);
+        Request updated = repository.save(request);
 
         assertThat(updated.getVersion()).isGreaterThan(initialVersion);
         assertThat(updated.getUpdatedAt()).isAfterOrEqualTo(updated.getCreatedAt());
+    }
+
+    @Test
+    void insertWithUnknownStatus_whenWrittenDirectlyBypassingCode_isRejectedByDatabase() {
+        String insertWithBrokenStatus =
+                """
+                INSERT INTO requests (id, tenant_id, subject, description, status, author_id,
+                                      created_at, updated_at)
+                VALUES (?, ?, 'тема', 'описание', 'ARCHIVED', ?, now(), now())
+                """;
+
+        assertThatThrownBy(() -> jdbcTemplate.update(insertWithBrokenStatus, UUID.randomUUID(),
+                tenantA, authorId))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("requests_status_check");
     }
 
     @Test

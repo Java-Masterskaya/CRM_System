@@ -6,7 +6,9 @@ CREATE TABLE requests (
     description TEXT NOT NULL,
     data_params JSONB,
     priority VARCHAR(20),
-    status VARCHAR(20) NOT NULL,
+    status VARCHAR(20) NOT NULL CONSTRAINT requests_status_check CHECK (
+        status IN ('NEW', 'CONTACTED', 'IN_PROGRESS', 'ON_HOLD', 'DONE', 'REJECTED', 'CANCELLED')
+    ),
     author_id UUID NOT NULL,
     assignee_id UUID,
     desired_due_at TIMESTAMPTZ,
