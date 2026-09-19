@@ -68,6 +68,24 @@ class CrmMetricsTest {
     }
 
     @Test
+    void givenActionThrowsError_whenTimedCalled_thenErrorRethrownAndErrorTimerRecorded() {
+        assertThatThrownBy(() ->
+                metrics.timed("client.create", () -> {
+                    throw new StackOverflowError("boom");
+                })
+        )
+                .isInstanceOf(StackOverflowError.class)
+                .hasMessage("boom");
+
+        Timer timer = registry.get("crm.operation.duration")
+                .tag("operation", "client.create")
+                .tag("outcome", "error")
+                .timer();
+
+        assertThat(timer.count()).isEqualTo(1);
+    }
+
+    @Test
     void givenSuccessfulAndFailingActions_whenTimedCalled_thenTimersSeparatedByOutcome() {
         metrics.timed("op", () -> "ok");
 

@@ -64,6 +64,11 @@ checkstyle {
 	toolVersion = "14.1.0"
 	configFile = file("config/checkstyle/checkstyle.xml")
 	configProperties = mapOf("org.checkstyle.google.severity" to "error")
+	configProperties = mapOf(
+		"org.checkstyle.google.severity" to "error",
+		"org.checkstyle.google.suppressionfilter.config" to
+			file("config/checkstyle/checkstyle-suppressions.xml").absolutePath
+	)
 }
 
 spotbugs {

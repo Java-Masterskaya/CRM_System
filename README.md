@@ -157,6 +157,11 @@ docker compose up
 GET http://localhost:8080/api/v1/health
 ```
 
+ **Важно:** `/api/v1/health` — legacy-эндпоинт из T-001, оставлен для
+обратной совместимости. Для проб и healthcheck'ов используйте actuator:
+`GET /actuator/health/liveness` и `GET /actuator/health/readiness`
+на management-порту (см. раздел «Мониторинг и метрики»).
+
 ### Документация API (OpenAPI)
 
 Описание API генерируется из кода библиотекой springdoc-openapi. Файлы описания руками
@@ -291,6 +296,14 @@ V202609151400__add_something.sql
 
 ### Health checks
 
+Actuator отдаёт два вида ответа: **группы** и **агрегат**. У них разное
+назначение, и путать их нельзя.
+
+#### Группы — для проб и автоматики
+
+Используйте **только эти два эндпоинта** во всех healthcheck'ах: LB,
+Kubernetes probe, Docker Compose `healthcheck`, системы мониторинга.
+
 Проверка живости:
 
 ```text
@@ -314,6 +327,43 @@ GET http://localhost:8081/actuator/health/readiness
 
 После восстановления БД `readiness` снова становится `UP` без перезапуска
 приложения.
+
+#### Агрегат — только для диагностики
+
+```text
+GET http://localhost:8081/actuator/health
+```
+
+Агрегат включает **все** health-индикаторы, зарегистрированные в контексте,
+в том числе `diskSpace` и `mail`. Его состояние может отличаться от групп:
+например, при недоступном SMTP агрегат отдаст `DOWN`, хотя приложение живо
+и готово принимать трафик.
+
+**Не используйте агрегат для LB, Kubernetes probe, Docker Compose
+`healthcheck` и других автоматических проверок.** Он предназначен для
+ручной диагностики при разборе инцидентов: дёрнуть curl'ом и посмотреть,
+какой именно компонент упал.
+
+#### Что входит в проверки
+
+| Компонент        | liveness | readiness | aggregate |
+| ---------------- | -------- | --------- | --------- |
+| `livenessState`  | да       | да        | да        |
+| `readinessState` | нет      | да        | да        |
+| `db`             | нет      | да        | да        |
+| `diskSpace`      | нет      | нет       | да        |
+| `mail`           | нет      | нет       | да        |
+
+`mail` намеренно исключён из групп: недоступность SMTP не делает сервис
+неготовым принимать трафик. Заявки создаются и обрабатываются, письма
+копятся в очереди или логируются. Если SMTP недоступен, это видно в
+агрегате — но пробы и LB не страдают.
+
+### Валидация групп
+
+`readiness` включает `db`, а `management.endpoint.health.validate-group-membership`
+включён по умолчанию. Поэтому приложение не стартует без DataSource — это осознанное
+решение: CRM без БД работать не может, лучше упасть на старте, чем отдавать неверный
 
 ### Технические метрики
 
@@ -355,10 +405,10 @@ Micrometer.
 Например:
 
 ```java
-Counter.builder("crm.clients.created")
+Counter clientsCreated = Counter.builder("crm.clients.created")
         .description("Количество созданных клиентов")
-        .register(registry)
-        .increment();
+        .register(registry);
+clientsCreated.increment();
 ```
 
 Каждый вызов `increment()` увеличивает значение счётчика на единицу.
@@ -432,11 +482,15 @@ var result = metrics.timed(
 outcome=success
 ```
 
-При `RuntimeException`:
+При `RuntimeException` и `Error`:
 
 ```text
 outcome=error
 ```
+
+Метрика экспортируется с `publishPercentileHistogram()`. Квантили (p50, p95, p99)
+рассчитываются на стороне Prometheus через `histogram_quantile()`, а не клиентом.
+Это позволяет агрегировать метрики между инстансами приложения.
 
 Таким образом, можно отдельно анализировать длительность успешных и ошибочных
 операций.
@@ -481,3 +535,10 @@ orderId=...
 ```text
 http://localhost:8081/actuator/prometheus
 ```
+## Mail в тестовом профиле
+
+В тестах mail health check отключён через
+`@TestPropertySource(properties = "management.health.mail.enabled=false")`,
+потому что тестовое окружение не поднимает SMTP-сервер. Это не меняет
+production-контракт: в `local` и `prod` mail входит в агрегат `/actuator/health`,
+но не в группы `liveness`/`readiness`.
