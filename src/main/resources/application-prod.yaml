@@ -21,6 +21,18 @@ spring:
           starttls:
             enable: true
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      show-details: never
+  metrics:
+    tags:
+      env: prod
+
 app:
   database:
     url: ${SPRING_DATASOURCE_URL}

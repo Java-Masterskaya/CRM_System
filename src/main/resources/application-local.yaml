@@ -1,5 +1,4 @@
 spring:
-
   sql:
     init:
       mode: always
@@ -21,6 +20,11 @@ spring:
           auth: ${app.mail.auth}
           starttls:
             enable: false
+
+management:
+  endpoint:
+    health:
+      show-details: always
 
 app:
   database:

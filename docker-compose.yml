@@ -35,12 +35,19 @@ services:
     container_name: crm-app
     ports:
       - "${SERVER_PORT:-8080}:8080"
+      - "127.0.0.1:${MANAGEMENT_PORT:-8081}:8081"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-crm_db}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-crm_user}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_MAIL_HOST: ${SMTP_HOST:-mailhog}
       SPRING_MAIL_PORT: ${SMTP_PORT:-1025}
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8081/actuator/health/readiness" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     depends_on:
       db:
         condition: service_healthy

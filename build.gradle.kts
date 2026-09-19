@@ -32,6 +32,10 @@ dependencies {
 
 	implementation("org.springframework.boot:spring-boot-starter-web")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
+	implementation("org.springframework.boot:spring-boot-starter-actuator")
+	runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+
+	compileOnly("com.github.spotbugs:spotbugs-annotations:4.10.4")
 
 	compileOnly("org.projectlombok:lombok")
 	annotationProcessor("org.projectlombok:lombok")
@@ -62,6 +66,11 @@ checkstyle {
 	toolVersion = "14.1.0"
 	configFile = file("config/checkstyle/checkstyle.xml")
 	configProperties = mapOf("org.checkstyle.google.severity" to "error")
+	configProperties = mapOf(
+		"org.checkstyle.google.severity" to "error",
+		"org.checkstyle.google.suppressionfilter.config" to
+			file("config/checkstyle/checkstyle-suppressions.xml").absolutePath
+	)
 }
 
 spotbugs {
