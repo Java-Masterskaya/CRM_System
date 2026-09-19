@@ -35,6 +35,8 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
 	runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 
+	compileOnly("com.github.spotbugs:spotbugs-annotations:4.10.4")
+
 	compileOnly("org.projectlombok:lombok")
 	annotationProcessor("org.projectlombok:lombok")
 

@@ -1,5 +1,6 @@
 package ru.practicum.crm.platform.observability;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -15,6 +16,10 @@ public class CrmMetrics {
     private final MeterRegistry registry;
     private final Counter clientsCreated;
 
+    @SuppressFBWarnings(
+            value = "EI2",
+            justification = "MeterRegistry — Spring-бин, живёт всё время работы приложения, "
+                    + "не мутируется через CrmMetrics")
     public CrmMetrics(MeterRegistry registry) {
         this.registry = registry;
         this.clientsCreated = Counter.builder("crm.clients.created")
