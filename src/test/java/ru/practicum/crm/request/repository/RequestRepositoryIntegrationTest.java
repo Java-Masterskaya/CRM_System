@@ -179,6 +179,61 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    void insertWithoutTenant_whenWrittenDirectlyToDatabase_isRejected() {
+        String insertWithoutTenant =
+                """
+                INSERT INTO requests (
+                    id,
+                    tenant_id,
+                    subject,
+                    description,
+                    status,
+                    author_id,
+                    created_at,
+                    updated_at
+                )
+                VALUES (
+                    ?, NULL, 'тема', 'описание', 'NEW', ?, now(), now()
+                )
+                """;
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                insertWithoutTenant,
+                UUID.randomUUID(),
+                authorId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void insertWithUnknownTenant_whenWrittenDirectlyToDatabase_isRejected() {
+        UUID unknownTenant = UUID.randomUUID();
+
+        String insertWithUnknownTenant =
+                """
+                INSERT INTO requests (
+                    id,
+                    tenant_id,
+                    subject,
+                    description,
+                    status,
+                    author_id,
+                    created_at,
+                    updated_at
+                )
+                VALUES (
+                    ?, ?, 'тема', 'описание', 'NEW', ?, now(), now()
+                )
+                """;
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                insertWithUnknownTenant,
+                UUID.randomUUID(),
+                unknownTenant,
+                authorId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
     void selectByTenantAndStatus_whenTableIsLarge_usesIndexInsteadOfSequentialScan() {
         String insertManyRequests =
                 """
