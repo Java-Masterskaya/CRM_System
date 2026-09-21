@@ -129,6 +129,17 @@ class RequestTypeRepositoryIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    void request_whenTypeDoesNotExist_isRejectedByForeignKey() {
+        Request request = new Request(tenantA, UUID.randomUUID(), "Тема", "Описание",
+                RequestStatus.NEW);
+        request.setTypeId(UUID.randomUUID());
+
+        assertThatThrownBy(() -> requestRepository.save(request))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("requests_type_id_fkey");
+    }
+
+    @Test
     void request_whenItsTypeDisabledAfterCreation_isStillReadable() {
         RequestType type = repository.save(new RequestType(tenantA, "Выгрузка"));
         Request request = new Request(tenantA, UUID.randomUUID(), "Тема", "Описание",
