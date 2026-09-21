@@ -535,6 +535,42 @@ orderId=...
 ```text
 http://localhost:8081/actuator/prometheus
 ```
+## Логирование
+
+Логи пишутся в stdout в формате JSON, одна запись на строку. Формат задаётся в
+`src/main/resources/logback-spring.xml` (`logstash-logback-encoder`).
+
+```json
+{"@timestamp":"2026-09-21T15:42:06.593+03:00","message":"Заявка создана","logger_name":"ru.practicum.crm.request.service.RequestService","thread_name":"http-nio-8080-exec-1","level":"INFO","requestId":"7d1f5c0e-3b7a-4a8e-9c2d-0f6b1e2a3c4d"}
+```
+
+Кроме стандартных полей в запись попадают значения MDC и структурные аргументы
+`kv("ключ", значение)` из `net.logstash.logback.argument.StructuredArguments`.
+
+### Идентификатор запроса
+
+`RequestIdFilter` берёт `X-Request-Id` из запроса, если он состоит из латинских
+букв, цифр, `.`, `_`, `-` и не длиннее 64 символов; иначе генерирует UUID.
+Идентификатор:
+
+* кладётся в MDC — поле `requestId` есть во всех записях этого запроса;
+* возвращается в заголовке `X-Request-Id` каждого ответа и в поле `requestId`
+  тела ошибки;
+* удаляется из MDC в `finally`, чтобы не утечь в следующий запрос на том же потоке.
+
+### Маскирование чувствительных данных
+
+Настроено в `logback-spring.xml` через `MaskingJsonGeneratorDecorator`:
+
+* значения полей `password`, `newPassword`, `oldPassword`, `token`, `accessToken`,
+  `refreshToken`, `authorization`, `secret`, `apiKey`, `email`, `phone` заменяются
+  на `****` на любой глубине записи;
+* в тексте любого поля `Bearer …` и `Basic …` заменяются на `****`.
+
+Новое чувствительное поле добавьте в `<paths>` и покройте случаем в
+`StructuredLoggingTest`. Маскирование — страховка, а не разрешение: пароли,
+токены, тела запросов и персональные данные в логи не пишем.
+
 ## Mail в тестовом профиле
 
 В тестах mail health check отключён через
