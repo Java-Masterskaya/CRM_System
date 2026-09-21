@@ -11,7 +11,7 @@ public final class ProblemDetailFactory {
     static final String CODE_PROPERTY = "code";
     static final String REQUEST_ID_PROPERTY = "requestId";
     static final String ERRORS_PROPERTY = "errors";
-    static final String MDC_REQUEST_ID = "requestId";
+    public static final String MDC_REQUEST_ID = "requestId";
 
     private ProblemDetailFactory() {
     }
