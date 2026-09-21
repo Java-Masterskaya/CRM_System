@@ -33,6 +33,7 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-web")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
+	implementation("net.logstash.logback:logstash-logback-encoder:8.0")
 	runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 
 	compileOnly("com.github.spotbugs:spotbugs-annotations:4.10.4")
