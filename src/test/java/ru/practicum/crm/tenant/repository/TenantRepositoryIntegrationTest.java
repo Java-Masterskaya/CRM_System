@@ -37,7 +37,7 @@ public class TenantRepositoryIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void save_whenTwoTenantsCreated_keepsTheirDataSeparate() {
+    void save_whenTwoTenantsCreated_storesBothTenants() {
         Tenant first = repository.saveAndFlush(new Tenant("Tenant A"));
         Tenant second = repository.saveAndFlush(new Tenant("Tenant B"));
 
