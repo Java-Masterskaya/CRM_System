@@ -75,25 +75,6 @@ class RequestTest {
     }
 
     @Test
-    void onCreate_whenCalled_setsCreatedAndUpdatedTimes() {
-        request.onCreate();
-
-        assertThat(request.getCreatedAt()).isNotNull();
-        assertThat(request.getUpdatedAt()).isEqualTo(request.getCreatedAt());
-    }
-
-    @Test
-    void onUpdate_whenCalled_movesUpdatedAtAndLeavesCreatedAtIntact() {
-        request.onCreate();
-        Instant createdAt = request.getCreatedAt();
-
-        request.onUpdate();
-
-        assertThat(request.getCreatedAt()).isEqualTo(createdAt);
-        assertThat(request.getUpdatedAt()).isAfterOrEqualTo(createdAt);
-    }
-
-    @Test
     void dataParams_whenSourceMapChangedAfterAssignment_requestKeepsOriginalValues() {
         Map<String, Object> source = new HashMap<>();
         source.put("format", "csv");

@@ -4,11 +4,6 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
@@ -19,6 +14,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import ru.practicum.crm.common.model.TenantScopedEntity;
 
 /**
  * Заявка на обработку данных — главная сущность продукта (ТЗ §4.2).
@@ -30,15 +26,7 @@ import org.hibernate.type.SqlTypes;
 @Entity
 @Table(name = "requests")
 @Getter
-public class Request {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id", nullable = false, updatable = false)
-    private UUID id;
-
-    @Column(name = "tenant_id", nullable = false, updatable = false)
-    private UUID tenantId;
+public class Request extends TenantScopedEntity {
 
     @Setter
     @Column(name = "type_id")
@@ -96,12 +84,6 @@ public class Request {
     @Column(name = "version", nullable = false)
     private long version;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
-
     protected Request() {
         // Конструктор без аргументов нужен Hibernate; прикладной код использует конструктор ниже.
     }
@@ -115,7 +97,7 @@ public class Request {
      */
     public Request(UUID tenantId, UUID authorId, String subject, String description,
             RequestStatus status) {
-        this.tenantId = tenantId;
+        super(tenantId);
         this.authorId = authorId;
         this.subject = subject;
         this.description = description;
@@ -130,18 +112,6 @@ public class Request {
         this.dataParams = dataParams == null ? null : new LinkedHashMap<>(dataParams);
     }
 
-    @PrePersist
-    void onCreate() {
-        Instant now = Instant.now();
-        createdAt = now;
-        updatedAt = now;
-    }
-
-    @PreUpdate
-    void onUpdate() {
-        updatedAt = Instant.now();
-    }
-
     @Override
     public boolean equals(Object other) {
         if (this == other) {
@@ -150,7 +120,7 @@ public class Request {
         if (!(other instanceof Request request)) {
             return false;
         }
-        return id != null && id.equals(request.id);
+        return getId() != null && getId().equals(request.getId());
     }
 
     @Override
