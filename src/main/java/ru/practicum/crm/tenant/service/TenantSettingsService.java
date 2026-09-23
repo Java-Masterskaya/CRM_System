@@ -1,9 +1,9 @@
 package ru.practicum.crm.tenant.service;
 
-import ru.practicum.crm.tenant.api.dto.TenantSettingsDTO;
+import ru.practicum.crm.tenant.api.dto.TenantSettingsDto;
 
 public interface TenantSettingsService {
-    TenantSettingsDTO getTenantSettings();
+    TenantSettingsDto getTenantSettings();
 
-    TenantSettingsDTO updateTenantSettings(TenantSettingsDTO tenantSettingsDTO);
+    TenantSettingsDto updateTenantSettings(TenantSettingsDto tenantSettingsDto);
 }

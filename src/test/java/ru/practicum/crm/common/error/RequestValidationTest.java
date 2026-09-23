@@ -29,7 +29,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@WebMvcTest(properties = "app.web.max-request-body-size=1KB")
+@WebMvcTest(
+        controllers = RequestValidationTest.ProbeController.class,
+        properties = "app.web.max-request-body-size=1KB"
+)
 @Import(RequestValidationTest.ProbeController.class)
 class RequestValidationTest {
 

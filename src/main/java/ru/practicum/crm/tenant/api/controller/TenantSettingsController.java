@@ -5,23 +5,28 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import ru.practicum.crm.tenant.api.dto.TenantSettingsDTO;
+import ru.practicum.crm.tenant.api.dto.TenantSettingsDto;
 import ru.practicum.crm.tenant.service.TenantSettingsService;
 
 @RequiredArgsConstructor
-@RestController("/api/v1/tenants/settings")
+@RestController
+@RequestMapping("/api/v1/admin/tenant/settings")
 public class TenantSettingsController {
 
     private final TenantSettingsService service;
 
     @GetMapping
-    public TenantSettingsDTO getTenantSettings() {
+    public TenantSettingsDto getTenantSettings() {
         return service.getTenantSettings();
     }
 
     @PutMapping
-    public TenantSettingsDTO updateTenantSettings(@Valid @RequestBody TenantSettingsDTO tenantSettingsDTO) {
-        return service.updateTenantSettings(tenantSettingsDTO);
+    public TenantSettingsDto updateTenantSettings(
+            @Valid
+            @RequestBody
+            TenantSettingsDto tenantSettingsDto) {
+        return service.updateTenantSettings(tenantSettingsDto);
     }
 }
