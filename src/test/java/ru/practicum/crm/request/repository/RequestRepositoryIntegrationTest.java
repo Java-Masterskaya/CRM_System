@@ -2,6 +2,7 @@ package ru.practicum.crm.request.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatCode;
 
 import java.time.Instant;
 import java.util.List;
@@ -241,6 +242,24 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
         assertThat(finalState.getVersion()).isEqualTo(1L);
         assertThat(finalState.getSubject())
                 .startsWith("Правка от ");
+    }
+
+    @Test
+    void requireVersion_whenVersionMatches_doesNotThrow() {
+        Request saved = repository.save(newRequest(tenantA, "Проверка версии"));
+
+        assertThatCode(() -> saved.requireVersion(saved.getVersion()))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void requireVersion_whenVersionDiffers_throwsOptimisticLock() {
+        Request saved = repository.save(newRequest(tenantA, "Проверка версии"));
+
+        assertThat(saved.getVersion()).isEqualTo(0L);
+
+        assertThatThrownBy(() -> saved.requireVersion(1L))
+                .isInstanceOf(ObjectOptimisticLockingFailureException.class);
     }
 
     @Test

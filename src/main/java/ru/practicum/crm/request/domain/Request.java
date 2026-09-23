@@ -14,6 +14,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import ru.practicum.crm.common.model.TenantScopedEntity;
 
 /**
@@ -110,6 +111,24 @@ public class Request extends TenantScopedEntity {
 
     public void setDataParams(Map<String, Object> dataParams) {
         this.dataParams = dataParams == null ? null : new LinkedHashMap<>(dataParams);
+    }
+
+    public void requireVersion(long expectedVersion) {
+        if (version != expectedVersion) {
+            throw new ObjectOptimisticLockingFailureException(Request.class, id);
+        }
+    }
+
+    @PrePersist
+    void onCreate() {
+        Instant now = Instant.now();
+        createdAt = now;
+        updatedAt = now;
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        updatedAt = Instant.now();
     }
 
     @Override
