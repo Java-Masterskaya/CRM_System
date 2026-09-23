@@ -45,6 +45,7 @@ dependencies {
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 	testAnnotationProcessor("org.projectlombok:lombok")
 	implementation("org.springframework.boot:spring-boot-starter-mail")
+	implementation("org.thymeleaf:thymeleaf")
 
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 	implementation("org.flywaydb:flyway-core")

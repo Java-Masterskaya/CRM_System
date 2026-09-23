@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title th:text="${requestSubject}">Тема заявки</title>
+</head>
+<body>
+<p>Здравствуйте, <span th:text="${recipientName}">имя</span>!</p>
+<p>Ваша заявка «<span th:text="${requestSubject}">тема</span>» принята и ждёт обработки.</p>
+<p>Номер заявки: <span th:text="${requestId}">номер</span></p>
+<p>Это письмо отправлено автоматически, отвечать на него не нужно.</p>
+</body>
+</html>
