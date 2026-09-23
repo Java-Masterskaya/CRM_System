@@ -11,6 +11,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.request.domain.Request;
+import ru.practicum.crm.request.domain.RequestPriority;
 import ru.practicum.crm.request.domain.RequestStatus;
 import ru.practicum.crm.request.domain.RequestType;
 
@@ -48,7 +49,7 @@ class RequestTypeRepositoryIntegrationTest extends BaseIntegrationTest {
     @Test
     void save_whenTypeFilled_readsBackEveryField() {
         RequestType type = new RequestType(tenantA, "Выгрузка данных");
-        type.describe("Выгрузка данных", "Отчёты и витрины", "HIGH");
+        type.describe("Выгрузка данных", "Отчёты и витрины", RequestPriority.HIGH);
 
         UUID id = repository.save(type).getId();
         RequestType saved = repository.findByIdAndTenantId(id, tenantA).orElseThrow();
@@ -56,7 +57,7 @@ class RequestTypeRepositoryIntegrationTest extends BaseIntegrationTest {
         assertThat(saved.getTenantId()).isEqualTo(tenantA);
         assertThat(saved.getName()).isEqualTo("Выгрузка данных");
         assertThat(saved.getDescription()).isEqualTo("Отчёты и витрины");
-        assertThat(saved.getDefaultPriority()).isEqualTo("HIGH");
+        assertThat(saved.getDefaultPriority()).isEqualTo(RequestPriority.HIGH);
         assertThat(saved.isActive()).isTrue();
         assertThat(saved.getCreatedAt()).isNotNull();
         assertThat(saved.getUpdatedAt()).isNotNull();

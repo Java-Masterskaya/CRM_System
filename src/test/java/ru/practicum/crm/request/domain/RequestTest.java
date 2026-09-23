@@ -1,6 +1,7 @@
 package ru.practicum.crm.request.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -37,7 +38,8 @@ class RequestTest {
         assertThat(request.isDeleted()).isFalse();
         assertThat(request.getAssigneeId()).isNull();
         assertThat(request.getTypeId()).isNull();
-        assertThat(request.getPriority()).isNull();
+        assertThat(request.getPriority()).isEqualTo(RequestPriority.NORMAL);
+        assertThat(request.getPriorityRank()).isEqualTo(RequestPriority.NORMAL.getRank());
         assertThat(request.getVersion()).isZero();
     }
 
@@ -53,7 +55,7 @@ class RequestTest {
         request.setAssigneeId(assigneeId);
         request.setSubject("Новая тема");
         request.setDescription("Новое описание");
-        request.setPriority("HIGH");
+        request.setPriority(RequestPriority.HIGH);
         request.setStatus(RequestStatus.IN_PROGRESS);
         request.setDesiredDueAt(desired);
         request.setFirstResponseDueAt(firstResponse);
@@ -65,13 +67,31 @@ class RequestTest {
         assertThat(request.getAssigneeId()).isEqualTo(assigneeId);
         assertThat(request.getSubject()).isEqualTo("Новая тема");
         assertThat(request.getDescription()).isEqualTo("Новое описание");
-        assertThat(request.getPriority()).isEqualTo("HIGH");
+        assertThat(request.getPriority()).isEqualTo(RequestPriority.HIGH);
         assertThat(request.getStatus()).isEqualTo(RequestStatus.IN_PROGRESS);
         assertThat(request.getDesiredDueAt()).isEqualTo(desired);
         assertThat(request.getFirstResponseDueAt()).isEqualTo(firstResponse);
         assertThat(request.getResolutionDueAt()).isEqualTo(resolution);
         assertThat(request.isOverdue()).isTrue();
         assertThat(request.isDeleted()).isTrue();
+    }
+
+    @Test
+    void setPriority_whenChanged_movesRankTogetherWithIt() {
+        request.setPriority(RequestPriority.URGENT);
+
+        assertThat(request.getPriority()).isEqualTo(RequestPriority.URGENT);
+        assertThat(request.getPriorityRank()).isEqualTo(RequestPriority.URGENT.getRank());
+    }
+
+    @Test
+    void setPriority_whenNull_isRejectedAndPriorityStaysAsItWas() {
+        request.setPriority(RequestPriority.HIGH);
+
+        assertThatThrownBy(() -> request.setPriority(null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(request.getPriority()).isEqualTo(RequestPriority.HIGH);
+        assertThat(request.getPriorityRank()).isEqualTo(RequestPriority.HIGH.getRank());
     }
 
     @Test

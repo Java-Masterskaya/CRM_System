@@ -17,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
+import ru.practicum.crm.request.domain.RequestPriority;
 import ru.practicum.crm.request.domain.RequestType;
 import ru.practicum.crm.request.repository.RequestTypeRepository;
 
@@ -41,12 +42,13 @@ class RequestTypeServiceTest {
         when(repository.existsByTenantIdAndNameIgnoreCase(TENANT_ID, "Выгрузка")).thenReturn(false);
         when(repository.save(any(RequestType.class))).thenAnswer(call -> call.getArgument(0));
 
-        RequestType created = service.create(TENANT_ID, "Выгрузка", "Выгрузка отчётов", "HIGH");
+        RequestType created = service.create(TENANT_ID, "Выгрузка", "Выгрузка отчётов",
+                RequestPriority.HIGH);
 
         assertThat(created.getTenantId()).isEqualTo(TENANT_ID);
         assertThat(created.getName()).isEqualTo("Выгрузка");
         assertThat(created.getDescription()).isEqualTo("Выгрузка отчётов");
-        assertThat(created.getDefaultPriority()).isEqualTo("HIGH");
+        assertThat(created.getDefaultPriority()).isEqualTo(RequestPriority.HIGH);
         assertThat(created.isActive()).isTrue();
     }
 
@@ -80,10 +82,10 @@ class RequestTypeServiceTest {
         when(repository.save(any(RequestType.class))).thenAnswer(call -> call.getArgument(0));
 
         RequestType updated = service.update(TENANT_ID, TYPE_ID, "Выгрузка", "Новое пояснение",
-                "LOW");
+                RequestPriority.LOW);
 
         assertThat(updated.getDescription()).isEqualTo("Новое пояснение");
-        assertThat(updated.getDefaultPriority()).isEqualTo("LOW");
+        assertThat(updated.getDefaultPriority()).isEqualTo(RequestPriority.LOW);
         verify(repository, never()).existsByTenantIdAndNameIgnoreCase(any(), any());
     }
 

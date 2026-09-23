@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ValidationError;
+import ru.practicum.crm.request.domain.RequestPriority;
 import ru.practicum.crm.request.domain.RequestType;
 import ru.practicum.crm.request.repository.RequestTypeRepository;
 
@@ -30,7 +31,7 @@ public class RequestTypeService {
 
     @Transactional
     public RequestType create(UUID tenantId, String name, String description,
-            String defaultPriority) {
+            RequestPriority defaultPriority) {
         requireNameIsFree(tenantId, name);
         RequestType type = new RequestType(tenantId, name);
         type.describe(name, description, defaultPriority);
@@ -39,7 +40,7 @@ public class RequestTypeService {
 
     @Transactional
     public RequestType update(UUID tenantId, UUID id, String name, String description,
-            String defaultPriority) {
+            RequestPriority defaultPriority) {
         RequestType type = require(tenantId, id);
         // Смена одного регистра («ремонт» → «Ремонт») — тот же тип: проверка на занятость
         // нашла бы его самого и отказала бы.

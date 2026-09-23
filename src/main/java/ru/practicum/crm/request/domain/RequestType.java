@@ -2,6 +2,8 @@ package ru.practicum.crm.request.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -16,8 +18,8 @@ import lombok.Getter;
  * Тип заявки — категория обращения, принадлежащая арендатору (ТЗ §4.1).
  *
  * <p>Справочник настраивается администратором арендатора; стартовых значений нет, поэтому
- * до создания первого типа клиент подать заявку не может. Приоритет по умолчанию хранится
- * строкой: закрытый набор значений задаёт T-035 (#36).
+ * до создания первого типа клиент подать заявку не может. Приоритет по умолчанию может быть
+ * не задан — тогда новая заявка получает {@link RequestPriority#FALLBACK}.
  *
  * <p>Тип не удаляется, а отключается: на него ссылаются ранее созданные заявки, и они
  * обязаны читаться после отключения.
@@ -41,8 +43,9 @@ public class RequestType {
     @Column(name = "description", length = 500)
     private String description;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "default_priority", length = 20)
-    private String defaultPriority;
+    private RequestPriority defaultPriority;
 
     @Column(name = "active", nullable = false)
     private boolean active = true;
@@ -68,7 +71,7 @@ public class RequestType {
      * <p>Одним методом, а не тремя сеттерами: администратор правит карточку типа целиком,
      * и частичное изменение половины полей смысла не имеет.
      */
-    public void describe(String name, String description, String defaultPriority) {
+    public void describe(String name, String description, RequestPriority defaultPriority) {
         this.name = name;
         this.description = description;
         this.defaultPriority = defaultPriority;
