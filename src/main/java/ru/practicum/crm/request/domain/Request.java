@@ -97,7 +97,7 @@ public class Request extends TenantScopedEntity {
      * исполнитель — при назначении.
      */
     public Request(UUID tenantId, UUID authorId, String subject, String description,
-            RequestStatus status) {
+                   RequestStatus status) {
         super(tenantId);
         this.authorId = authorId;
         this.subject = subject;
@@ -115,20 +115,8 @@ public class Request extends TenantScopedEntity {
 
     public void requireVersion(long expectedVersion) {
         if (version != expectedVersion) {
-            throw new ObjectOptimisticLockingFailureException(Request.class, id);
+            throw new ObjectOptimisticLockingFailureException(Request.class, getId());
         }
-    }
-
-    @PrePersist
-    void onCreate() {
-        Instant now = Instant.now();
-        createdAt = now;
-        updatedAt = now;
-    }
-
-    @PreUpdate
-    void onUpdate() {
-        updatedAt = Instant.now();
     }
 
     @Override
