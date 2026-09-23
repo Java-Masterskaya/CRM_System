@@ -26,14 +26,14 @@ public class TenantSettingsServiceImpl implements TenantSettingsService {
 
     @Override
     public TenantSettingsDTO getTenantSettings() {
-        UUID tenantId = UUID.randomUUID(); //TODO: переписать на корректный из токена
+        UUID tenantId = UUID.fromString("00000000-0000-0000-0000-000000000001"); //TODO: переписать на корректный из токена
         TenantSettings settings = findByTenantId(tenantId);
         return mapper.toDto(settings);
     }
 
     @Override
     public TenantSettingsDTO updateTenantSettings(TenantSettingsDTO tenantSettingsDTO) {
-        UUID tenantId = UUID.randomUUID(); //TODO: переписать на корректный из токена
+        UUID tenantId = UUID.fromString("00000000-0000-0000-0000-000000000002"); //TODO: переписать на корректный из токена
         return transactionTemplate.execute(status -> {
             TenantSettings settings = findByTenantId(tenantId);
             updateSettings(settings, tenantSettingsDTO);
