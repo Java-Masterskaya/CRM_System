@@ -38,7 +38,7 @@ class RequestTypeServiceTest {
 
     @Test
     void create_whenNameIsFree_savesActiveType() {
-        when(repository.existsByTenantIdAndName(TENANT_ID, "Выгрузка")).thenReturn(false);
+        when(repository.existsByTenantIdAndNameIgnoreCase(TENANT_ID, "Выгрузка")).thenReturn(false);
         when(repository.save(any(RequestType.class))).thenAnswer(call -> call.getArgument(0));
 
         RequestType created = service.create(TENANT_ID, "Выгрузка", "Выгрузка отчётов", "HIGH");
@@ -52,7 +52,7 @@ class RequestTypeServiceTest {
 
     @Test
     void create_whenNameAlreadyUsedByTenant_isRejectedAndNothingSaved() {
-        when(repository.existsByTenantIdAndName(TENANT_ID, "Выгрузка")).thenReturn(true);
+        when(repository.existsByTenantIdAndNameIgnoreCase(TENANT_ID, "Выгрузка")).thenReturn(true);
 
         ApiException thrown = catchThrowableOfType(
                 () -> service.create(TENANT_ID, "Выгрузка", null, null), ApiException.class);
@@ -84,14 +84,26 @@ class RequestTypeServiceTest {
 
         assertThat(updated.getDescription()).isEqualTo("Новое пояснение");
         assertThat(updated.getDefaultPriority()).isEqualTo("LOW");
-        verify(repository, never()).existsByTenantIdAndName(any(), any());
+        verify(repository, never()).existsByTenantIdAndNameIgnoreCase(any(), any());
+    }
+
+    @Test
+    void update_whenOnlyLetterCaseChanged_renamesWithoutTreatingTypeAsItsOwnDuplicate() {
+        RequestType stored = new RequestType(TENANT_ID, "выгрузка");
+        when(repository.findByIdAndTenantId(TYPE_ID, TENANT_ID)).thenReturn(Optional.of(stored));
+        when(repository.save(any(RequestType.class))).thenAnswer(call -> call.getArgument(0));
+
+        RequestType updated = service.update(TENANT_ID, TYPE_ID, "Выгрузка", null, null);
+
+        assertThat(updated.getName()).isEqualTo("Выгрузка");
+        verify(repository, never()).existsByTenantIdAndNameIgnoreCase(any(), any());
     }
 
     @Test
     void update_whenNewNameTakenByAnotherType_isRejected() {
         RequestType stored = new RequestType(TENANT_ID, "Выгрузка");
         when(repository.findByIdAndTenantId(TYPE_ID, TENANT_ID)).thenReturn(Optional.of(stored));
-        when(repository.existsByTenantIdAndName(TENANT_ID, "Импорт")).thenReturn(true);
+        when(repository.existsByTenantIdAndNameIgnoreCase(TENANT_ID, "Импорт")).thenReturn(true);
 
         ApiException thrown = catchThrowableOfType(
                 () -> service.update(TENANT_ID, TYPE_ID, "Импорт", null, null),

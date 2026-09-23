@@ -106,6 +106,23 @@ class RequestTypeRepositoryIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    void save_whenNameDiffersOnlyByLetterCase_isRejectedByDatabase() {
+        repository.save(new RequestType(tenantA, "Ремонт"));
+
+        assertThatThrownBy(() -> repository.save(new RequestType(tenantA, "ремонт")))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("request_types_name_unique");
+    }
+
+    @Test
+    void existsByName_whenLetterCaseDiffers_findsType() {
+        repository.save(new RequestType(tenantA, "Ремонт"));
+
+        assertThat(repository.existsByTenantIdAndNameIgnoreCase(tenantA, "РЕМОНТ")).isTrue();
+        assertThat(repository.existsByTenantIdAndNameIgnoreCase(tenantB, "ремонт")).isFalse();
+    }
+
+    @Test
     void save_whenSameNameUsedByAnotherTenant_isAllowed() {
         repository.save(new RequestType(tenantA, "Выгрузка"));
 

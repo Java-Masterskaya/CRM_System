@@ -24,5 +24,5 @@ public interface RequestTypeRepository extends Repository<RequestType, UUID> {
 
     List<RequestType> findByTenantIdAndActiveTrueOrderByNameAsc(UUID tenantId);
 
-    boolean existsByTenantIdAndName(UUID tenantId, String name);
+    boolean existsByTenantIdAndNameIgnoreCase(UUID tenantId, String name);
 }

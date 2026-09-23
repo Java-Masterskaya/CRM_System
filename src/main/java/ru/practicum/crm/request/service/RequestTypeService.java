@@ -41,7 +41,9 @@ public class RequestTypeService {
     public RequestType update(UUID tenantId, UUID id, String name, String description,
             String defaultPriority) {
         RequestType type = require(tenantId, id);
-        if (!type.getName().equals(name)) {
+        // Смена одного регистра («ремонт» → «Ремонт») — тот же тип: проверка на занятость
+        // нашла бы его самого и отказала бы.
+        if (!type.getName().equalsIgnoreCase(name)) {
             requireNameIsFree(tenantId, name);
         }
         type.describe(name, description, defaultPriority);
@@ -97,7 +99,7 @@ public class RequestTypeService {
     }
 
     private void requireNameIsFree(UUID tenantId, String name) {
-        if (repository.existsByTenantIdAndName(tenantId, name)) {
+        if (repository.existsByTenantIdAndNameIgnoreCase(tenantId, name)) {
             throw new ApiException(ErrorCode.ALREADY_EXISTS,
                     "Тип заявки с таким названием уже есть.");
         }
