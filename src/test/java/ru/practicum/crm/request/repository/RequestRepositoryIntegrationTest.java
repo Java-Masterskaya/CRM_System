@@ -63,7 +63,7 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
     @Test
     void save_whenRequestFilled_readsBackEveryField() {
         Request request = newRequest(tenantA, "Выгрузка отчёта");
-        UUID typeId = UUID.randomUUID();
+        UUID typeId = createRequestType(tenantA, "Выгрузка данных");
         UUID assigneeId = UUID.randomUUID();
         request.setTypeId(typeId);
         request.setAssigneeId(assigneeId);
@@ -357,6 +357,14 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update("INSERT INTO tenants (id, name, active, created_at, updated_at)"
                 + " VALUES (?, ?, true, now(), now())", id, name);
+        return id;
+    }
+
+    private UUID createRequestType(UUID tenantId, String name) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO request_types"
+                + " (id, tenant_id, name, active, created_at, updated_at)"
+                + " VALUES (?, ?, ?, true, now(), now())", id, tenantId, name);
         return id;
     }
 
