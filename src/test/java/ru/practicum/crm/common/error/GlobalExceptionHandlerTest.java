@@ -7,12 +7,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.lang.reflect.Method;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.MethodParameter;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
@@ -26,6 +28,23 @@ class GlobalExceptionHandlerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Test
+    void optimisticLock_whenConflict_returns409WithStaleVersionCode() throws Exception {
+        mockMvc.perform(get("/test-errors/stale-version"))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(jsonPath("$.type")
+                        .value("https://crm.example/problems/stale-version"))
+                .andExpect(jsonPath("$.title").value("Данные устарели"))
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.code").value("STALE_VERSION"))
+                .andExpect(jsonPath("$.detail").value(
+                        "Объект изменён другим пользователем. "
+                                + "Обновите данные и повторите изменения."))
+                .andExpect(jsonPath("$.trace").doesNotExist())
+                .andExpect(jsonPath("$.exception").doesNotExist());
+    }
 
     @Test
     void apiException_whenObjectMissing_returnsNotFoundWithCode() throws Exception {
@@ -79,6 +98,12 @@ class GlobalExceptionHandlerTest {
 
         @RestController
         static class ProbeController {
+
+            @GetMapping("/test-errors/stale-version")
+            String staleVersion() {
+                throw new ObjectOptimisticLockingFailureException(
+                        "Request", UUID.randomUUID());
+            }
 
             @GetMapping("/test-errors/not-found")
             String notFound() {

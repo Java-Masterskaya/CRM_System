@@ -2,11 +2,18 @@ package ru.practicum.crm.request.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatCode;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +21,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.request.domain.Request;
 import ru.practicum.crm.request.domain.RequestStatus;
@@ -27,6 +36,9 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private TransactionTemplate transactionTemplate;
 
     private UUID tenantA;
     private UUID tenantB;
@@ -161,6 +173,93 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
 
         assertThat(updated.getVersion()).isGreaterThan(initialVersion);
         assertThat(updated.getUpdatedAt()).isAfterOrEqualTo(updated.getCreatedAt());
+    }
+
+    @Test
+    void save_whenTwoTransactionsReadSameVersion_secondFailsWithOptimisticLock() throws Exception {
+
+        UUID requestId = transactionTemplate.execute(status ->
+                repository.save(newRequest(tenantA, "Исходное значение")).getId());
+
+        CountDownLatch bothRead = new CountDownLatch(2);
+        CountDownLatch canSave = new CountDownLatch(1);
+
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+
+            Runnable task = () -> transactionTemplate.execute(status -> {
+                Request request = repository
+                        .findByIdAndTenantIdAndDeletedFalse(requestId, tenantA)
+                        .orElseThrow();
+
+                bothRead.countDown();
+
+                try {
+                    canSave.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Поток был прерван", e);
+                }
+
+                request.setSubject("Правка от " + Thread.currentThread().getName());
+                repository.save(request);
+
+                return null;
+            });
+
+            Future<?> first = executor.submit(task);
+            Future<?> second = executor.submit(task);
+
+            assertThat(bothRead.await(5, TimeUnit.SECONDS))
+                    .as("Оба потока должны прочитать заявку до сохранения")
+                    .isTrue();
+
+            canSave.countDown();
+
+            int successes = 0;
+            int conflicts = 0;
+
+            for (Future<?> future : List.of(first, second)) {
+                try {
+                    future.get(10, TimeUnit.SECONDS);
+                    successes++;
+                } catch (ExecutionException e) {
+                    if (e.getCause() instanceof ObjectOptimisticLockingFailureException) {
+                        conflicts++;
+                    } else {
+                        throw e;
+                    }
+                }
+            }
+
+            assertThat(successes).isEqualTo(1);
+            assertThat(conflicts).isEqualTo(1);
+        }
+
+        Request finalState = repository
+                .findByIdAndTenantIdAndDeletedFalse(requestId, tenantA)
+                .orElseThrow();
+
+        assertThat(finalState.getVersion()).isEqualTo(1L);
+        assertThat(finalState.getSubject())
+                .startsWith("Правка от ");
+    }
+
+    @Test
+    void requireVersion_whenVersionMatches_doesNotThrow() {
+        Request saved = repository.save(newRequest(tenantA, "Проверка версии"));
+
+        assertThatCode(() -> saved.requireVersion(saved.getVersion()))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void requireVersion_whenVersionDiffers_throwsOptimisticLock() {
+        Request saved = repository.save(newRequest(tenantA, "Проверка версии"));
+
+        assertThat(saved.getVersion()).isEqualTo(0L);
+
+        assertThatThrownBy(() -> saved.requireVersion(1L))
+                .isInstanceOf(ObjectOptimisticLockingFailureException.class);
     }
 
     @Test

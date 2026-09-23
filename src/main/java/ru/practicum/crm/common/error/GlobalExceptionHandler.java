@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.TypeMismatchException;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.core.MethodParameter;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -42,6 +43,24 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     static final String WRONG_TYPE_MESSAGE = "имеет неверный формат";
 
     private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ProblemDetail> handleOptimisticLock(
+            OptimisticLockingFailureException ex,
+            HttpServletRequest request
+    ) {
+        LOG.warn("Конфликт версий при {} {}", request.getMethod(), request.getRequestURI());
+
+        ProblemDetail body = ProblemDetailFactory.create(
+                ErrorCode.STALE_VERSION,
+                null,
+                instanceOf(request),
+                List.of());
+
+        return ResponseEntity.status(ErrorCode.STALE_VERSION.getStatus())
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(body);
+    }
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ProblemDetail> handleApiException(ApiException ex,
