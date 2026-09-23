@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import ru.practicum.crm.base.BaseIntegrationTest;
-import ru.practicum.crm.tenant.model.Tenant;
+import ru.practicum.crm.tenant.domain.Tenant;
 
 public class TenantRepositoryIntegrationTest extends BaseIntegrationTest {
 
