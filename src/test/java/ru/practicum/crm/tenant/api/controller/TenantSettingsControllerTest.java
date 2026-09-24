@@ -32,7 +32,7 @@ class TenantSettingsControllerTest {
         TenantSettingsDto dto = new TenantSettingsDto("Europe/Moscow");
         when(service.getTenantSettings()).thenReturn(dto);
 
-        mockMvc.perform(get("/api/v1/admin/tenant/settings"))
+        mockMvc.perform(get("/admin/tenant/settings"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.timezone").value("Europe/Moscow"));
 
@@ -45,7 +45,7 @@ class TenantSettingsControllerTest {
         TenantSettingsDto response = new TenantSettingsDto("Europe/Paris");
         when(service.updateTenantSettings(any(TenantSettingsDto.class))).thenReturn(response);
 
-        mockMvc.perform(put("/api/v1/admin/tenant/settings")
+        mockMvc.perform(put("/admin/tenant/settings")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"timezone\":\"Europe/Paris\"}"))
                 .andExpect(status().isOk())
@@ -56,7 +56,7 @@ class TenantSettingsControllerTest {
 
     @Test
     void updateTenantSettings_whenTimezoneIsInvalid_thenReturnsBadRequest() throws Exception {
-        mockMvc.perform(put("/api/v1/admin/tenant/settings")
+        mockMvc.perform(put("/admin/tenant/settings")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"timezone\":\"Not/AZone\"}"))
                 .andExpect(status().isBadRequest())

@@ -14,7 +14,7 @@ import ru.practicum.crm.tenant.service.TenantSettingsService;
 //  Доступ к эндпоинтам должен иметь только администратор арендатора.
 @RequiredArgsConstructor
 @RestController
-@RequestMapping("/api/v1/admin/tenant/settings")
+@RequestMapping("/admin/tenant/settings")
 public class TenantSettingsController {
 
     private final TenantSettingsService service;
