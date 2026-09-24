@@ -28,7 +28,8 @@ import org.hibernate.type.SqlTypes;
  * <p>Событие — свершившийся факт: арендатор, тип и полезная нагрузка после записи не меняются.
  * В коде это выражено отсутствием сеттеров и {@code updatable = false}, в базе — триггером
  * {@code outbox_events_immutable_payload}. Меняются только поля доставки, и только методами
- * {@link #claim}, {@link #markSent}, {@link #retryAt} и {@link #releaseUnstarted}, которые
+ * {@link #claim}, {@link #markSent}, {@link #retryAt}, {@link #markFailed} и
+ * {@link #releaseUnstarted}, которые
  * вызывает фоновый обработчик доставки.
  */
 @Entity
@@ -60,6 +61,12 @@ public class OutboxEvent {
 
     @Column(name = "next_attempt_at", nullable = false)
     private Instant nextAttemptAt;
+
+    @Column(name = "last_error_code", length = DeliveryFailure.CODE_MAX_LENGTH)
+    private String lastErrorCode;
+
+    @Column(name = "last_error_message", length = DeliveryFailure.MESSAGE_MAX_LENGTH)
+    private String lastErrorMessage;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -107,14 +114,30 @@ public class OutboxEvent {
     }
 
     /**
-     * Попытка не удалась: событие возвращается в очередь и станет доступно в
-     * {@code nextAttempt}. Счётчик попыток не меняется — эта попытка уже учтена в
-     * {@link #claim}.
+     * Попытка не удалась, но попытки ещё есть: событие возвращается в очередь и станет доступно
+     * в {@code nextAttempt}. Счётчик попыток не меняется — эта попытка уже учтена в
+     * {@link #claim}. Причина запоминается для разбора.
      */
-    public void retryAt(Instant nextAttempt) {
+    public void retryAt(Instant nextAttempt, DeliveryFailure failure) {
         requireInProgress();
         status = OutboxStatus.NEW;
         nextAttemptAt = nextAttempt;
+        remember(failure);
+    }
+
+    /**
+     * Попытки исчерпаны: окончательный неуспех. Событие остаётся в таблице для разбора и больше
+     * не выбирается — захват берёт только новые и взятые в работу.
+     */
+    public void markFailed(DeliveryFailure failure) {
+        requireInProgress();
+        status = OutboxStatus.FAILED;
+        remember(failure);
+    }
+
+    private void remember(DeliveryFailure failure) {
+        lastErrorCode = failure.code();
+        lastErrorMessage = failure.message();
     }
 
     /**

@@ -27,7 +27,9 @@ class OutboxSchedulingConfigTest {
                     "app.outbox.batch-size=50",
                     "app.outbox.poll-interval=1h",
                     "app.outbox.lease=5m",
-                    "app.outbox.retry-delay=1m");
+                    "app.outbox.retry-delay=1m",
+                    "app.outbox.max-retry-delay=2h",
+                    "app.outbox.max-attempts=8");
 
     @Test
     void scheduler_whenEnabled_runsProcessorWithConfiguredPause() {

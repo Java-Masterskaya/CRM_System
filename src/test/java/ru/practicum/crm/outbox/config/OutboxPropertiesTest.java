@@ -21,7 +21,9 @@ class OutboxPropertiesTest {
                     "app.outbox.batch-size=50",
                     "app.outbox.poll-interval=5s",
                     "app.outbox.lease=5m",
-                    "app.outbox.retry-delay=1m");
+                    "app.outbox.retry-delay=1m",
+                    "app.outbox.max-retry-delay=2h",
+                    "app.outbox.max-attempts=8");
 
     @Test
     void properties_whenValid_areBoundIncludingShortDurationFormat() {
@@ -32,7 +34,29 @@ class OutboxPropertiesTest {
             assertThat(properties.pollInterval()).isEqualTo(Duration.ofSeconds(5));
             assertThat(properties.lease()).isEqualTo(Duration.ofMinutes(5));
             assertThat(properties.retryDelay()).isEqualTo(Duration.ofMinutes(1));
+            assertThat(properties.maxRetryDelay()).isEqualTo(Duration.ofHours(2));
+            assertThat(properties.maxAttempts()).isEqualTo(8);
         });
+    }
+
+    @Test
+    void maxAttempts_whenZero_stopsApplicationFromStarting() {
+        contextRunner.withPropertyValues("app.outbox.max-attempts=0").run(context -> {
+            assertThat(context).hasFailed();
+            assertThat(context.getStartupFailure()).rootCause()
+                    .hasMessageContaining("maxAttempts");
+        });
+    }
+
+    @Test
+    void maxRetryDelay_whenShorterThanFirstDelay_stopsApplicationFromStarting() {
+        contextRunner
+                .withPropertyValues("app.outbox.retry-delay=10m", "app.outbox.max-retry-delay=5m")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure()).rootCause()
+                            .hasMessageContaining("retryDelayWithinMaximum");
+                });
     }
 
     @Test
@@ -51,7 +75,9 @@ class OutboxPropertiesTest {
                 .withPropertyValues(
                         "app.outbox.batch-size=50",
                         "app.outbox.poll-interval=5s",
-                        "app.outbox.retry-delay=1m")
+                        "app.outbox.retry-delay=1m",
+                        "app.outbox.max-retry-delay=2h",
+                        "app.outbox.max-attempts=8")
                 .run(context -> {
                     assertThat(context).hasFailed();
                     assertThat(context.getStartupFailure()).rootCause()

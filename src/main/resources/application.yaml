@@ -37,6 +37,8 @@ app:
     poll-interval: ${OUTBOX_POLL_INTERVAL:5s}
     lease: ${OUTBOX_LEASE:5m}
     retry-delay: ${OUTBOX_RETRY_DELAY:1m}
+    max-retry-delay: ${OUTBOX_MAX_RETRY_DELAY:2h}
+    max-attempts: ${OUTBOX_MAX_ATTEMPTS:8}
 
 server:
   port: ${SERVER_PORT:8080}

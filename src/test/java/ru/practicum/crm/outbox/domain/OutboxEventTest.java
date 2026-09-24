@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Test;
 class OutboxEventTest {
 
     private static final UUID TENANT_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final DeliveryFailure SMTP_DOWN =
+            new DeliveryFailure("SMTP_DOWN", "Почтовый сервер недоступен");
 
     private OutboxEvent event;
 
@@ -131,11 +133,41 @@ class OutboxEventTest {
         Instant nextAttempt = Instant.parse("2026-09-24T12:10:00Z");
         event.claim(Instant.parse("2026-09-24T12:05:00Z"));
 
-        event.retryAt(nextAttempt);
+        event.retryAt(nextAttempt, SMTP_DOWN);
 
         assertThat(event.getStatus()).isEqualTo(OutboxStatus.NEW);
         assertThat(event.getNextAttemptAt()).isEqualTo(nextAttempt);
         assertThat(event.getAttempts()).isEqualTo(1);
+        assertThat(event.getLastErrorCode()).isEqualTo("SMTP_DOWN");
+        assertThat(event.getLastErrorMessage()).isEqualTo("Почтовый сервер недоступен");
+    }
+
+    @Test
+    void markFailed_whenAttemptsExhausted_keepsEventWithReasonAndClosesIt() {
+        event.claim(Instant.parse("2026-09-24T12:05:00Z"));
+
+        event.markFailed(SMTP_DOWN);
+
+        assertThat(event.getStatus()).isEqualTo(OutboxStatus.FAILED);
+        assertThat(event.getLastErrorCode()).isEqualTo("SMTP_DOWN");
+        assertThat(event.getAttempts()).isEqualTo(1);
+    }
+
+    @Test
+    void markFailed_whenEventWasNotTaken_isRejected() {
+        assertThatThrownBy(() -> event.markFailed(SMTP_DOWN))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(event.getStatus()).isEqualTo(OutboxStatus.NEW);
+    }
+
+    @Test
+    void claim_whenEventFailedForGood_isRejected() {
+        event.claim(Instant.parse("2026-09-24T12:05:00Z"));
+        event.markFailed(SMTP_DOWN);
+
+        assertThatThrownBy(() -> event.claim(Instant.parse("2026-09-24T12:15:00Z")))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(event.getStatus()).isEqualTo(OutboxStatus.FAILED);
     }
 
     @Test

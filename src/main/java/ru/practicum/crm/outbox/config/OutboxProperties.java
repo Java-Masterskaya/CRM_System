@@ -16,7 +16,10 @@ import org.springframework.validation.annotation.Validated;
  * @param lease на сколько событие закрепляется за взявшим его обработчиком; должно быть больше
  *     самой долгой отправки, иначе событие может быть взято повторно, пока первая отправка ещё
  *     идёт
- * @param retryDelay через сколько повторить неудачную отправку
+ * @param retryDelay задержка после первой неудачной попытки; каждая следующая вдвое больше
+ * @param maxRetryDelay верхняя граница задержки между попытками
+ * @param maxAttempts сколько всего попыток доставки, включая первую; после последней неудачной
+ *     событие переходит в окончательный неуспех
  */
 @ConfigurationProperties(prefix = "app.outbox")
 @Validated
@@ -28,12 +31,25 @@ public record OutboxProperties(
 
         @NotNull Duration lease,
 
-        @NotNull Duration retryDelay
+        @NotNull Duration retryDelay,
+
+        @NotNull Duration maxRetryDelay,
+
+        @Min(1) @Max(100)
+        int maxAttempts
 ) {
 
-    @AssertTrue(message = "app.outbox: poll-interval, lease и retry-delay должны быть больше нуля")
+    @AssertTrue(message = "app.outbox: poll-interval, lease, retry-delay и max-retry-delay "
+            + "должны быть больше нуля")
     public boolean isDurationsPositive() {
-        return isPositive(pollInterval) && isPositive(lease) && isPositive(retryDelay);
+        return isPositive(pollInterval) && isPositive(lease) && isPositive(retryDelay)
+                && isPositive(maxRetryDelay);
+    }
+
+    @AssertTrue(message = "app.outbox: max-retry-delay не может быть меньше retry-delay")
+    public boolean isRetryDelayWithinMaximum() {
+        return retryDelay == null || maxRetryDelay == null
+                || maxRetryDelay.compareTo(retryDelay) >= 0;
     }
 
     private static boolean isPositive(Duration duration) {
