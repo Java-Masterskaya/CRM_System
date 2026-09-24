@@ -25,6 +25,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.request.domain.Request;
+import ru.practicum.crm.request.domain.RequestPriority;
 import ru.practicum.crm.request.domain.RequestStatus;
 
 class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
@@ -67,7 +68,7 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
         UUID assigneeId = UUID.randomUUID();
         request.setTypeId(typeId);
         request.setAssigneeId(assigneeId);
-        request.setPriority("HIGH");
+        request.setPriority(RequestPriority.HIGH);
         request.setDataParams(Map.of("format", "csv", "rows", 1000));
         request.setDesiredDueAt(Instant.parse("2026-10-01T09:00:00Z"));
         request.setFirstResponseDueAt(Instant.parse("2026-09-19T12:00:00Z"));
@@ -84,7 +85,7 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
         assertThat(saved.getDescription()).isEqualTo("Нужен отчёт за квартал");
         assertThat(saved.getDataParams()).containsEntry("format", "csv")
                 .containsEntry("rows", 1000);
-        assertThat(saved.getPriority()).isEqualTo("HIGH");
+        assertThat(saved.getPriority()).isEqualTo(RequestPriority.HIGH);
         assertThat(saved.getStatus()).isEqualTo(RequestStatus.NEW);
         assertThat(saved.getAuthorId()).isEqualTo(authorId);
         assertThat(saved.getAssigneeId()).isEqualTo(assigneeId);

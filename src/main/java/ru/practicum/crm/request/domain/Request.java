@@ -21,7 +21,7 @@ import ru.practicum.crm.common.model.TenantScopedEntity;
  * Заявка на обработку данных — главная сущность продукта (ТЗ §4.2).
  *
  * <p>Состав полей зафиксирован в T-033 (#34). Правила переходов статусов (T-043),
- * подстановка приоритета из типа заявки (T-035) и расчёт сроков по SLA (T-049)
+ * выбор приоритета новой заявки ({@link RequestPriority#resolve}) и расчёт сроков по SLA (T-049)
  * находятся за пределами сущности: здесь только хранение состояния.
  */
 @Entity
@@ -45,9 +45,17 @@ public class Request extends TenantScopedEntity {
     @Column(name = "data_params")
     private Map<String, Object> dataParams;
 
-    @Setter
-    @Column(name = "priority", length = 20)
-    private String priority;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "priority", nullable = false, length = 20)
+    private RequestPriority priority = RequestPriority.FALLBACK;
+
+    /**
+     * Ранг приоритета для сортировки по срочности. Сеттера нет: значение меняется только
+     * вместе с приоритетом в {@link #setPriority}, а в базе их соответствие проверяет
+     * ограничение {@code requests_priority_check}.
+     */
+    @Column(name = "priority_rank", nullable = false)
+    private short priorityRank = RequestPriority.FALLBACK.getRank();
 
     @Setter
     @Enumerated(EnumType.STRING)
@@ -111,6 +119,19 @@ public class Request extends TenantScopedEntity {
 
     public void setDataParams(Map<String, Object> dataParams) {
         this.dataParams = dataParams == null ? null : new LinkedHashMap<>(dataParams);
+    }
+
+    /**
+     * Меняет приоритет и вместе с ним ранг для сортировки.
+     *
+     * @throws IllegalArgumentException если приоритет не передан: у заявки он есть всегда
+     */
+    public void setPriority(RequestPriority priority) {
+        if (priority == null) {
+            throw new IllegalArgumentException("Приоритет заявки обязателен");
+        }
+        this.priority = priority;
+        this.priorityRank = priority.getRank();
     }
 
     public void requireVersion(long expectedVersion) {

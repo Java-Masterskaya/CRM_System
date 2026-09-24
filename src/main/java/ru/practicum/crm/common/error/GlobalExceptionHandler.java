@@ -1,9 +1,13 @@
 package ru.practicum.crm.common.error;
 
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.TypeMismatchException;
@@ -41,6 +45,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             "Исправьте ошибки в указанных параметрах и повторите запрос.";
     static final String MISSING_PARAMETER_MESSAGE = "обязательный параметр не передан";
     static final String WRONG_TYPE_MESSAGE = "имеет неверный формат";
+    static final String ALLOWED_VALUES_MESSAGE = "допустимые значения: ";
 
     private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
@@ -145,6 +150,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             return createResponseEntity(body, headers, ErrorCode.PAYLOAD_TOO_LARGE.getStatus(),
                     request);
         }
+        // Значение вне набора допустимых (например, неизвестный приоритет) — не испорченный
+        // JSON, а ошибка в конкретном поле, поэтому отвечаем так же, как на невалидное поле.
+        InvalidFormatException invalidValue = findCause(ex, InvalidFormatException.class);
+        if (invalidValue != null && invalidValue.getTargetType() != null
+                && invalidValue.getTargetType().isEnum()) {
+            ValidationError error = ValidationError.ofField(fieldPath(invalidValue),
+                    ALLOWED_VALUES_MESSAGE + enumNames(invalidValue.getTargetType()));
+            return validationFailed(List.of(error), null, headers, request);
+        }
         return super.handleHttpMessageNotReadable(ex, headers, status, request);
     }
 
@@ -204,15 +218,50 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     private static boolean hasCause(Throwable ex, Class<? extends Throwable> type) {
+        return findCause(ex, type) != null;
+    }
+
+    @Nullable
+    private static <T extends Throwable> T findCause(Throwable ex, Class<T> type) {
         Throwable current = ex;
         while (current != null) {
             if (type.isInstance(current)) {
-                return true;
+                return type.cast(current);
             }
             Throwable cause = current.getCause();
             current = cause == current ? null : cause;
         }
-        return false;
+        return null;
+    }
+
+    /**
+     * Путь к полю в формате {@code items[0].priority}, из которого строится JSON Pointer.
+     * Индекс в самом начале пути (тело — массив) пишется без скобок: {@code 0.priority}, иначе
+     * указатель получил бы лишний слэш.
+     */
+    private static String fieldPath(JsonMappingException ex) {
+        StringBuilder path = new StringBuilder();
+        for (JsonMappingException.Reference reference : ex.getPath()) {
+            if (reference.getFieldName() != null) {
+                if (!path.isEmpty()) {
+                    path.append('.');
+                }
+                path.append(reference.getFieldName());
+            } else if (reference.getIndex() >= 0) {
+                if (path.isEmpty()) {
+                    path.append(reference.getIndex());
+                } else {
+                    path.append('[').append(reference.getIndex()).append(']');
+                }
+            }
+        }
+        return path.toString();
+    }
+
+    private static String enumNames(Class<?> enumType) {
+        return Arrays.stream(enumType.getEnumConstants())
+                .map(constant -> ((Enum<?>) constant).name())
+                .collect(Collectors.joining(", "));
     }
 
     private static URI instanceOf(HttpServletRequest request) {

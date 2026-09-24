@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,12 +15,15 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.MethodParameter;
+import org.springframework.http.MediaType;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 @WebMvcTest(controllers = GlobalExceptionHandlerTest.ProbeConfiguration.ProbeController.class)
@@ -84,6 +88,54 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void body_whenEnumValueUnknown_returnsValidationErrorForThatField() throws Exception {
+        mockMvc.perform(post("/test-errors/level").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"level\": \"SUPER\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].pointer").value("#/level"))
+                .andExpect(jsonPath("$.errors[0].detail").value("допустимые значения: LOW, HIGH"));
+    }
+
+    @Test
+    void body_whenEnumInsideListUnknown_pointsToThatElement() throws Exception {
+        mockMvc.perform(post("/test-errors/level").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\": [{\"level\": \"LOW\"}, {\"level\": \"SUPER\"}]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.errors[0].pointer").value("#/items/1/level"));
+    }
+
+    @Test
+    void body_whenTopLevelArrayHasUnknownEnum_pointsToElementWithSingleSlash() throws Exception {
+        mockMvc.perform(post("/test-errors/levels").contentType(MediaType.APPLICATION_JSON)
+                        .content("[\"LOW\", \"SUPER\"]"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.errors[0].pointer").value("#/1"));
+    }
+
+    @Test
+    void body_whenTopLevelArrayOfObjectsHasUnknownEnum_pointsToFieldOfElement()
+            throws Exception {
+        mockMvc.perform(post("/test-errors/items").contentType(MediaType.APPLICATION_JSON)
+                        .content("[{\"level\": \"SUPER\"}]"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.errors[0].pointer").value("#/0/level"));
+    }
+
+    @Test
+    void body_whenJsonItselfBroken_staysMalformedRequest() throws Exception {
+        mockMvc.perform(post("/test-errors/level").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"level\": "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"))
+                .andExpect(jsonPath("$.errors").doesNotExist());
+    }
+
+    @Test
     void springOwnError_whenMethodNotAllowed_isReturnedInSameFormat() throws Exception {
         mockMvc.perform(post("/test-errors/not-found"))
                 .andExpect(status().isMethodNotAllowed())
@@ -98,6 +150,29 @@ class GlobalExceptionHandlerTest {
 
         @RestController
         static class ProbeController {
+
+            enum Level { LOW, HIGH }
+
+            record Item(Level level) {
+            }
+
+            record LevelRequest(Level level, List<Item> items) {
+            }
+
+            @PostMapping("/test-errors/level")
+            String level(@RequestBody LevelRequest body) {
+                return "ok";
+            }
+
+            @PostMapping("/test-errors/levels")
+            String levels(@RequestBody List<Level> levels) {
+                return "ok";
+            }
+
+            @PostMapping("/test-errors/items")
+            String items(@RequestBody List<Item> items) {
+                return "ok";
+            }
 
             @GetMapping("/test-errors/stale-version")
             String staleVersion() {

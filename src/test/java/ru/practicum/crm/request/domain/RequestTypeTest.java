@@ -29,16 +29,16 @@ class RequestTypeTest {
 
     @Test
     void describe_whenCalled_replacesNameDescriptionAndDefaultPriority() {
-        type.describe("Импорт данных", "Загрузка файлов клиента", "HIGH");
+        type.describe("Импорт данных", "Загрузка файлов клиента", RequestPriority.HIGH);
 
         assertThat(type.getName()).isEqualTo("Импорт данных");
         assertThat(type.getDescription()).isEqualTo("Загрузка файлов клиента");
-        assertThat(type.getDefaultPriority()).isEqualTo("HIGH");
+        assertThat(type.getDefaultPriority()).isEqualTo(RequestPriority.HIGH);
     }
 
     @Test
     void describe_whenOptionalFieldsOmitted_clearsThem() {
-        type.describe("Импорт данных", "Загрузка файлов", "HIGH");
+        type.describe("Импорт данных", "Загрузка файлов", RequestPriority.HIGH);
 
         type.describe("Импорт данных", null, null);
 
