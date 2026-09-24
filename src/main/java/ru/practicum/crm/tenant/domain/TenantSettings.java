@@ -3,11 +3,14 @@ package ru.practicum.crm.tenant.domain;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.MapsId;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -20,7 +23,6 @@ import org.springframework.data.jpa.convert.threeten.Jsr310JpaConverters.ZoneIdC
 @Entity
 @Table(name = "tenant_settings")
 @Getter
-@Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class TenantSettings {
 
@@ -28,6 +30,7 @@ public class TenantSettings {
     @Column(name = "tenant_id", nullable = false, updatable = false)
     private UUID tenantId;
 
+    @Setter
     @Column(nullable = false, length = 64)
     @Convert(converter = ZoneIdConverter.class)
     private ZoneId timezone;
@@ -40,12 +43,20 @@ public class TenantSettings {
     @UpdateTimestamp
     private OffsetDateTime updatedAt;
 
-    public TenantSettings(UUID tenantId, ZoneId timezone) {
-        this.tenantId = tenantId;
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @MapsId
+    @JoinColumn(name = "tenant_id")
+    private Tenant tenant;
+
+    public TenantSettings(Tenant tenant, ZoneId timezone) {
+        this.tenant = tenant;
         this.timezone = timezone;
     }
 
-    public static TenantSettings createDefaults(UUID tenantId) {
-        return new TenantSettings(tenantId, ZoneOffset.UTC);
+    public static TenantSettings createDefaults(Tenant tenant) {
+        TenantSettings settings = new TenantSettings();
+        settings.tenant = tenant;
+        settings.timezone = ZoneId.of("UTC");
+        return settings;
     }
 }

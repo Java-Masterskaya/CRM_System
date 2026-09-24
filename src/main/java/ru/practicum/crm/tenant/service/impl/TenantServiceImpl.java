@@ -15,18 +15,18 @@ import ru.practicum.crm.tenant.service.TenantService;
 @RequiredArgsConstructor
 public class TenantServiceImpl implements TenantService {
     private final TenantRepository tenantRepository;
-    private final TenantSettingsRepository tenantSettingsRepository;
     private final TenantMapper mapper;
 
     @Override
     @Transactional
     public TenantDto createTenant(TenantDto request) {
-        Tenant tenant = tenantRepository.save(new Tenant(request.name()));
-
+        Tenant tenant = new Tenant(request.name());
         TenantSettings settings =
-                TenantSettings.createDefaults(tenant.getId());
+                TenantSettings.createDefaults(tenant);
 
-        tenantSettingsRepository.save(settings);
+        tenant.initializeSettings(settings);
+        tenantRepository.save(tenant);
+
         return mapper.toDto(tenant);
     }
 }

@@ -10,6 +10,7 @@ import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.NotFoundException;
 import ru.practicum.crm.tenant.api.dto.TenantSettingsDto;
 import ru.practicum.crm.tenant.api.mapper.TenantSettingsMapper;
+import ru.practicum.crm.tenant.context.TenantContext;
 import ru.practicum.crm.tenant.domain.TenantSettings;
 import ru.practicum.crm.tenant.repository.TenantSettingsRepository;
 import ru.practicum.crm.tenant.service.TenantSettingsService;
@@ -21,19 +22,18 @@ public class TenantSettingsServiceImpl implements TenantSettingsService {
     private final TenantSettingsRepository repository;
     private final TenantSettingsMapper mapper;
     private final TransactionTemplate transactionTemplate;
+    private final TenantContext tenantContext;
 
     @Override
     public TenantSettingsDto getTenantSettings() {
-        // TODO: переписать на корректный из токена и проверить права доступа
-        UUID tenantId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        UUID tenantId = tenantContext.getCurrentTenantId();
         TenantSettings settings = findByTenantId(tenantId);
         return mapper.toDto(settings);
     }
 
     @Override
     public TenantSettingsDto updateTenantSettings(TenantSettingsDto tenantSettingsDto) {
-        // TODO: переписать на корректный из токена и проверить права доступа
-        UUID tenantId = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        UUID tenantId = tenantContext.getCurrentTenantId();
         return transactionTemplate.execute(status -> {
             TenantSettings settings = findByTenantId(tenantId);
             updateSettings(settings, tenantSettingsDto);
@@ -42,7 +42,7 @@ public class TenantSettingsServiceImpl implements TenantSettingsService {
     }
 
     private TenantSettings findByTenantId(UUID tenantId) {
-        return repository.findById(tenantId).orElseThrow(
+        return repository.findByTenantId(tenantId).orElseThrow(
                 () -> new NotFoundException(ErrorCode.NOT_FOUND,
                         "Не найдены настройки у арендатора с id = " + tenantId)
         );

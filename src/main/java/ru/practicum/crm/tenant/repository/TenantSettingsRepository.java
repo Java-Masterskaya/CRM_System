@@ -1,8 +1,12 @@
 package ru.practicum.crm.tenant.repository;
 
+import java.util.Optional;
 import java.util.UUID;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.Repository;
 import ru.practicum.crm.tenant.domain.TenantSettings;
 
-public interface TenantSettingsRepository extends JpaRepository<TenantSettings, UUID> {
+public interface TenantSettingsRepository extends Repository<TenantSettings, UUID> {
+    Optional<TenantSettings> findByTenantId(UUID tenantId);
+
+    TenantSettings save(TenantSettings settings);
 }

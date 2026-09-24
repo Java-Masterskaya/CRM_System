@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RestController;
 import ru.practicum.crm.tenant.api.dto.TenantSettingsDto;
 import ru.practicum.crm.tenant.service.TenantSettingsService;
 
+// TODO: После реализации Security добавить проверку прав доступа.
+//  Доступ к эндпоинтам должен иметь только администратор арендатора.
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/api/v1/admin/tenant/settings")
