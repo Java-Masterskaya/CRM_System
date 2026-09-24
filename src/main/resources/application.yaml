@@ -23,6 +23,21 @@ spring:
       validation-timeout: 1000
       initialization-fail-timeout: -1
 
+  # При остановке планировщик ждёт, пока обработчик исходящих событий допишет текущую порцию.
+  task:
+    scheduling:
+      shutdown:
+        await-termination: true
+        await-termination-period: 30s
+
+app:
+  outbox:
+    scheduler-enabled: ${OUTBOX_SCHEDULER_ENABLED:true}
+    batch-size: ${OUTBOX_BATCH_SIZE:50}
+    poll-interval: ${OUTBOX_POLL_INTERVAL:5s}
+    lease: ${OUTBOX_LEASE:5m}
+    retry-delay: ${OUTBOX_RETRY_DELAY:1m}
+
 server:
   port: ${SERVER_PORT:8080}
 

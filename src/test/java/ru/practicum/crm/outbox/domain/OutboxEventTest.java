@@ -1,6 +1,7 @@
 package ru.practicum.crm.outbox.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -76,5 +77,76 @@ class OutboxEventTest {
                 .isNotEqualTo(null)
                 .isNotEqualTo("не событие");
         assertThat(event.hashCode()).isEqualTo(other.hashCode());
+    }
+
+    @Test
+    void claim_whenNewEventTaken_startsAttemptAndHoldsItUntilLeaseEnds() {
+        Instant leaseUntil = Instant.parse("2026-09-24T12:05:00Z");
+
+        event.claim(leaseUntil);
+
+        assertThat(event.getStatus()).isEqualTo(OutboxStatus.IN_PROGRESS);
+        assertThat(event.getAttempts()).isEqualTo(1);
+        assertThat(event.getNextAttemptAt()).isEqualTo(leaseUntil);
+    }
+
+    @Test
+    void claim_whenLeaseOfPreviousHandlerExpired_takesEventAgain() {
+        event.claim(Instant.parse("2026-09-24T12:05:00Z"));
+
+        event.claim(Instant.parse("2026-09-24T12:15:00Z"));
+
+        assertThat(event.getStatus()).isEqualTo(OutboxStatus.IN_PROGRESS);
+        assertThat(event.getAttempts()).isEqualTo(2);
+    }
+
+    @Test
+    void claim_whenEventAlreadySent_isRejected() {
+        event.claim(Instant.parse("2026-09-24T12:05:00Z"));
+        event.markSent();
+
+        assertThatThrownBy(() -> event.claim(Instant.parse("2026-09-24T12:15:00Z")))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(event.getStatus()).isEqualTo(OutboxStatus.SENT);
+    }
+
+    @Test
+    void markSent_whenEventInProgress_finishesDelivery() {
+        event.claim(Instant.parse("2026-09-24T12:05:00Z"));
+
+        event.markSent();
+
+        assertThat(event.getStatus()).isEqualTo(OutboxStatus.SENT);
+        assertThat(event.getAttempts()).isEqualTo(1);
+    }
+
+    @Test
+    void markSent_whenEventWasNotTaken_isRejected() {
+        assertThatThrownBy(() -> event.markSent()).isInstanceOf(IllegalStateException.class);
+        assertThat(event.getStatus()).isEqualTo(OutboxStatus.NEW);
+    }
+
+    @Test
+    void retryAt_whenAttemptFailed_returnsEventToQueueKeepingAttemptCounted() {
+        Instant nextAttempt = Instant.parse("2026-09-24T12:10:00Z");
+        event.claim(Instant.parse("2026-09-24T12:05:00Z"));
+
+        event.retryAt(nextAttempt);
+
+        assertThat(event.getStatus()).isEqualTo(OutboxStatus.NEW);
+        assertThat(event.getNextAttemptAt()).isEqualTo(nextAttempt);
+        assertThat(event.getAttempts()).isEqualTo(1);
+    }
+
+    @Test
+    void releaseUnstarted_whenSendingNeverBegan_returnsEventAndCancelsCountedAttempt() {
+        Instant now = Instant.parse("2026-09-24T12:00:30Z");
+        event.claim(Instant.parse("2026-09-24T12:05:00Z"));
+
+        event.releaseUnstarted(now);
+
+        assertThat(event.getStatus()).isEqualTo(OutboxStatus.NEW);
+        assertThat(event.getNextAttemptAt()).isEqualTo(now);
+        assertThat(event.getAttempts()).isZero();
     }
 }

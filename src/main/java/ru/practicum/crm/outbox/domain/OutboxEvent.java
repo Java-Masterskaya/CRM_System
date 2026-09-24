@@ -27,8 +27,9 @@ import org.hibernate.type.SqlTypes;
  *
  * <p>Событие — свершившийся факт: арендатор, тип и полезная нагрузка после записи не меняются.
  * В коде это выражено отсутствием сеттеров и {@code updatable = false}, в базе — триггером
- * {@code outbox_events_immutable_payload}. Меняются только поля доставки, и делают это
- * T-066 (#88) и T-067 (#89).
+ * {@code outbox_events_immutable_payload}. Меняются только поля доставки, и только методами
+ * {@link #claim}, {@link #markSent}, {@link #retryAt} и {@link #releaseUnstarted}, которые
+ * вызывает фоновый обработчик доставки.
  */
 @Entity
 @Table(name = "outbox_events")
@@ -78,6 +79,60 @@ public class OutboxEvent {
 
     public Map<String, Object> getPayload() {
         return payload == null ? null : new LinkedHashMap<>(payload);
+    }
+
+    /**
+     * Обработчик забирает событие: начинается очередная попытка доставки.
+     *
+     * <p>До {@code leaseUntil} событие принадлежит этому обработчику — выборка готовых его не
+     * вернёт. Если обработчик упадёт, не записав результат, после этого момента событие снова
+     * станет доступно, и оно не потеряется.
+     *
+     * @throws IllegalStateException если событие уже доставлено или окончательно не удалось
+     */
+    public void claim(Instant leaseUntil) {
+        if (status != OutboxStatus.NEW && status != OutboxStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Событие " + id + " в состоянии " + status
+                    + " брать в обработку нельзя");
+        }
+        status = OutboxStatus.IN_PROGRESS;
+        attempts++;
+        nextAttemptAt = leaseUntil;
+    }
+
+    /** Доставка удалась: событие больше не выбирается. */
+    public void markSent() {
+        requireInProgress();
+        status = OutboxStatus.SENT;
+    }
+
+    /**
+     * Попытка не удалась: событие возвращается в очередь и станет доступно в
+     * {@code nextAttempt}. Счётчик попыток не меняется — эта попытка уже учтена в
+     * {@link #claim}.
+     */
+    public void retryAt(Instant nextAttempt) {
+        requireInProgress();
+        status = OutboxStatus.NEW;
+        nextAttemptAt = nextAttempt;
+    }
+
+    /**
+     * Событие взято, но отправка даже не начиналась — например, приложение останавливается.
+     * Оно возвращается в очередь сразу, а засчитанная при взятии попытка отменяется.
+     */
+    public void releaseUnstarted(Instant now) {
+        requireInProgress();
+        status = OutboxStatus.NEW;
+        attempts--;
+        nextAttemptAt = now;
+    }
+
+    private void requireInProgress() {
+        if (status != OutboxStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Событие " + id + " не в обработке, а в состоянии "
+                    + status);
+        }
     }
 
     @PrePersist
