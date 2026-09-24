@@ -108,6 +108,25 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void body_whenTopLevelArrayHasUnknownEnum_pointsToElementWithSingleSlash() throws Exception {
+        mockMvc.perform(post("/test-errors/levels").contentType(MediaType.APPLICATION_JSON)
+                        .content("[\"LOW\", \"SUPER\"]"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.errors[0].pointer").value("#/1"));
+    }
+
+    @Test
+    void body_whenTopLevelArrayOfObjectsHasUnknownEnum_pointsToFieldOfElement()
+            throws Exception {
+        mockMvc.perform(post("/test-errors/items").contentType(MediaType.APPLICATION_JSON)
+                        .content("[{\"level\": \"SUPER\"}]"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.errors[0].pointer").value("#/0/level"));
+    }
+
+    @Test
     void body_whenJsonItselfBroken_staysMalformedRequest() throws Exception {
         mockMvc.perform(post("/test-errors/level").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"level\": "))
@@ -142,6 +161,16 @@ class GlobalExceptionHandlerTest {
 
             @PostMapping("/test-errors/level")
             String level(@RequestBody LevelRequest body) {
+                return "ok";
+            }
+
+            @PostMapping("/test-errors/levels")
+            String levels(@RequestBody List<Level> levels) {
+                return "ok";
+            }
+
+            @PostMapping("/test-errors/items")
+            String items(@RequestBody List<Item> items) {
                 return "ok";
             }
 

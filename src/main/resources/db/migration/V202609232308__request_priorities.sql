@@ -2,6 +2,9 @@
 -- До этой миграции колонки приоритета были свободной строкой, поэтому сначала приводим к набору
 -- то, что могло в них оказаться.
 
+-- Регистр и пробелы по краям — не повод терять значение: 'high' и ' URGENT ' — это HIGH и URGENT.
+UPDATE requests SET priority = upper(btrim(priority)) WHERE priority IS NOT NULL;
+
 UPDATE requests SET priority = 'NORMAL'
 WHERE priority IS NULL OR priority NOT IN ('LOW', 'NORMAL', 'HIGH', 'URGENT');
 
@@ -33,6 +36,9 @@ COMMENT ON COLUMN requests.priority_rank IS 'Ранг приоритета дл�
 
 -- Реестр и очередь работ сортируют и фильтруют по срочности в пределах арендатора.
 CREATE INDEX idx_requests_tenant_priority_rank ON requests (tenant_id, priority_rank DESC);
+
+UPDATE request_types SET default_priority = upper(btrim(default_priority))
+WHERE default_priority IS NOT NULL;
 
 UPDATE request_types SET default_priority = NULL
 WHERE default_priority NOT IN ('LOW', 'NORMAL', 'HIGH', 'URGENT');

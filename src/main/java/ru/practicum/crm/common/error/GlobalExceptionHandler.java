@@ -234,7 +234,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return null;
     }
 
-    /** Путь к полю в формате {@code items[0].priority}, из которого строится JSON Pointer. */
+    /**
+     * Путь к полю в формате {@code items[0].priority}, из которого строится JSON Pointer.
+     * Индекс в самом начале пути (тело — массив) пишется без скобок: {@code 0.priority}, иначе
+     * указатель получил бы лишний слэш.
+     */
     private static String fieldPath(JsonMappingException ex) {
         StringBuilder path = new StringBuilder();
         for (JsonMappingException.Reference reference : ex.getPath()) {
@@ -244,7 +248,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 }
                 path.append(reference.getFieldName());
             } else if (reference.getIndex() >= 0) {
-                path.append('[').append(reference.getIndex()).append(']');
+                if (path.isEmpty()) {
+                    path.append(reference.getIndex());
+                } else {
+                    path.append('[').append(reference.getIndex()).append(']');
+                }
             }
         }
         return path.toString();
