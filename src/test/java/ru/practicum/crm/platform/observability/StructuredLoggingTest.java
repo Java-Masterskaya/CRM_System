@@ -14,6 +14,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -28,7 +30,10 @@ import org.springframework.web.bind.annotation.RestController;
 import ru.practicum.crm.common.error.GlobalExceptionHandler;
 import ru.practicum.crm.platform.web.RequestIdFilter;
 
-@WebMvcTest(controllers = StructuredLoggingTest.ProbeConfiguration.ProbeController.class)
+@WebMvcTest(
+        controllers = StructuredLoggingTest.ProbeConfiguration.ProbeController.class,
+        excludeAutoConfiguration = SecurityAutoConfiguration.class
+)
 @Import(GlobalExceptionHandler.class)
 @ExtendWith(OutputCaptureExtension.class)
 class StructuredLoggingTest {

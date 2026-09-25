@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
@@ -26,7 +27,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-@WebMvcTest(controllers = GlobalExceptionHandlerTest.ProbeConfiguration.ProbeController.class)
+@WebMvcTest(
+        controllers = GlobalExceptionHandlerTest.ProbeConfiguration.ProbeController.class,
+        excludeAutoConfiguration = SecurityAutoConfiguration.class
+)
 @Import(GlobalExceptionHandler.class)
 class GlobalExceptionHandlerTest {
 
