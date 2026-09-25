@@ -19,17 +19,27 @@ public final class RequestTransitions {
             return Set.of();
         }
         return switch (from) {
-            case NEW -> Set.of(RequestStatus.CONTACTED, RequestStatus.CANCELLED);
+            case NEW -> Set.of(
+                    RequestStatus.CONTACTED,
+                    RequestStatus.CANCELLED,
+                    RequestStatus.REJECTED
+            );
+
             case CONTACTED -> Set.of(
                     RequestStatus.IN_PROGRESS,
                     RequestStatus.REJECTED,
-                    RequestStatus.CANCELLED);
+                    RequestStatus.CANCELLED
+            );
+
             case IN_PROGRESS -> Set.of(
                     RequestStatus.ON_HOLD,
                     RequestStatus.DONE,
                     RequestStatus.REJECTED,
-                    RequestStatus.CANCELLED);
+                    RequestStatus.CANCELLED
+            );
+
             case ON_HOLD -> Set.of(RequestStatus.IN_PROGRESS);
+
             case DONE, REJECTED, CANCELLED -> Set.of();
         };
     }

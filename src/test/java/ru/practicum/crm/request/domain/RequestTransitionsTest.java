@@ -2,6 +2,8 @@ package ru.practicum.crm.request.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -10,44 +12,32 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 class RequestTransitionsTest {
 
-    static Stream<Arguments> allowedTransitions() {
-        return Stream.of(
-                Arguments.of(RequestStatus.NEW, RequestStatus.CONTACTED),
-                Arguments.of(RequestStatus.NEW, RequestStatus.CANCELLED),
+    private static final Set<List<RequestStatus>> ALLOWED = Set.of(
+            List.of(RequestStatus.NEW, RequestStatus.CONTACTED),
+            List.of(RequestStatus.NEW, RequestStatus.REJECTED),
+            List.of(RequestStatus.NEW, RequestStatus.CANCELLED),
 
-                Arguments.of(RequestStatus.CONTACTED, RequestStatus.IN_PROGRESS),
-                Arguments.of(RequestStatus.CONTACTED, RequestStatus.REJECTED),
-                Arguments.of(RequestStatus.CONTACTED, RequestStatus.CANCELLED),
+            List.of(RequestStatus.CONTACTED, RequestStatus.IN_PROGRESS),
+            List.of(RequestStatus.CONTACTED, RequestStatus.REJECTED),
+            List.of(RequestStatus.CONTACTED, RequestStatus.CANCELLED),
 
-                Arguments.of(RequestStatus.IN_PROGRESS, RequestStatus.ON_HOLD),
-                Arguments.of(RequestStatus.IN_PROGRESS, RequestStatus.DONE),
-                Arguments.of(RequestStatus.IN_PROGRESS, RequestStatus.REJECTED),
-                Arguments.of(RequestStatus.IN_PROGRESS, RequestStatus.CANCELLED),
+            List.of(RequestStatus.IN_PROGRESS, RequestStatus.ON_HOLD),
+            List.of(RequestStatus.IN_PROGRESS, RequestStatus.DONE),
+            List.of(RequestStatus.IN_PROGRESS, RequestStatus.REJECTED),
+            List.of(RequestStatus.IN_PROGRESS, RequestStatus.CANCELLED),
 
-                Arguments.of(RequestStatus.ON_HOLD, RequestStatus.IN_PROGRESS)
-        );
-    }
-
-    @ParameterizedTest
-    @MethodSource("allowedTransitions")
-    void givenAllowedPair_whenCheck_thenReturnsTrue(
-            RequestStatus from,
-            RequestStatus to) {
-
-        assertThat(RequestTransitions.isAllowed(from, to)).isTrue();
-    }
+            List.of(RequestStatus.ON_HOLD, RequestStatus.IN_PROGRESS)
+    );
 
     @ParameterizedTest
     @MethodSource("allStatusPairs")
-    void givenStatusPair_whenCheck_thenMatchesMatrix(
+    void givenStatusPair_whenCheck_thenMatchesSpecification(
             RequestStatus from,
             RequestStatus to) {
 
-        boolean expected = RequestTransitions.allowedFrom(from).contains(to);
-
         assertThat(RequestTransitions.isAllowed(from, to))
                 .as("Переход %s → %s", from, to)
-                .isEqualTo(expected);
+                .isEqualTo(ALLOWED.contains(List.of(from, to)));
     }
 
     static Stream<Arguments> allStatusPairs() {
@@ -74,11 +64,27 @@ class RequestTransitionsTest {
     }
 
     @ParameterizedTest
+    @MethodSource("allStatuses")
+    void givenStatus_whenCheckTerminality_thenMatchesTransitionMatrix(
+            RequestStatus status) {
+
+        assertThat(RequestTransitions.allowedFrom(status).isEmpty())
+                .as("Терминальность статуса %s не совпадает с матрицей", status)
+                .isEqualTo(status.isTerminal());
+    }
+
+    static Stream<RequestStatus> allStatuses() {
+        return Stream.of(RequestStatus.values());
+    }
+
+    @ParameterizedTest
     @MethodSource("nonRejectedStatuses")
     void givenNonRejectedStatus_whenCheckRequiresReason_thenFalse(
             RequestStatus status) {
 
-        assertThat(RequestTransitions.requiresReason(status)).isFalse();
+        assertThat(RequestTransitions.requiresReason(status))
+                .as("Причина не должна требоваться для %s", status)
+                .isFalse();
     }
 
     static Stream<RequestStatus> nonRejectedStatuses() {
@@ -96,11 +102,27 @@ class RequestTransitionsTest {
     void givenNullStatus_whenCheckTransition_thenForbidden() {
         assertThat(RequestTransitions.isAllowed(null, RequestStatus.NEW))
                 .isFalse();
+
         assertThat(RequestTransitions.isAllowed(RequestStatus.NEW, null))
                 .isFalse();
+
         assertThat(RequestTransitions.isAllowed(null, null))
                 .isFalse();
+
         assertThat(RequestTransitions.allowedFrom(null))
                 .isEmpty();
+    }
+
+    @Test
+    void givenOnHold_whenCheckForbiddenTransitions_thenRejectedAndCancelledAreForbidden() {
+        assertThat(RequestTransitions.isAllowed(
+                RequestStatus.ON_HOLD,
+                RequestStatus.REJECTED))
+                .isFalse();
+
+        assertThat(RequestTransitions.isAllowed(
+                RequestStatus.ON_HOLD,
+                RequestStatus.CANCELLED))
+                .isFalse();
     }
 }
