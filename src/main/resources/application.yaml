@@ -23,6 +23,16 @@ spring:
       validation-timeout: 1000
       initialization-fail-timeout: -1
 
+  # У Jakarta Mail тайм-ауты по умолчанию не ограничены: неотвечающий почтовый сервер держал бы
+  # отправку бесконечно. Значения — в миллисекундах.
+  mail:
+    properties:
+      mail:
+        smtp:
+          connectiontimeout: 5000
+          timeout: 10000
+          writetimeout: 10000
+
   # При остановке планировщик ждёт, пока обработчик исходящих событий допишет текущую порцию.
   task:
     scheduling:
