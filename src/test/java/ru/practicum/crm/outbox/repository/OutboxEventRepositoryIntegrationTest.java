@@ -10,12 +10,19 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.IllegalTransactionStateException;
+import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.outbox.domain.OutboxEvent;
 import ru.practicum.crm.outbox.domain.OutboxStatus;
@@ -29,6 +36,9 @@ class OutboxEventRepositoryIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private TransactionTemplate transactionTemplate;
 
     private UUID tenantA;
     private UUID tenantB;
@@ -87,7 +97,7 @@ class OutboxEventRepositoryIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void findReadyToSend_whenAttemptTimeIsInFuture_skipsEvent() {
+    void lockReadyBatch_whenAttemptTimeIsInFuture_skipsEvent() {
         UUID id = repository.save(new OutboxEvent(tenantA, "REQUEST_CREATED", Map.of())).getId();
         jdbcTemplate.update("UPDATE outbox_events SET next_attempt_at = now() + interval '1 hour'"
                 + " WHERE id = ?", id);
@@ -98,7 +108,61 @@ class OutboxEventRepositoryIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void findReadyToSend_whenSeveralEventsWait_returnsOldestFirstWithinLimit() {
+    void lockReadyBatch_whenLeaseOfTakenEventExpired_returnsItAgain() {
+        UUID id = repository.save(new OutboxEvent(tenantA, "REQUEST_CREATED", Map.of())).getId();
+        jdbcTemplate.update("UPDATE outbox_events SET status = 'IN_PROGRESS',"
+                + " next_attempt_at = now() - interval '1 minute' WHERE id = ?", id);
+
+        assertThat(findReady(10)).extracting(OutboxEvent::getId).containsExactly(id);
+    }
+
+    @Test
+    void lockReadyBatch_whenLeaseOfTakenEventStillActive_skipsIt() {
+        UUID id = repository.save(new OutboxEvent(tenantA, "REQUEST_CREATED", Map.of())).getId();
+        jdbcTemplate.update("UPDATE outbox_events SET status = 'IN_PROGRESS',"
+                + " next_attempt_at = now() + interval '5 minutes' WHERE id = ?", id);
+
+        assertThat(findReady(10)).isEmpty();
+    }
+
+    @Test
+    void lockReadyBatch_whenCalledOutsideTransaction_refusesToRun() {
+        assertThatThrownBy(() -> repository.lockReadyBatch(Instant.now(), 10))
+                .isInstanceOf(IllegalTransactionStateException.class);
+    }
+
+    @Test
+    void lockReadyBatch_whenAnotherTransactionHoldsRows_skipsThemInsteadOfWaiting()
+            throws Exception {
+        for (int i = 0; i < 4; i++) {
+            repository.save(new OutboxEvent(tenantA, "EVENT_" + i, Map.of()));
+        }
+        CountDownLatch firstLocked = new CountDownLatch(1);
+        CountDownLatch secondDone = new CountDownLatch(1);
+
+        try (ExecutorService executor = Executors.newSingleThreadExecutor()) {
+            Future<List<UUID>> first = executor.submit(() -> transactionTemplate.execute(
+                    status -> {
+                        List<UUID> ids = repository.lockReadyBatch(Instant.now(), 2).stream()
+                                .map(OutboxEvent::getId).toList();
+                        firstLocked.countDown();
+                        await(secondDone);
+                        return ids;
+                    }));
+            assertThat(firstLocked.await(10, TimeUnit.SECONDS)).isTrue();
+
+            List<UUID> second = transactionTemplate.execute(status ->
+                    repository.lockReadyBatch(Instant.now(), 10).stream()
+                            .map(OutboxEvent::getId).toList());
+            secondDone.countDown();
+
+            assertThat(second).hasSize(2).doesNotContainAnyElementsOf(first.get(10,
+                    TimeUnit.SECONDS));
+        }
+    }
+
+    @Test
+    void lockReadyBatch_whenSeveralEventsWait_returnsOldestFirstWithinLimit() {
         UUID first = repository.save(new OutboxEvent(tenantA, "FIRST", Map.of())).getId();
         UUID second = repository.save(new OutboxEvent(tenantA, "SECOND", Map.of())).getId();
         UUID third = repository.save(new OutboxEvent(tenantB, "THIRD", Map.of())).getId();
@@ -112,7 +176,7 @@ class OutboxEventRepositoryIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void findReadyToSend_whenEventAlreadySent_isNotReturnedAgain() {
+    void lockReadyBatch_whenEventAlreadySent_isNotReturnedAgain() {
         UUID id = repository.save(new OutboxEvent(tenantA, "REQUEST_CREATED", Map.of())).getId();
         jdbcTemplate.update("UPDATE outbox_events SET status = 'SENT' WHERE id = ?", id);
 
@@ -174,11 +238,32 @@ class OutboxEventRepositoryIntegrationTest extends BaseIntegrationTest {
                 String.class);
 
         assertThat(String.join("\n", plan)).contains("idx_outbox_events_status_next_attempt");
+
+        List<String> claimPlan = jdbcTemplate.queryForList(
+                "EXPLAIN SELECT * FROM outbox_events WHERE status IN ('NEW', 'IN_PROGRESS')"
+                        + " AND next_attempt_at <= now() ORDER BY next_attempt_at LIMIT 100"
+                        + " FOR UPDATE SKIP LOCKED",
+                String.class);
+
+        assertThat(String.join("\n", claimPlan))
+                .as("запрос захвата порции, которым работает обработчик")
+                .contains("idx_outbox_events_status_next_attempt");
     }
 
     private List<OutboxEvent> findReady(int limit) {
-        return repository.findByStatusAndNextAttemptAtLessThanEqualOrderByNextAttemptAtAsc(
-                OutboxStatus.NEW, Instant.now(), PageRequest.of(0, limit));
+        return transactionTemplate.execute(status -> repository.lockReadyBatch(Instant.now(),
+                limit));
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            if (!latch.await(10, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Не дождались второй транзакции");
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(ex);
+        }
     }
 
     private void shiftAttemptTime(UUID id, int secondsAgo) {
