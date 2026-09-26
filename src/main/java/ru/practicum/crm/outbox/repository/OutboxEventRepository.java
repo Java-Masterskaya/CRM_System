@@ -58,5 +58,12 @@ public interface OutboxEventRepository extends Repository<OutboxEvent, UUID> {
 
     Page<OutboxEvent> findByTenantIdOrderByCreatedAtDesc(UUID tenantId, Pageable pageable);
 
+    /**
+     * События одного объекта в порядке создания. {@code id} — последний ключ сортировки, чтобы
+     * события, созданные в одну и ту же микросекунду, всегда шли в одном порядке.
+     */
+    List<OutboxEvent> findByTenantIdAndAggregateTypeAndAggregateIdOrderByCreatedAtAscIdAsc(
+            UUID tenantId, String aggregateType, UUID aggregateId);
+
     long countByTenantIdAndStatus(UUID tenantId, OutboxStatus status);
 }
