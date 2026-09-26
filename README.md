@@ -401,10 +401,33 @@ Micrometer.
 
 #### Метрики, используемые в проекте
 
-| Метрика                  | Тип       | Назначение                              |
-| ------------------------ | --------- | --------------------------------------- |
-| `crm.clients.created`    | `Counter` | Количество созданных клиентов           |
-| `crm.operation.duration` | `Timer`   | Длительность выполнения бизнес-операций |
+| Метрика                         | Тип         | Назначение                                                        |
+| ------------------------------- | ----------- | ----------------------------------------------------------------- |
+| `crm.clients.created`           | `Counter`   | Количество созданных клиентов                                     |
+| `crm.operation.duration`        | `Timer`     | Длительность выполнения бизнес-операций                           |
+| `crm.outbox.delivery.attempts`  | `Counter`   | Попытки доставки исходящих событий по типу события, исходу и причине |
+| `crm.outbox.events`             | `Gauge`     | Исходящие события в состояниях `NEW`, `IN_PROGRESS`, `FAILED`     |
+| `crm.outbox.oldest.pending.age` | `TimeGauge` | Сколько ждёт самое давнее недоставленное событие, в секундах      |
+
+#### Очередь исходящих событий
+
+Метрики очереди (T-073) в формате Prometheus:
+
+```text
+crm_outbox_delivery_attempts_total{event_type="EMAIL_NOTIFICATION",outcome="retry",reason="MAIL_SERVER_UNAVAILABLE"}
+crm_outbox_events{status="NEW"}
+crm_outbox_oldest_pending_age_seconds
+```
+
+* `outcome` — исход попытки: `success`, `retry` (событие вернулось в очередь) или `failed`
+  (попытки исчерпаны); `reason` — код причины неудачи, у успешных попыток — `none`.
+* Число событий и возраст считаются по всей очереди при каждом запросе метрик. Доставленные
+  (`SENT`) не считаются: до очистки очереди их число растёт без предела, а сколько доставлено,
+  видно по счётчику с `outcome="success"`.
+* Почтовый сервер недоступен — растут `crm_outbox_delivery_attempts_total` с `outcome="retry"`
+  и `crm_outbox_oldest_pending_age_seconds`. После восстановления очередь разбирается, число
+  событий `NEW` и возраст возвращаются к нулю.
+* Окончательный неуспех пишется в лог с полями `eventId`, `eventType`, `attempts`, `errorCode`.
 
 #### Counter
 

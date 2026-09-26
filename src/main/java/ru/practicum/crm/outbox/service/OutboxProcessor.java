@@ -1,5 +1,7 @@
 package ru.practicum.crm.outbox.service;
 
+import static net.logstash.logback.argument.StructuredArguments.value;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -64,12 +66,14 @@ public class OutboxProcessor {
     private final OutboxProperties properties;
     private final OutboxRetryPolicy retryPolicy;
     private final Map<String, OutboxEventSender> senders;
+    private final OutboxMetrics metrics;
 
     private volatile boolean stopping;
 
     public OutboxProcessor(OutboxEventRepository repository,
             PlatformTransactionManager transactionManager, OutboxProperties properties,
-            ObjectProvider<OutboxEventSender> senders) {
+            ObjectProvider<OutboxEventSender> senders, OutboxMetrics metrics) {
+        this.metrics = metrics;
         this.repository = repository;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.properties = properties;
@@ -173,6 +177,7 @@ public class OutboxProcessor {
             }
             if (failure.isEmpty()) {
                 owned.get().markSent();
+                metrics.delivered(event.getEventType());
             } else {
                 registerFailure(owned.get(), failure.get());
             }
@@ -182,19 +187,27 @@ public class OutboxProcessor {
     /**
      * В лог попадают только идентификатор, тип, номер попытки и код причины — без полезной
      * нагрузки и сообщения: так в нём не окажутся адреса, текст письма и токены.
+     *
+     * <p>Эти значения передаются как структурные поля ({@code eventId}, {@code eventType},
+     * {@code attempts}, {@code errorCode}): в JSON-логе они лежат отдельными полями, и записи
+     * можно отбирать по ним, а текст сообщения остаётся прежним.
      */
     private void registerFailure(OutboxEvent event, DeliveryFailure failure) {
         int attempts = event.getAttempts();
         if (retryPolicy.isExhausted(attempts)) {
             event.markFailed(failure);
+            metrics.failed(event.getEventType(), failure.code());
             LOG.warn("Событие {} типа {} окончательно не доставлено после {} попыток: {}",
-                    event.getId(), event.getEventType(), attempts, failure.code());
+                    value("eventId", event.getId()), value("eventType", event.getEventType()),
+                    value("attempts", attempts), value("errorCode", failure.code()));
             return;
         }
         Duration delay = retryPolicy.delayAfter(attempts);
         event.retryAt(Instant.now().plus(delay), failure);
+        metrics.willRetry(event.getEventType(), failure.code());
         LOG.warn("Событие {} типа {} не доставлено ({}), попытка {} из {}; следующая через {}",
-                event.getId(), event.getEventType(), failure.code(), attempts,
+                value("eventId", event.getId()), value("eventType", event.getEventType()),
+                value("errorCode", failure.code()), value("attempts", attempts),
                 properties.maxAttempts(), delay);
     }
 
