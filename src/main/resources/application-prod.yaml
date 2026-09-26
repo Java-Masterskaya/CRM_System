@@ -45,3 +45,6 @@ app:
     auth: true
     username: ${SPRING_MAIL_USERNAME}
     password: ${SPRING_MAIL_PASSWORD}
+
+  notification:
+    mail-from: ${MAIL_FROM}

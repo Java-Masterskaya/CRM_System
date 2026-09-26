@@ -18,6 +18,9 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import ru.practicum.crm.outbox.api.OutboxDeliveryException;
+import ru.practicum.crm.outbox.api.OutboxEventSender;
+import ru.practicum.crm.outbox.api.OutboxMessage;
 import ru.practicum.crm.outbox.config.OutboxProperties;
 import ru.practicum.crm.outbox.domain.DeliveryFailure;
 import ru.practicum.crm.outbox.domain.OutboxEvent;
@@ -143,7 +146,7 @@ public class OutboxProcessor {
                     "Нет отправителя для событий типа " + event.getEventType()));
         }
         try {
-            sender.send(event);
+            sender.send(toMessage(event));
             return Optional.empty();
         } catch (OutboxDeliveryException ex) {
             return Optional.of(new DeliveryFailure(ex.getCode(), ex.getMessage()));
@@ -151,6 +154,12 @@ public class OutboxProcessor {
             return Optional.of(new DeliveryFailure(UNEXPECTED_ERROR,
                     ex.getClass().getSimpleName()));
         }
+    }
+
+    /** Сущность за пределы пакета не выходит: отправитель получает копию данных события. */
+    private static OutboxMessage toMessage(OutboxEvent event) {
+        return new OutboxMessage(event.getId(), event.getTenantId(), event.getEventType(),
+                event.getPayload(), event.getAttempts());
     }
 
     private void recordResult(OutboxEvent event, Instant leaseUntil,

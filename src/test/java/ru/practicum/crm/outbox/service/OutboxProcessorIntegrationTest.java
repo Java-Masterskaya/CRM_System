@@ -26,6 +26,9 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import ru.practicum.crm.base.BaseIntegrationTest;
+import ru.practicum.crm.outbox.api.OutboxDeliveryException;
+import ru.practicum.crm.outbox.api.OutboxEventSender;
+import ru.practicum.crm.outbox.api.OutboxMessage;
 import ru.practicum.crm.outbox.domain.OutboxEvent;
 import ru.practicum.crm.outbox.repository.OutboxEventRepository;
 
@@ -85,6 +88,23 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
 
         assertThat(recordingSender.sent()).containsExactly(id);
         assertThat(row(id)).containsEntry("status", "SENT").containsEntry("attempts", 1);
+    }
+
+    @Test
+    void processBatch_whenEventDelivered_givesSenderEventDataAndAttemptNumber() {
+        UUID id = repository.save(new OutboxEvent(tenantId, DELIVERED,
+                Map.of("recipient", "user-1"))).getId();
+        jdbcTemplate.update("UPDATE outbox_events SET attempts = 2 WHERE id = ?", id);
+
+        processor.processBatch();
+
+        assertThat(recordingSender.received()).singleElement().satisfies(message -> {
+            assertThat(message.id()).isEqualTo(id);
+            assertThat(message.tenantId()).isEqualTo(tenantId);
+            assertThat(message.eventType()).isEqualTo(DELIVERED);
+            assertThat(message.payload()).containsExactly(Map.entry("recipient", "user-1"));
+            assertThat(message.attempt()).as("третья попытка").isEqualTo(3);
+        });
     }
 
     @Test
@@ -307,7 +327,7 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
                 }
 
                 @Override
-                public void send(OutboxEvent event) {
+                public void send(OutboxMessage message) {
                     throw new IllegalStateException("SMTP недоступен для client@example.com");
                 }
             };
@@ -327,7 +347,7 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
                 }
 
                 @Override
-                public void send(OutboxEvent event) {
+                public void send(OutboxMessage message) {
                     throw new OutboxDeliveryException("SMTP_UNAVAILABLE",
                             "Почтовый сервер недоступен");
                 }
@@ -344,9 +364,9 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
                 }
 
                 @Override
-                public void send(OutboxEvent event) {
+                public void send(OutboxMessage message) {
                     jdbcTemplate.update("UPDATE outbox_events SET next_attempt_at ="
-                            + " '2100-01-01T00:00:00Z' WHERE id = ?", event.getId());
+                            + " '2100-01-01T00:00:00Z' WHERE id = ?", message.id());
                 }
             };
         }
@@ -363,7 +383,7 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
         }
 
         @Override
-        public void send(OutboxEvent event) {
+        public void send(OutboxMessage message) {
             if (failuresLeft.getAndUpdate(left -> Math.max(0, left - 1)) > 0) {
                 throw new OutboxDeliveryException("SMTP_UNAVAILABLE",
                         "Почтовый сервер недоступен");
@@ -377,7 +397,7 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
 
     static class RecordingSender implements OutboxEventSender {
 
-        private final List<UUID> sent = new CopyOnWriteArrayList<>();
+        private final List<OutboxMessage> received = new CopyOnWriteArrayList<>();
         private volatile Duration delay = Duration.ZERO;
 
         @Override
@@ -386,18 +406,22 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
         }
 
         @Override
-        public void send(OutboxEvent event) {
+        public void send(OutboxMessage message) {
             try {
                 Thread.sleep(delay.toMillis());
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException(ex);
             }
-            sent.add(event.getId());
+            received.add(message);
         }
 
         List<UUID> sent() {
-            return List.copyOf(sent);
+            return received.stream().map(OutboxMessage::id).toList();
+        }
+
+        List<OutboxMessage> received() {
+            return List.copyOf(received);
         }
 
         void slowDownBy(Duration pause) {
@@ -405,7 +429,7 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
         }
 
         void reset() {
-            sent.clear();
+            received.clear();
             delay = Duration.ZERO;
         }
     }

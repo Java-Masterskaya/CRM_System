@@ -1,4 +1,4 @@
-package ru.practicum.crm.outbox.service;
+package ru.practicum.crm.outbox.api;
 
 /**
  * Известная причина, по которой отправитель не смог доставить событие.
