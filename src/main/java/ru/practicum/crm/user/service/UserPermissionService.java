@@ -16,7 +16,7 @@ public class UserPermissionService {
     }
 
     @Transactional(readOnly = true)
-    public Set getUserPermissionCodes(UUID userId) {
+    public Set<String> getUserPermissionCodes(UUID userId) {
         if (userId == null) {
             return Set.of();
         }
@@ -28,7 +28,8 @@ public class UserPermissionService {
         if (userId == null || permissionCode == null || permissionCode.isBlank()) {
             return false;
         }
-        Set userPermissions = getUserPermissionCodes(userId);
+
+        Set<String> userPermissions = getUserPermissionCodes(userId);
         return userPermissions.contains(permissionCode);
     }
 }
