@@ -36,6 +36,9 @@ import ru.practicum.crm.outbox.repository.OutboxEventRepository;
  * Обработчик на реальной базе. Расписание в тестовом профиле выключено — проходы запускаются
  * вручную. «Два экземпляра приложения» — два потока, вызывающие один и тот же обработчик:
  * своего состояния у него нет, согласуются экземпляры только через блокировки в базе.
+ *
+ * <p>Случайный разброс задержки выключен: здесь задержки проверяются точно. Разброс проверяет
+ * {@link OutboxRetryJitterIntegrationTest}.
  */
 @Import(OutboxProcessorIntegrationTest.Senders.class)
 @TestPropertySource(properties = {
@@ -43,6 +46,7 @@ import ru.practicum.crm.outbox.repository.OutboxEventRepository;
     "app.outbox.lease=5m",
     "app.outbox.retry-delay=1h",
     "app.outbox.max-retry-delay=10h",
+    "app.outbox.retry-jitter=0",
     "app.outbox.max-attempts=4"
 })
 class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
