@@ -7,6 +7,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import org.eclipse.angus.mail.smtp.SMTPAddressFailedException;
+import org.eclipse.angus.mail.smtp.SMTPSendFailedException;
+import org.eclipse.angus.mail.smtp.SMTPSenderFailedException;
 import org.springframework.mail.MailAuthenticationException;
 import org.springframework.mail.MailException;
 import org.springframework.mail.MailSendException;
@@ -24,6 +27,10 @@ import ru.practicum.crm.notification.template.RenderedMail;
  * кодом причины и сам решает, повторять ли. Текст исключений почтовой библиотеки не сохраняется
  * и не пишется в лог — в нём бывают адреса получателей и ответы сервера. Ошибки самой
  * программы не перехватываются: это не сбой почты.
+ *
+ * <p>Неудачи делятся на постоянные и временные. Постоянные связаны с самим письмом —
+ * неверный адрес, отказ сервера с кодом 5xx — и повтором не исправятся. Временные — сбои
+ * окружения: сервер недоступен, не приняты учётные данные, отказ с кодом 4xx.
  *
  * <p>Сервер, учётные данные и тайм-ауты задаются настройками {@code spring.mail.*}.
  */
@@ -49,7 +56,7 @@ public class EmailChannel {
         try {
             message = compose(recipient, mail);
         } catch (MessagingException ex) {
-            return EmailSendResult.failure(INVALID_MESSAGE,
+            return EmailSendResult.permanentFailure(INVALID_MESSAGE,
                     "Письмо не собрано: неверный адрес или заголовок");
         }
         try {
@@ -59,17 +66,24 @@ public class EmailChannel {
             return EmailSendResult.failure(AUTH_FAILED,
                     "Почтовый сервер не принял учётные данные");
         } catch (MailException ex) {
-            if (isNetworkFailure(ex)) {
+            List<Throwable> causes = causesOf(ex);
+            if (causes.stream().anyMatch(IOException.class::isInstance)) {
                 return EmailSendResult.failure(SERVER_UNAVAILABLE,
                         "Почтовый сервер недоступен или не ответил вовремя");
+            }
+            if (causes.stream().anyMatch(EmailChannel::isPermanentRejection)) {
+                return EmailSendResult.permanentFailure(REJECTED,
+                        "Почтовый сервер отклонил письмо окончательно");
             }
             return EmailSendResult.failure(REJECTED, "Почтовый сервер отклонил письмо");
         }
     }
 
+    /** Адреса проверяются до отправки: адрес без домена не дойдёт до почтового сервера. */
     private MimeMessage compose(String recipient, RenderedMail mail) throws MessagingException {
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, StandardCharsets.UTF_8.name());
+        helper.setValidateAddresses(true);
         helper.setFrom(from);
         helper.setTo(recipient);
         helper.setSubject(mail.subject());
@@ -78,23 +92,42 @@ public class EmailChannel {
     }
 
     /**
-     * Сетевой сбой — соединение не установилось или сервер не ответил вовремя — виден по
-     * {@link IOException} среди причин. Spring кладёт её в причину исключения, если не удалось
-     * подключиться, и в исключения по отдельным письмам, если связь оборвалась при передаче.
+     * Все исключения, из которых сложилась неудача: само исключение Spring, исключения по
+     * отдельным письмам и цепочки их причин. Если не удалось подключиться, Spring кладёт исходную
+     * ошибку в причину исключения; если отказ или обрыв случились при передаче — в исключения по
+     * отдельным письмам.
      */
-    private static boolean isNetworkFailure(MailException ex) {
-        List<Throwable> failures = new ArrayList<>();
-        failures.add(ex);
+    private static List<Throwable> causesOf(MailException ex) {
+        List<Throwable> roots = new ArrayList<>();
+        roots.add(ex);
         if (ex instanceof MailSendException sendFailure) {
-            failures.addAll(Arrays.asList(sendFailure.getMessageExceptions()));
+            roots.addAll(Arrays.asList(sendFailure.getMessageExceptions()));
         }
-        for (Throwable failure : failures) {
-            for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
-                if (cause instanceof IOException) {
-                    return true;
-                }
+        List<Throwable> causes = new ArrayList<>();
+        for (Throwable root : roots) {
+            for (Throwable cause = root; cause != null; cause = cause.getCause()) {
+                causes.add(cause);
             }
         }
-        return false;
+        return causes;
+    }
+
+    /**
+     * Постоянный отказ — код ответа SMTP 5xx: сервер не примет это письмо и при повторе. Код 4xx
+     * означает временный отказ (например, ящик переполнен или сервер перегружен), и повтор уместен.
+     * Код ответа есть у трёх исключений Angus Mail, общего предка с ним у них нет.
+     */
+    private static boolean isPermanentRejection(Throwable cause) {
+        int code;
+        if (cause instanceof SMTPSendFailedException failure) {
+            code = failure.getReturnCode();
+        } else if (cause instanceof SMTPAddressFailedException failure) {
+            code = failure.getReturnCode();
+        } else if (cause instanceof SMTPSenderFailedException failure) {
+            code = failure.getReturnCode();
+        } else {
+            return false;
+        }
+        return code >= 500 && code < 600;
     }
 }

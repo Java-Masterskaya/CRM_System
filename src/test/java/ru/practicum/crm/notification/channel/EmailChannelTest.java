@@ -8,8 +8,11 @@ import jakarta.mail.Address;
 import jakarta.mail.internet.MimeMessage;
 import java.net.InetAddress;
 import java.net.ServerSocket;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
+import org.eclipse.angus.mail.smtp.SMTPSendFailedException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,7 +70,7 @@ class EmailChannelTest {
 
         EmailSendResult result = channel(mailSender(port)).send(RECIPIENT, LETTER);
 
-        assertFailure(result, EmailChannel.SERVER_UNAVAILABLE);
+        assertFailure(result, EmailChannel.SERVER_UNAVAILABLE, false);
     }
 
     @Test
@@ -77,7 +80,7 @@ class EmailChannelTest {
             EmailSendResult result = channel(mailSender(silentServer.getLocalPort()))
                     .send(RECIPIENT, LETTER);
 
-            assertFailure(result, EmailChannel.SERVER_UNAVAILABLE);
+            assertFailure(result, EmailChannel.SERVER_UNAVAILABLE, false);
         }
     }
 
@@ -91,13 +94,27 @@ class EmailChannelTest {
 
         EmailSendResult result = channel(mailSender).send(RECIPIENT, LETTER);
 
-        assertFailure(result, EmailChannel.AUTH_FAILED);
+        assertFailure(result, EmailChannel.AUTH_FAILED, false);
         assertThat(result.failureMessage()).doesNotContain("wrong-password");
         assertThat(mailServer.getReceivedMessages()).isEmpty();
     }
 
     @Test
-    void send_whenServerRejectsLetter_reportsRejectionWithoutServerResponseText() {
+    void send_whenServerRejectsWithCode5xx_reportsPermanentRejection() {
+        EmailSendResult result = channel(rejectingWith(550)).send(RECIPIENT, LETTER);
+
+        assertFailure(result, EmailChannel.REJECTED, true);
+    }
+
+    @Test
+    void send_whenServerRejectsWithCode4xx_reportsRejectionWorthRetrying() {
+        EmailSendResult result = channel(rejectingWith(451)).send(RECIPIENT, LETTER);
+
+        assertFailure(result, EmailChannel.REJECTED, false);
+    }
+
+    @Test
+    void send_whenRejectionCarriesNoSmtpCode_treatsItAsWorthRetrying() {
         JavaMailSenderImpl rejectingSender = new JavaMailSenderImpl() {
             @Override
             protected void doSend(MimeMessage[] mimeMessages, Object[] originalMessages) {
@@ -107,21 +124,48 @@ class EmailChannelTest {
 
         EmailSendResult result = channel(rejectingSender).send(RECIPIENT, LETTER);
 
-        assertFailure(result, EmailChannel.REJECTED);
+        assertFailure(result, EmailChannel.REJECTED, false);
     }
 
     @Test
-    void send_whenRecipientAddressIsMalformed_reportsInvalidMessageWithoutContactingServer() {
+    void send_whenRecipientAddressIsMalformed_reportsPermanentInvalidMessage() {
         EmailSendResult result = channel(mailSender(port())).send("client@@example.com", LETTER);
 
-        assertFailure(result, EmailChannel.INVALID_MESSAGE);
+        assertFailure(result, EmailChannel.INVALID_MESSAGE, true);
         assertThat(mailServer.getReceivedMessages()).isEmpty();
     }
 
-    private static void assertFailure(EmailSendResult result, String expectedCode) {
+    @Test
+    void send_whenRecipientAddressHasNoDomain_rejectsItBeforeContactingServer() {
+        EmailSendResult result = channel(mailSender(port())).send("client", LETTER);
+
+        assertFailure(result, EmailChannel.INVALID_MESSAGE, true);
+        assertThat(mailServer.getReceivedMessages()).isEmpty();
+    }
+
+    private static void assertFailure(EmailSendResult result, String expectedCode,
+            boolean expectedPermanent) {
         assertThat(result.sent()).isFalse();
         assertThat(result.failureCode()).isEqualTo(expectedCode);
+        assertThat(result.permanent()).as("постоянная ли неудача").isEqualTo(expectedPermanent);
         assertThat(result.failureMessage()).isNotBlank().doesNotContain(RECIPIENT);
+    }
+
+    /**
+     * Отправитель, которому почтовый сервер отказывает с кодом {@code returnCode}: так этот отказ
+     * доходит от Angus Mail через Spring — исключением по конкретному письму.
+     */
+    private static JavaMailSenderImpl rejectingWith(int returnCode) {
+        return new JavaMailSenderImpl() {
+            @Override
+            protected void doSend(MimeMessage[] mimeMessages, Object[] originalMessages) {
+                Map<Object, Exception> failedMessages = new LinkedHashMap<>();
+                failedMessages.put(mimeMessages[0], new SMTPSendFailedException("RCPT TO",
+                        returnCode, returnCode + " Recipient <" + RECIPIENT + "> rejected",
+                        null, null, null, null));
+                throw new MailSendException(failedMessages);
+            }
+        };
     }
 
     private int port() {
