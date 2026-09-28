@@ -255,13 +255,13 @@ class OutboxEventRepositoryIntegrationTest extends BaseIntegrationTest {
         saveWithStatus(OutboxStatus.NEW, "2026-09-28T10:10:00Z");
         saveWithStatus(OutboxStatus.NEW, "2026-09-28T10:05:00Z");
         saveWithStatus(OutboxStatus.IN_PROGRESS, "2026-09-28T10:00:00Z");
-        saveWithStatus(OutboxStatus.FAILED, "2026-09-28T09:00:00Z");
+        saveWithStatus(OutboxStatus.SENT, "2026-09-28T09:00:00Z");
 
         assertThat(repository.findOldestCreatedAt(OutboxStatus.NEW))
                 .contains(Instant.parse("2026-09-28T10:05:00Z"));
         assertThat(repository.findOldestCreatedAt(OutboxStatus.IN_PROGRESS))
                 .contains(Instant.parse("2026-09-28T10:00:00Z"));
-        assertThat(repository.findOldestCreatedAt(OutboxStatus.SENT)).isEmpty();
+        assertThat(repository.findOldestCreatedAt(OutboxStatus.FAILED)).isEmpty();
     }
 
     /**
@@ -291,6 +291,10 @@ class OutboxEventRepositoryIntegrationTest extends BaseIntegrationTest {
                 .contains("Limit");
     }
 
+    /**
+     * Событие в нужном состоянии и с нужным временем создания. Не для {@code FAILED}: у него
+     * база требует код причины ({@code outbox_events_failed_has_reason_check}).
+     */
     private void saveWithStatus(OutboxStatus status, String createdAt) {
         UUID id = repository.save(new OutboxEvent(tenantA, "REQUEST_CREATED", Map.of())).getId();
         jdbcTemplate.update("UPDATE outbox_events SET status = ?, created_at = ?::timestamptz"
