@@ -42,14 +42,22 @@ class OutboxPropertiesTest {
     }
 
     @Test
-    void retryJitter_whenOutsideZeroToOne_stopsApplicationFromStarting() {
-        for (String jitter : new String[] {"-0.1", "1.5"}) {
+    void retryJitter_whenOutsideZeroToNineTenths_stopsApplicationFromStarting() {
+        for (String jitter : new String[] {"-0.1", "0.95", "1.0"}) {
             contextRunner.withPropertyValues("app.outbox.retry-jitter=" + jitter).run(context -> {
                 assertThat(context).as("разброс %s", jitter).hasFailed();
                 assertThat(context.getStartupFailure()).rootCause()
                         .hasMessageContaining("retryJitter");
             });
         }
+    }
+
+    @Test
+    void retryJitter_whenAtUpperBound_isAccepted() {
+        contextRunner.withPropertyValues("app.outbox.retry-jitter=0.9").run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context.getBean(OutboxProperties.class).retryJitter()).isEqualTo(0.9);
+        });
     }
 
     @Test
