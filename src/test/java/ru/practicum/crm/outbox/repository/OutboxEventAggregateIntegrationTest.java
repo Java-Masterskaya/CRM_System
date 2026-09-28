@@ -23,7 +23,7 @@ import ru.practicum.crm.outbox.domain.OutboxEvent;
 class OutboxEventAggregateIntegrationTest extends BaseIntegrationTest {
 
     /** Последняя миграция перед этой: до неё накатывается схема в проверке на заполненной базе. */
-    private static final String PREVIOUS_MIGRATION = "202609241534";
+    private static final String PREVIOUS_MIGRATION = "202609261000";
     private static final String REQUEST = "REQUEST";
 
     @Autowired

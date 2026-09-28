@@ -1,7 +1,7 @@
 -- Ссылка события на объект, к которому оно относится (#146): вид объекта и его идентификатор.
--- По ней выбираются все события одного объекта — для разбора и, если понадобится, для доставки
--- по порядку. Колонки допускают NULL: у уже записанных событий и у событий, не относящихся
--- к конкретному объекту, ссылки нет, а придуманное значение для них было бы неправдой.
+-- По ней выбираются все события одного объекта — для разбора и для доставки по порядку (#159).
+-- Колонки допускают NULL: у уже записанных событий и у событий, не относящихся к конкретному
+-- объекту, ссылки нет, а придуманное значение для них было бы неправдой.
 ALTER TABLE outbox_events
     ADD COLUMN aggregate_type VARCHAR(100),
     ADD COLUMN aggregate_id UUID;
@@ -14,7 +14,10 @@ ALTER TABLE outbox_events ADD CONSTRAINT outbox_events_aggregate_complete_check 
 COMMENT ON COLUMN outbox_events.aggregate_type IS 'Вид объекта, к которому относится событие, например REQUEST';
 COMMENT ON COLUMN outbox_events.aggregate_id IS 'Идентификатор объекта, к которому относится событие';
 
-CREATE INDEX idx_outbox_events_aggregate ON outbox_events (aggregate_type, aggregate_id, created_at);
+-- tenant_id первым, как в остальных индексах арендаторских таблиц: события объекта читаются
+-- только в пределах арендатора.
+CREATE INDEX idx_outbox_events_aggregate
+    ON outbox_events (tenant_id, aggregate_type, aggregate_id, created_at);
 
 -- Ссылка, как и остальное содержимое события, после записи не меняется: к проверкам триггера
 -- outbox_events_immutable_payload добавляются обе колонки. Сам триггер не пересоздаётся —
