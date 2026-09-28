@@ -56,6 +56,7 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
     private static final String STOLEN = "TEST_STOLEN";
     private static final String FLAKY = "TEST_FLAKY";
     private static final String KNOWN_FAILURE = "TEST_KNOWN_FAILURE";
+    private static final String PERMANENT_FAILURE = "TEST_PERMANENT_FAILURE";
 
     @Autowired
     private OutboxProcessor processor;
@@ -208,6 +209,18 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    void processBatch_whenFailureIsPermanent_failsEventAfterFirstAttempt() {
+        UUID id = saveEvent(PERMANENT_FAILURE);
+
+        processor.processBatch();
+
+        assertThat(row(id)).containsEntry("status", "FAILED").containsEntry("attempts", 1)
+                .containsEntry("last_error_code", "MAIL_INVALID_MESSAGE");
+        makeDue(id);
+        assertThat(processor.processBatch()).as("постоянная неудача не повторяется").isZero();
+    }
+
+    @Test
     void processBatch_whenDeliveryFails_logsNeitherAddressesNorLetterText() {
         UUID id = repository.save(new OutboxEvent(tenantId, FAILING,
                 Map.of("email", "client@example.com", "text", "Текст письма"))).getId();
@@ -354,6 +367,22 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
                 public void send(OutboxMessage message) {
                     throw new OutboxDeliveryException("SMTP_UNAVAILABLE",
                             "Почтовый сервер недоступен");
+                }
+            };
+        }
+
+        @Bean
+        OutboxEventSender permanentFailureSender() {
+            return new OutboxEventSender() {
+                @Override
+                public String eventType() {
+                    return PERMANENT_FAILURE;
+                }
+
+                @Override
+                public void send(OutboxMessage message) {
+                    throw OutboxDeliveryException.permanent("MAIL_INVALID_MESSAGE",
+                            "Письмо не собрано: неверный адрес");
                 }
             };
         }

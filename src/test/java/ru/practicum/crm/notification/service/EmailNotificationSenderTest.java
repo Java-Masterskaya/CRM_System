@@ -74,11 +74,26 @@ class EmailNotificationSenderTest {
         assertThatThrownBy(() -> sender.send(message(1, NOTIFICATION.toPayload())))
                 .isInstanceOfSatisfying(OutboxDeliveryException.class, ex -> {
                     assertThat(ex.getCode()).isEqualTo(EmailChannel.SERVER_UNAVAILABLE);
+                    assertThat(ex.isPermanent()).as("очередь повторит").isFalse();
                     assertThat(ex.getMessage()).doesNotContain(RECIPIENT);
                 });
         assertThat(notifications.only().getStatus()).isEqualTo(NotificationStatus.FAILED);
         assertThat(notifications.only().getLastErrorCode())
                 .isEqualTo(EmailChannel.SERVER_UNAVAILABLE);
+    }
+
+    @Test
+    void send_whenServerRejectsLetterPermanently_tellsQueueNotToRetry() {
+        channel.nextResult = EmailSendResult.permanentFailure(EmailChannel.REJECTED,
+                "Почтовый сервер отклонил письмо окончательно");
+
+        assertThatThrownBy(() -> sender.send(message(1, NOTIFICATION.toPayload())))
+                .isInstanceOfSatisfying(OutboxDeliveryException.class, ex -> {
+                    assertThat(ex.getCode()).isEqualTo(EmailChannel.REJECTED);
+                    assertThat(ex.isPermanent()).isTrue();
+                });
+        assertThat(notifications.only().getStatus()).isEqualTo(NotificationStatus.FAILED);
+        assertThat(notifications.only().getLastErrorCode()).isEqualTo(EmailChannel.REJECTED);
     }
 
     @Test
@@ -102,8 +117,10 @@ class EmailNotificationSenderTest {
                 .toPayload();
 
         assertThatThrownBy(() -> sender.send(message(1, payload)))
-                .isInstanceOfSatisfying(OutboxDeliveryException.class, ex -> assertThat(
-                        ex.getCode()).isEqualTo(EmailNotificationSender.TEMPLATE_FAILED));
+                .isInstanceOfSatisfying(OutboxDeliveryException.class, ex -> {
+                    assertThat(ex.getCode()).isEqualTo(EmailNotificationSender.TEMPLATE_FAILED);
+                    assertThat(ex.isPermanent()).as("данные в событии не появятся").isTrue();
+                });
         assertThat(channel.recipients).isEmpty();
         assertThat(notifications.only().getLastErrorCode())
                 .isEqualTo(EmailNotificationSender.TEMPLATE_FAILED);
@@ -112,8 +129,10 @@ class EmailNotificationSenderTest {
     @Test
     void send_whenPayloadIsNotNotification_reportsInvalidPayloadAndRecordsNothing() {
         assertThatThrownBy(() -> sender.send(message(1, Map.of("n", 1))))
-                .isInstanceOfSatisfying(OutboxDeliveryException.class, ex -> assertThat(
-                        ex.getCode()).isEqualTo(EmailNotificationSender.INVALID_PAYLOAD));
+                .isInstanceOfSatisfying(OutboxDeliveryException.class, ex -> {
+                    assertThat(ex.getCode()).isEqualTo(EmailNotificationSender.INVALID_PAYLOAD);
+                    assertThat(ex.isPermanent()).isTrue();
+                });
         assertThat(channel.recipients).isEmpty();
         assertThat(notifications.byEvent).isEmpty();
     }

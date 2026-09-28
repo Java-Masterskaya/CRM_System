@@ -43,7 +43,7 @@ import ru.practicum.crm.outbox.repository.OutboxEventRepository;
  *       базой.</li>
  *   <li><b>Результат</b> — отдельная транзакция на каждое событие: {@link OutboxStatus#SENT},
  *       возврат в очередь с нарастающей задержкой ({@link OutboxRetryPolicy}) или, когда
- *       попытки исчерпаны, {@link OutboxStatus#FAILED} с причиной.</li>
+ *       попытки исчерпаны либо неудача постоянная, {@link OutboxStatus#FAILED} с причиной.</li>
  * </ol>
  *
  * <p>Если приложение упадёт между захватом и записью результата, событие останется
@@ -155,7 +155,8 @@ public class OutboxProcessor {
             sender.send(toMessage(event));
             return Optional.empty();
         } catch (OutboxDeliveryException ex) {
-            return Optional.of(new DeliveryFailure(ex.getCode(), ex.getMessage()));
+            return Optional.of(new DeliveryFailure(ex.getCode(), ex.getMessage(),
+                    ex.isPermanent()));
         } catch (RuntimeException ex) {
             return Optional.of(new DeliveryFailure(UNEXPECTED_ERROR,
                     ex.getClass().getSimpleName()));
@@ -196,7 +197,7 @@ public class OutboxProcessor {
      */
     private void registerFailure(OutboxEvent event, DeliveryFailure failure) {
         int attempts = event.getAttempts();
-        if (retryPolicy.isExhausted(attempts)) {
+        if (failure.permanent() || retryPolicy.isExhausted(attempts)) {
             event.markFailed(failure);
             metrics.failed(event.getEventType(), failure.code());
             LOG.warn("Событие {} типа {} окончательно не доставлено после {} попыток: {}",

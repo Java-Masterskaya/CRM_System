@@ -48,6 +48,7 @@ class OutboxMetricsIntegrationTest extends BaseIntegrationTest {
     private static final String DELIVERED = "TEST_DELIVERED";
     private static final String FAILING = "TEST_FAILING";
     private static final String FLAKY = "TEST_FLAKY";
+    private static final String PERMANENT_FAILURE = "TEST_PERMANENT_FAILURE";
 
     @Autowired
     private OutboxProcessor processor;
@@ -135,6 +136,19 @@ class OutboxMetricsIntegrationTest extends BaseIntegrationTest {
         assertThat(json.get("errorCode").asText()).isEqualTo("UNEXPECTED_ERROR");
         assertThat(json.get("message").asText()).as("текст сообщения прежний")
                 .contains(id.toString()).doesNotContain("eventId=");
+    }
+
+    @Test
+    void processBatch_whenFailureIsPermanent_countsItAsFailedWithoutRetry() {
+        saveEvent(PERMANENT_FAILURE);
+        final double failuresBefore = attempts(PERMANENT_FAILURE, "failed", "MAIL_INVALID_MESSAGE");
+
+        processor.processBatch();
+
+        assertThat(attempts(PERMANENT_FAILURE, "failed", "MAIL_INVALID_MESSAGE") - failuresBefore)
+                .isEqualTo(1);
+        assertThat(attempts(PERMANENT_FAILURE, "retry", "MAIL_INVALID_MESSAGE")).isZero();
+        assertThat(events("FAILED")).isEqualTo(1);
     }
 
     @Test
