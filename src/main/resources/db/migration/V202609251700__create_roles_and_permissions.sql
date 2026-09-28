@@ -80,3 +80,35 @@ CREATE INDEX idx_role_permissions_permission
 
 CREATE INDEX idx_user_roles_role
     ON user_roles (role_id);
+
+-- ============================================================================
+-- Seed-данные: Дефолтные системные права и роли
+-- ============================================================================
+
+-- Системный tenant для дефолтных ролей и прав
+INSERT INTO tenants (
+    id,
+    name,
+    active,
+    created_at,
+    updated_at
+) VALUES (
+    '00000000-0000-0000-0000-000000000000',
+    'System',
+    TRUE,
+    NOW(),
+    NOW()
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Системный UUID для дефолтного tenant
+INSERT INTO permissions (id, tenant_id, code, description) VALUES
+    ('11111111-1111-1111-1111-111111111111',
+     '00000000-0000-0000-0000-000000000000',
+     'REQUEST_STATUS_CHANGE',
+     'Право изменять статус заявки'),
+    ('22222222-2222-2222-2222-222222222222',
+     '00000000-0000-0000-0000-000000000000',
+     'USER_MANAGE',
+     'Право управления пользователями')
+ON CONFLICT (tenant_id, code) DO NOTHING;

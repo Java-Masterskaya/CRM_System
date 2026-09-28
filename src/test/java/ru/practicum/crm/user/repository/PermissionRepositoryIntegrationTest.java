@@ -18,7 +18,7 @@ class PermissionRepositoryIntegrationTest extends BaseIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    void shouldAllowSamePermissionCodeForDifferentTenants() {
+    void insertPermission_whenDifferentTenantsUseSameCode_isAllowed() {
         UUID firstTenantId = createTenant();
         UUID secondTenantId = createTenant();
 
@@ -38,7 +38,7 @@ class PermissionRepositoryIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void shouldAllowSameRoleCodeForDifferentTenants() {
+    void insertRole_whenDifferentTenantsUseSameCode_isAllowed() {
         UUID firstTenantId = createTenant();
         UUID secondTenantId = createTenant();
 
@@ -58,72 +58,40 @@ class PermissionRepositoryIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void shouldFindUnionOfPermissionCodesByUserId() {
+    void findAllPermissionCodesByUserId_whenUserHasMultipleRoles_returnsUnionOfPermissions() {
         UUID tenantId = createTenant();
 
-        UUID operatorRoleId = insertRole(
-                tenantId,
-                "OPERATOR",
-                "Operator"
-        );
-        UUID adminRoleId = insertRole(
-                tenantId,
-                "ADMIN",
-                "Administrator"
-        );
+        UUID operatorRoleId = insertRole(tenantId, "OPERATOR", "Operator");
+        UUID adminRoleId = insertRole(tenantId, "ADMIN", "Administrator");
 
-        UUID statusChangePermissionId = insertPermission(
-                tenantId,
-                "REQUEST_STATUS_CHANGE"
-        );
-        UUID userManagePermissionId = insertPermission(
-                tenantId,
-                "USER_MANAGE"
-        );
+        UUID statusChangePermissionId = insertPermission(tenantId, "REQUEST_STATUS_CHANGE");
+        UUID userManagePermissionId = insertPermission(tenantId, "USER_MANAGE");
 
         UUID userId = UUID.randomUUID();
 
         jdbcTemplate.update(
-                """
-                INSERT INTO user_roles (user_id, role_id)
-                VALUES (?, ?)
-                """,
+                "INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)",
                 userId,
                 operatorRoleId
         );
-
         jdbcTemplate.update(
-                """
-                INSERT INTO user_roles (user_id, role_id)
-                VALUES (?, ?)
-                """,
+                "INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)",
                 userId,
                 adminRoleId
         );
 
         jdbcTemplate.update(
-                """
-                INSERT INTO role_permissions (role_id, permission_id)
-                VALUES (?, ?)
-                """,
+                "INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)",
                 operatorRoleId,
                 statusChangePermissionId
         );
-
         jdbcTemplate.update(
-                """
-                INSERT INTO role_permissions (role_id, permission_id)
-                VALUES (?, ?)
-                """,
+                "INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)",
                 operatorRoleId,
                 userManagePermissionId
         );
-
         jdbcTemplate.update(
-                """
-                INSERT INTO role_permissions (role_id, permission_id)
-                VALUES (?, ?)
-                """,
+                "INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)",
                 adminRoleId,
                 userManagePermissionId
         );
@@ -139,7 +107,7 @@ class PermissionRepositoryIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void shouldReturnEmptySetWhenUserHasNoRoles() {
+    void findAllPermissionCodesByUserId_whenUserHasNoRoles_returnsEmptySet() {
         UUID userId = UUID.randomUUID();
 
         Set<String> permissions =
@@ -153,13 +121,7 @@ class PermissionRepositoryIntegrationTest extends BaseIntegrationTest {
 
         jdbcTemplate.update(
                 """
-                INSERT INTO tenants (
-                    id,
-                    name,
-                    active,
-                    created_at,
-                    updated_at
-                )
+                INSERT INTO tenants (id, name, active, created_at, updated_at)
                 VALUES (?, ?, true, NOW(), NOW())
                 """,
                 tenantId,
@@ -169,22 +131,13 @@ class PermissionRepositoryIntegrationTest extends BaseIntegrationTest {
         return tenantId;
     }
 
-    private UUID insertRole(
-            UUID tenantId,
-            String code,
-            String name
-    ) {
+    private UUID insertRole(UUID tenantId, String code, String name) {
         UUID roleId = UUID.randomUUID();
 
         jdbcTemplate.update(
                 """
-                INSERT INTO roles (
-                    id,
-                    tenant_id,
-                    code,
-                    name
-                )
-                VALUES (?, ?, ?, ?)
+                INSERT INTO roles (id, tenant_id, code, name, created_at, updated_at)
+                VALUES (?, ?, ?, ?, NOW(), NOW())
                 """,
                 roleId,
                 tenantId,
@@ -195,20 +148,13 @@ class PermissionRepositoryIntegrationTest extends BaseIntegrationTest {
         return roleId;
     }
 
-    private UUID insertPermission(
-            UUID tenantId,
-            String code
-    ) {
+    private UUID insertPermission(UUID tenantId, String code) {
         UUID permissionId = UUID.randomUUID();
 
         jdbcTemplate.update(
                 """
-                INSERT INTO permissions (
-                    id,
-                    tenant_id,
-                    code
-                )
-                VALUES (?, ?, ?)
+                INSERT INTO permissions (id, tenant_id, code, created_at, updated_at)
+                VALUES (?, ?, ?, NOW(), NOW())
                 """,
                 permissionId,
                 tenantId,
