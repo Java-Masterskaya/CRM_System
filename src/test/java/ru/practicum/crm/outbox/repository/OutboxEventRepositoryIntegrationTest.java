@@ -218,6 +218,11 @@ class OutboxEventRepositoryIntegrationTest extends BaseIntegrationTest {
                 .doesNotThrowAnyException();
     }
 
+    /**
+     * План запроса, которым обработчик захватывает порцию
+     * ({@link OutboxEventRepository#lockReadyBatch}). Проверяется именно он: другой выборки
+     * готовых событий в приложении нет.
+     */
     @Test
     void readySelection_whenTableHasHundredsOfThousandsOfRows_usesIndex() {
         String insertManyEvents =
@@ -231,13 +236,6 @@ class OutboxEventRepositoryIntegrationTest extends BaseIntegrationTest {
                 """;
         jdbcTemplate.update(insertManyEvents, tenantA);
         jdbcTemplate.execute("ANALYZE outbox_events");
-
-        List<String> plan = jdbcTemplate.queryForList(
-                "EXPLAIN SELECT id FROM outbox_events WHERE status = 'NEW'"
-                        + " AND next_attempt_at <= now() ORDER BY next_attempt_at LIMIT 100",
-                String.class);
-
-        assertThat(String.join("\n", plan)).contains("idx_outbox_events_status_next_attempt");
 
         List<String> claimPlan = jdbcTemplate.queryForList(
                 "EXPLAIN SELECT * FROM outbox_events WHERE status IN ('NEW', 'IN_PROGRESS')"
