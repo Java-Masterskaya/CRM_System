@@ -33,6 +33,13 @@ class DeliveryFailureTest {
     }
 
     @Test
+    void failure_unlessMarkedPermanent_isTemporary() {
+        assertThat(new DeliveryFailure("SMTP_DOWN", "Сообщение").permanent()).isFalse();
+        assertThat(new DeliveryFailure("MAIL_INVALID_MESSAGE", "Сообщение", true).permanent())
+                .isTrue();
+    }
+
+    @Test
     void failure_whenMessageAbsent_keepsCodeOnly() {
         DeliveryFailure failure = new DeliveryFailure("SMTP_DOWN", null);
 

@@ -64,28 +64,38 @@ public class EmailNotificationSender implements OutboxEventSender {
         EmailSendResult result = deliver(notification);
         record(message, notification, result);
         if (!result.sent()) {
-            throw new OutboxDeliveryException(result.failureCode(), result.failureMessage());
+            throw result.permanent()
+                    ? OutboxDeliveryException.permanent(result.failureCode(),
+                            result.failureMessage())
+                    : new OutboxDeliveryException(result.failureCode(), result.failureMessage());
         }
         LOG.info("Уведомление {} по событию {} отправлено, попытка {}", notification.type(),
                 message.id(), message.attempt());
     }
 
-    /** Без адресата и типа уведомление записать нельзя — очередь получает только код. */
+    /**
+     * Без адресата и типа уведомление записать нельзя — очередь получает только код. Событие
+     * после записи не меняется, поэтому повтор ничего не исправит.
+     */
     private static EmailNotification parse(OutboxMessage message) {
         try {
             return EmailNotification.fromPayload(message.payload());
         } catch (IllegalArgumentException ex) {
-            throw new OutboxDeliveryException(INVALID_PAYLOAD,
+            throw OutboxDeliveryException.permanent(INVALID_PAYLOAD,
                     "Полезная нагрузка события не описывает письмо-уведомление");
         }
     }
 
+    /**
+     * Нехватка данных для шаблона — неудача постоянная: данные лежат в неизменяемом событии.
+     * Отсутствие самого шаблона — ошибка сборки приложения, её ловят тесты шаблонов.
+     */
     private EmailSendResult deliver(EmailNotification notification) {
         RenderedMail mail;
         try {
             mail = renderer.render(notification.type(), notification.variables());
         } catch (MailTemplateException ex) {
-            return EmailSendResult.failure(TEMPLATE_FAILED,
+            return EmailSendResult.permanentFailure(TEMPLATE_FAILED,
                     "Письмо не собрано: нет шаблона или не хватает данных для него");
         }
         return channel.send(notification.recipientEmail(), mail);
