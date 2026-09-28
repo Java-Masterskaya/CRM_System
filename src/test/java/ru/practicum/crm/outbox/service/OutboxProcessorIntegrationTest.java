@@ -26,6 +26,9 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import ru.practicum.crm.base.BaseIntegrationTest;
+import ru.practicum.crm.outbox.api.OutboxDeliveryException;
+import ru.practicum.crm.outbox.api.OutboxEventSender;
+import ru.practicum.crm.outbox.api.OutboxMessage;
 import ru.practicum.crm.outbox.domain.OutboxEvent;
 import ru.practicum.crm.outbox.repository.OutboxEventRepository;
 
@@ -33,6 +36,9 @@ import ru.practicum.crm.outbox.repository.OutboxEventRepository;
  * Обработчик на реальной базе. Расписание в тестовом профиле выключено — проходы запускаются
  * вручную. «Два экземпляра приложения» — два потока, вызывающие один и тот же обработчик:
  * своего состояния у него нет, согласуются экземпляры только через блокировки в базе.
+ *
+ * <p>Случайный разброс задержки выключен: здесь задержки проверяются точно. Разброс проверяет
+ * {@link OutboxRetryJitterIntegrationTest}.
  */
 @Import(OutboxProcessorIntegrationTest.Senders.class)
 @TestPropertySource(properties = {
@@ -40,6 +46,7 @@ import ru.practicum.crm.outbox.repository.OutboxEventRepository;
     "app.outbox.lease=5m",
     "app.outbox.retry-delay=1h",
     "app.outbox.max-retry-delay=10h",
+    "app.outbox.retry-jitter=0",
     "app.outbox.max-attempts=4"
 })
 class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
@@ -49,6 +56,7 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
     private static final String STOLEN = "TEST_STOLEN";
     private static final String FLAKY = "TEST_FLAKY";
     private static final String KNOWN_FAILURE = "TEST_KNOWN_FAILURE";
+    private static final String PERMANENT_FAILURE = "TEST_PERMANENT_FAILURE";
 
     @Autowired
     private OutboxProcessor processor;
@@ -85,6 +93,23 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
 
         assertThat(recordingSender.sent()).containsExactly(id);
         assertThat(row(id)).containsEntry("status", "SENT").containsEntry("attempts", 1);
+    }
+
+    @Test
+    void processBatch_whenEventDelivered_givesSenderEventDataAndAttemptNumber() {
+        UUID id = repository.save(new OutboxEvent(tenantId, DELIVERED,
+                Map.of("recipient", "user-1"))).getId();
+        jdbcTemplate.update("UPDATE outbox_events SET attempts = 2 WHERE id = ?", id);
+
+        processor.processBatch();
+
+        assertThat(recordingSender.received()).singleElement().satisfies(message -> {
+            assertThat(message.id()).isEqualTo(id);
+            assertThat(message.tenantId()).isEqualTo(tenantId);
+            assertThat(message.eventType()).isEqualTo(DELIVERED);
+            assertThat(message.payload()).containsExactly(Map.entry("recipient", "user-1"));
+            assertThat(message.attempt()).as("третья попытка").isEqualTo(3);
+        });
     }
 
     @Test
@@ -181,6 +206,18 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
 
         assertThat(row(id)).containsEntry("last_error_code", "SMTP_UNAVAILABLE")
                 .containsEntry("last_error_message", "Почтовый сервер недоступен");
+    }
+
+    @Test
+    void processBatch_whenFailureIsPermanent_failsEventAfterFirstAttempt() {
+        UUID id = saveEvent(PERMANENT_FAILURE);
+
+        processor.processBatch();
+
+        assertThat(row(id)).containsEntry("status", "FAILED").containsEntry("attempts", 1)
+                .containsEntry("last_error_code", "MAIL_INVALID_MESSAGE");
+        makeDue(id);
+        assertThat(processor.processBatch()).as("постоянная неудача не повторяется").isZero();
     }
 
     @Test
@@ -307,7 +344,7 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
                 }
 
                 @Override
-                public void send(OutboxEvent event) {
+                public void send(OutboxMessage message) {
                     throw new IllegalStateException("SMTP недоступен для client@example.com");
                 }
             };
@@ -327,9 +364,25 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
                 }
 
                 @Override
-                public void send(OutboxEvent event) {
+                public void send(OutboxMessage message) {
                     throw new OutboxDeliveryException("SMTP_UNAVAILABLE",
                             "Почтовый сервер недоступен");
+                }
+            };
+        }
+
+        @Bean
+        OutboxEventSender permanentFailureSender() {
+            return new OutboxEventSender() {
+                @Override
+                public String eventType() {
+                    return PERMANENT_FAILURE;
+                }
+
+                @Override
+                public void send(OutboxMessage message) {
+                    throw OutboxDeliveryException.permanent("MAIL_INVALID_MESSAGE",
+                            "Письмо не собрано: неверный адрес");
                 }
             };
         }
@@ -344,9 +397,9 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
                 }
 
                 @Override
-                public void send(OutboxEvent event) {
+                public void send(OutboxMessage message) {
                     jdbcTemplate.update("UPDATE outbox_events SET next_attempt_at ="
-                            + " '2100-01-01T00:00:00Z' WHERE id = ?", event.getId());
+                            + " '2100-01-01T00:00:00Z' WHERE id = ?", message.id());
                 }
             };
         }
@@ -363,7 +416,7 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
         }
 
         @Override
-        public void send(OutboxEvent event) {
+        public void send(OutboxMessage message) {
             if (failuresLeft.getAndUpdate(left -> Math.max(0, left - 1)) > 0) {
                 throw new OutboxDeliveryException("SMTP_UNAVAILABLE",
                         "Почтовый сервер недоступен");
@@ -377,7 +430,7 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
 
     static class RecordingSender implements OutboxEventSender {
 
-        private final List<UUID> sent = new CopyOnWriteArrayList<>();
+        private final List<OutboxMessage> received = new CopyOnWriteArrayList<>();
         private volatile Duration delay = Duration.ZERO;
 
         @Override
@@ -386,18 +439,22 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
         }
 
         @Override
-        public void send(OutboxEvent event) {
+        public void send(OutboxMessage message) {
             try {
                 Thread.sleep(delay.toMillis());
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException(ex);
             }
-            sent.add(event.getId());
+            received.add(message);
         }
 
         List<UUID> sent() {
-            return List.copyOf(sent);
+            return received.stream().map(OutboxMessage::id).toList();
+        }
+
+        List<OutboxMessage> received() {
+            return List.copyOf(received);
         }
 
         void slowDownBy(Duration pause) {
@@ -405,7 +462,7 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
         }
 
         void reset() {
-            sent.clear();
+            received.clear();
             delay = Duration.ZERO;
         }
     }

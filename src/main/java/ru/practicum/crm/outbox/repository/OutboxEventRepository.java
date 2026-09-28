@@ -1,6 +1,7 @@
 package ru.practicum.crm.outbox.repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -17,10 +18,10 @@ import ru.practicum.crm.outbox.domain.OutboxStatus;
 /**
  * Доступ к исходящим событиям.
  *
- * <p>Здесь две разные по смыслу группы методов. Захват порции и поиск взятого события — работа
- * фонового обработчика, который обслуживает всех арендаторов сразу, поэтому арендатора они не
- * принимают. Всё остальное — просмотр журнала событий конкретного арендатора, и такие методы
- * без арендатора не вызываются.
+ * <p>Здесь две разные по смыслу группы методов. Захват порции, поиск взятого события и
+ * показатели очереди для метрик — служебная работа, которая охватывает всех арендаторов сразу,
+ * поэтому арендатора эти методы не принимают. Всё остальное — просмотр журнала событий
+ * конкретного арендатора, и такие методы без арендатора не вызываются.
  *
  * <p>Как и в остальных репозиториях проекта, интерфейс наследует маркерный {@link Repository}
  * и перечисляет операции поимённо: удаления и слепого {@code findAll} здесь нет.
@@ -53,6 +54,13 @@ public interface OutboxEventRepository extends Repository<OutboxEvent, UUID> {
 
     /** Событие, взятое в обработку, — чтобы записать результат попытки. */
     Optional<OutboxEvent> findByIdAndStatus(UUID id, OutboxStatus status);
+
+    /** Сколько событий в этом состоянии во всей очереди — для метрик. */
+    long countByStatus(OutboxStatus status);
+
+    /** Когда создано самое давнее событие в этих состояниях; пусто, если таких событий нет. */
+    @Query("SELECT min(e.createdAt) FROM OutboxEvent e WHERE e.status IN :statuses")
+    Optional<Instant> findOldestCreatedAt(@Param("statuses") Collection<OutboxStatus> statuses);
 
     Optional<OutboxEvent> findByIdAndTenantId(UUID id, UUID tenantId);
 

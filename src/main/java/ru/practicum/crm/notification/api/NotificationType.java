@@ -1,4 +1,4 @@
-package ru.practicum.crm.notification.template;
+package ru.practicum.crm.notification.api;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -9,6 +9,9 @@ import java.util.List;
  * <p>Каждому событию соответствует каталог шаблонов в ресурсах: {@code mail/<имя>/subject.txt}
  * с темой и {@code mail/<имя>/body.html} с телом письма. Здесь же перечислены значения, без
  * которых письмо собирать нельзя: иначе на их месте в тексте окажется пустота.
+ *
+ * <p>Перечень лежит в {@code api}: по нему пакеты, где происходят изменения, создают
+ * {@link EmailNotification}.
  */
 public enum NotificationType {
 

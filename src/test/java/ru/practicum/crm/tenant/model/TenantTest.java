@@ -3,6 +3,7 @@ package ru.practicum.crm.tenant.model;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
+import ru.practicum.crm.tenant.domain.Tenant;
 
 public class TenantTest {
 

@@ -1,5 +1,7 @@
 package ru.practicum.crm.outbox.service;
 
+import static net.logstash.logback.argument.StructuredArguments.value;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -7,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -18,6 +21,9 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import ru.practicum.crm.outbox.api.OutboxDeliveryException;
+import ru.practicum.crm.outbox.api.OutboxEventSender;
+import ru.practicum.crm.outbox.api.OutboxMessage;
 import ru.practicum.crm.outbox.config.OutboxProperties;
 import ru.practicum.crm.outbox.domain.DeliveryFailure;
 import ru.practicum.crm.outbox.domain.OutboxEvent;
@@ -37,7 +43,7 @@ import ru.practicum.crm.outbox.repository.OutboxEventRepository;
  *       базой.</li>
  *   <li><b>Результат</b> — отдельная транзакция на каждое событие: {@link OutboxStatus#SENT},
  *       возврат в очередь с нарастающей задержкой ({@link OutboxRetryPolicy}) или, когда
- *       попытки исчерпаны, {@link OutboxStatus#FAILED} с причиной.</li>
+ *       попытки исчерпаны либо неудача постоянная, {@link OutboxStatus#FAILED} с причиной.</li>
  * </ol>
  *
  * <p>Если приложение упадёт между захватом и записью результата, событие останется
@@ -61,17 +67,20 @@ public class OutboxProcessor {
     private final OutboxProperties properties;
     private final OutboxRetryPolicy retryPolicy;
     private final Map<String, OutboxEventSender> senders;
+    private final OutboxMetrics metrics;
 
     private volatile boolean stopping;
 
     public OutboxProcessor(OutboxEventRepository repository,
             PlatformTransactionManager transactionManager, OutboxProperties properties,
-            ObjectProvider<OutboxEventSender> senders) {
+            ObjectProvider<OutboxEventSender> senders, OutboxMetrics metrics) {
+        this.metrics = metrics;
         this.repository = repository;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.properties = properties;
         this.retryPolicy = new OutboxRetryPolicy(properties.retryDelay(),
-                properties.maxRetryDelay(), properties.maxAttempts());
+                properties.maxRetryDelay(), properties.maxAttempts(), properties.retryJitter(),
+                () -> ThreadLocalRandom.current().nextDouble());
         this.senders = senders.orderedStream()
                 .collect(Collectors.toUnmodifiableMap(OutboxEventSender::eventType,
                         Function.identity(), (first, second) -> {
@@ -143,14 +152,21 @@ public class OutboxProcessor {
                     "Нет отправителя для событий типа " + event.getEventType()));
         }
         try {
-            sender.send(event);
+            sender.send(toMessage(event));
             return Optional.empty();
         } catch (OutboxDeliveryException ex) {
-            return Optional.of(new DeliveryFailure(ex.getCode(), ex.getMessage()));
+            return Optional.of(new DeliveryFailure(ex.getCode(), ex.getMessage(),
+                    ex.isPermanent()));
         } catch (RuntimeException ex) {
             return Optional.of(new DeliveryFailure(UNEXPECTED_ERROR,
                     ex.getClass().getSimpleName()));
         }
+    }
+
+    /** Сущность за пределы пакета не выходит: отправитель получает копию данных события. */
+    private static OutboxMessage toMessage(OutboxEvent event) {
+        return new OutboxMessage(event.getId(), event.getTenantId(), event.getEventType(),
+                event.getPayload(), event.getAttempts());
     }
 
     private void recordResult(OutboxEvent event, Instant leaseUntil,
@@ -164,6 +180,7 @@ public class OutboxProcessor {
             }
             if (failure.isEmpty()) {
                 owned.get().markSent();
+                metrics.delivered(event.getEventType());
             } else {
                 registerFailure(owned.get(), failure.get());
             }
@@ -173,19 +190,27 @@ public class OutboxProcessor {
     /**
      * В лог попадают только идентификатор, тип, номер попытки и код причины — без полезной
      * нагрузки и сообщения: так в нём не окажутся адреса, текст письма и токены.
+     *
+     * <p>Эти значения передаются как структурные поля ({@code eventId}, {@code eventType},
+     * {@code attempts}, {@code errorCode}): в JSON-логе они лежат отдельными полями, и записи
+     * можно отбирать по ним, а текст сообщения остаётся прежним.
      */
     private void registerFailure(OutboxEvent event, DeliveryFailure failure) {
         int attempts = event.getAttempts();
-        if (retryPolicy.isExhausted(attempts)) {
+        if (failure.permanent() || retryPolicy.isExhausted(attempts)) {
             event.markFailed(failure);
+            metrics.failed(event.getEventType(), failure.code());
             LOG.warn("Событие {} типа {} окончательно не доставлено после {} попыток: {}",
-                    event.getId(), event.getEventType(), attempts, failure.code());
+                    value("eventId", event.getId()), value("eventType", event.getEventType()),
+                    value("attempts", attempts), value("errorCode", failure.code()));
             return;
         }
         Duration delay = retryPolicy.delayAfter(attempts);
         event.retryAt(Instant.now().plus(delay), failure);
+        metrics.willRetry(event.getEventType(), failure.code());
         LOG.warn("Событие {} типа {} не доставлено ({}), попытка {} из {}; следующая через {}",
-                event.getId(), event.getEventType(), failure.code(), attempts,
+                value("eventId", event.getId()), value("eventType", event.getEventType()),
+                value("errorCode", failure.code()), value("attempts", attempts),
                 properties.maxAttempts(), delay);
     }
 
