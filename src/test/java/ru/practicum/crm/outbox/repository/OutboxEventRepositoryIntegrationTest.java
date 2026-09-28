@@ -287,7 +287,7 @@ class OutboxEventRepositoryIntegrationTest extends BaseIntegrationTest {
                 String.class);
 
         assertThat(String.join("\n", plan))
-                .contains("idx_outbox_events_status_created_at")
+                .contains("idx_outbox_events_new_created_at")
                 .contains("Limit");
     }
 

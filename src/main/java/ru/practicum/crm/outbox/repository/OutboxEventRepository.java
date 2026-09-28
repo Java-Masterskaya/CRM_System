@@ -61,9 +61,9 @@ public interface OutboxEventRepository extends Repository<OutboxEvent, UUID> {
      * Когда создано самое давнее событие в этом состоянии; пусто, если таких событий нет.
      *
      * <p>Состояние одно, а не список: при условии {@code status = ?} PostgreSQL берёт минимум из
-     * первой записи индекса {@code idx_outbox_events_status_created_at}. При {@code status IN
-     * (...)} записи индекса идут по состояниям, а не по времени, и пришлось бы перебрать все
-     * события в этих состояниях.
+     * первой записи частичного индекса этого состояния ({@code idx_outbox_events_new_created_at},
+     * {@code idx_outbox_events_in_progress_created_at}). Условие со списком состояний такие
+     * индексы не покрывает, и пришлось бы перебрать все события в этих состояниях.
      */
     @Query("SELECT min(e.createdAt) FROM OutboxEvent e WHERE e.status = :status")
     Optional<Instant> findOldestCreatedAt(@Param("status") OutboxStatus status);
