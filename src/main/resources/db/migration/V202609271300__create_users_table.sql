@@ -15,17 +15,12 @@ CREATE TABLE users (
 
     CONSTRAINT fk_users_tenant
         FOREIGN KEY (tenant_id)
-        REFERENCES tenants (id)
+        REFERENCES tenants (id),
+
+        CONSTRAINT chk_users_status
+        CHECK (status IN ('ACTIVE', 'BLOCKED'))
 );
 
 -- 2. Составной уникальный индекс: email уникален строго внутри одного tenant_id
 CREATE UNIQUE INDEX uk_users_tenant_email
     ON users (tenant_id, lower(email));
-
--- 3. Индексы для оптимизации поиска
-CREATE INDEX idx_users_tenant_id
-    ON users (tenant_id);
-
-CREATE INDEX idx_users_status
-    ON users (status);
-
