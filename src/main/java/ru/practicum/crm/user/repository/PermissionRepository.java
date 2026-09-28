@@ -2,14 +2,14 @@ package ru.practicum.crm.user.repository;
 
 import java.util.Set;
 import java.util.UUID;
-import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
-import org.springframework.stereotype.Repository;
 import ru.practicum.crm.user.domain.PermissionEntity;
 
-@Repository
-public interface PermissionRepository extends JpaRepository<PermissionEntity, UUID> {
+public interface PermissionRepository extends Repository<PermissionEntity, UUID> {
+
+    PermissionEntity save(PermissionEntity permission);
 
     @Query(
             value =
