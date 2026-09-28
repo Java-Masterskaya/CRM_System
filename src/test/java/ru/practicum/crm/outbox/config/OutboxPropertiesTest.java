@@ -23,6 +23,7 @@ class OutboxPropertiesTest {
                     "app.outbox.lease=5m",
                     "app.outbox.retry-delay=1m",
                     "app.outbox.max-retry-delay=2h",
+                    "app.outbox.retry-jitter=0.5",
                     "app.outbox.max-attempts=8");
 
     @Test
@@ -35,8 +36,39 @@ class OutboxPropertiesTest {
             assertThat(properties.lease()).isEqualTo(Duration.ofMinutes(5));
             assertThat(properties.retryDelay()).isEqualTo(Duration.ofMinutes(1));
             assertThat(properties.maxRetryDelay()).isEqualTo(Duration.ofHours(2));
+            assertThat(properties.retryJitter()).isEqualTo(0.5);
             assertThat(properties.maxAttempts()).isEqualTo(8);
         });
+    }
+
+    @Test
+    void retryJitter_whenOutsideZeroToNineTenths_stopsApplicationFromStarting() {
+        for (String jitter : new String[] {"-0.1", "0.95", "1.0"}) {
+            contextRunner.withPropertyValues("app.outbox.retry-jitter=" + jitter).run(context -> {
+                assertThat(context).as("разброс %s", jitter).hasFailed();
+                assertThat(context.getStartupFailure()).rootCause()
+                        .hasMessageContaining("retryJitter");
+            });
+        }
+    }
+
+    @Test
+    void retryJitter_whenAtUpperBound_isAccepted() {
+        contextRunner.withPropertyValues("app.outbox.retry-jitter=0.9").run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context.getBean(OutboxProperties.class).retryJitter()).isEqualTo(0.9);
+        });
+    }
+
+    @Test
+    void retryJitter_whenNotSet_meansNoJitter() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(PropertiesConfig.class)
+                .withPropertyValues("app.outbox.batch-size=50", "app.outbox.poll-interval=5s",
+                        "app.outbox.lease=5m", "app.outbox.retry-delay=1m",
+                        "app.outbox.max-retry-delay=2h", "app.outbox.max-attempts=8")
+                .run(context -> assertThat(context.getBean(OutboxProperties.class).retryJitter())
+                        .isZero());
     }
 
     @Test

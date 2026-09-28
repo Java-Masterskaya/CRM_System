@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -78,7 +79,8 @@ public class OutboxProcessor {
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.properties = properties;
         this.retryPolicy = new OutboxRetryPolicy(properties.retryDelay(),
-                properties.maxRetryDelay(), properties.maxAttempts());
+                properties.maxRetryDelay(), properties.maxAttempts(), properties.retryJitter(),
+                () -> ThreadLocalRandom.current().nextDouble());
         this.senders = senders.orderedStream()
                 .collect(Collectors.toUnmodifiableMap(OutboxEventSender::eventType,
                         Function.identity(), (first, second) -> {
