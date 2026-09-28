@@ -169,4 +169,64 @@ class UserRepositoryIntegrationTest extends BaseIntegrationTest {
                         "active@example.com",
                         "blocked@example.com");
     }
+
+    @Test
+    @DisplayName("Заблокированный пользователь не может войти")
+    void blockedUser_cannotLogIn() {
+        UserEntity user =
+                new UserEntity(
+                        tenantA,
+                        "blocked@example.com",
+                        "hash",
+                        UserStatus.ACTIVE);
+
+        user.block();
+
+        assertThat(user.canLogIn()).isFalse();
+    }
+
+    @Test
+    @DisplayName("Заблокированный пользователь остаётся в списке пользователей арендатора")
+    void blockedUser_remainsInTenantUsersList() {
+        UserEntity user =
+                new UserEntity(
+                        tenantA,
+                        "blocked@example.com",
+                        "hash",
+                        UserStatus.ACTIVE);
+
+        user.block();
+
+        userRepository.save(user);
+        entityManager.flush();
+
+        assertThat(userRepository.findAllActiveByTenantId(tenantA))
+                .extracting(UserEntity::getEmail)
+                .contains("blocked@example.com");
+    }
+
+    @Test
+    @DisplayName("Удаление пользователя выполняется мягко")
+    void deleteUser_marksUserAsDeleted() {
+        UserEntity user =
+                new UserEntity(
+                        tenantA,
+                        "deleted@example.com",
+                        "hash",
+                        UserStatus.ACTIVE);
+
+        userRepository.save(user);
+        entityManager.flush();
+
+        user.delete();
+        entityManager.flush();
+
+        assertThat(user.getDeletedAt()).isNotNull();
+        assertThat(userRepository.findById(user.getId()))
+                .isPresent();
+
+        assertThat(userRepository.findAllActiveByTenantId(tenantA))
+                .extracting(UserEntity::getEmail)
+                .doesNotContain("deleted@example.com");
+    }
 }

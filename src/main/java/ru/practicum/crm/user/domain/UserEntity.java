@@ -72,4 +72,16 @@ public class UserEntity extends TenantScopedEntity {
     public void setDeletedAt(OffsetDateTime deletedAt) {
         this.deletedAt = deletedAt;
     }
+
+    public void block() {
+        this.status = UserStatus.BLOCKED;
+    }
+
+    public void delete() {
+        this.deletedAt = OffsetDateTime.now();
+    }
+
+    public boolean canLogIn() {
+        return status == UserStatus.ACTIVE && deletedAt == null;
+    }
 }

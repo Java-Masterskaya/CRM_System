@@ -12,6 +12,8 @@ public interface UserRepository extends Repository<UserEntity, UUID> {
 
     UserEntity save(UserEntity user);
 
+    Optional<UserEntity> findById(UUID id);
+
     Optional<UserEntity> findByTenantIdAndEmail(UUID tenantId, String email);
 
     @Query(

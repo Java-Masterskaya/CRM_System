@@ -3,7 +3,7 @@
 -- ============================================================================
 
 -- 1. Создаем таблицу пользователей (users)
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE users (
     id            UUID PRIMARY KEY,
     tenant_id     UUID NOT NULL,
     email         VARCHAR(255) NOT NULL,
@@ -19,13 +19,13 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- 2. Составной уникальный индекс: email уникален строго внутри одного tenant_id
-CREATE UNIQUE INDEX IF NOT EXISTS uk_users_tenant_email
+CREATE UNIQUE INDEX uk_users_tenant_email
     ON users (tenant_id, lower(email));
 
 -- 3. Индексы для оптимизации поиска
-CREATE INDEX IF NOT EXISTS idx_users_tenant_id
+CREATE INDEX idx_users_tenant_id
     ON users (tenant_id);
 
-CREATE INDEX IF NOT EXISTS idx_users_status
+CREATE INDEX idx_users_status
     ON users (status);
 
