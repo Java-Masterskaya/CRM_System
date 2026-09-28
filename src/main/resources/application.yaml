@@ -51,6 +51,7 @@ app:
     retry-jitter: ${OUTBOX_RETRY_JITTER:0.5}
     max-attempts: ${OUTBOX_MAX_ATTEMPTS:8}
 
+crm:
   security:
     password:
       min-length: 12
