@@ -8,7 +8,6 @@ import ru.practicum.crm.tenant.api.mapper.TenantMapper;
 import ru.practicum.crm.tenant.domain.Tenant;
 import ru.practicum.crm.tenant.domain.TenantSettings;
 import ru.practicum.crm.tenant.repository.TenantRepository;
-import ru.practicum.crm.tenant.repository.TenantSettingsRepository;
 import ru.practicum.crm.tenant.service.TenantService;
 
 @Service
