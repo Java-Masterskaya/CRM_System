@@ -25,7 +25,12 @@ import org.hibernate.type.SqlTypes;
  * отдельным процессом. Поэтому сбой почты не откатывает бизнес-операцию, а откат операции не
  * оставляет события, которое некому объяснить.
  *
- * <p>Событие — свершившийся факт: арендатор, тип и полезная нагрузка после записи не меняются.
+ * <p>Событие может ссылаться на объект, к которому относится, — вид объекта и его идентификатор
+ * ({@code aggregateType}, {@code aggregateId}). По этой ссылке выбираются все события одного
+ * объекта. Ссылка задаётся целиком или не задаётся вовсе.
+ *
+ * <p>Событие — свершившийся факт: арендатор, тип, ссылка на объект и полезная нагрузка после
+ * записи не меняются.
  * В коде это выражено отсутствием сеттеров и {@code updatable = false}, в базе — триггером
  * {@code outbox_events_immutable_payload}. Меняются только поля доставки, и только методами
  * {@link #claim}, {@link #markSent}, {@link #retryAt}, {@link #markFailed} и
@@ -47,6 +52,12 @@ public class OutboxEvent {
 
     @Column(name = "event_type", nullable = false, updatable = false, length = 100)
     private String eventType;
+
+    @Column(name = "aggregate_type", updatable = false, length = 100)
+    private String aggregateType;
+
+    @Column(name = "aggregate_id", updatable = false)
+    private UUID aggregateId;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "payload", nullable = false, updatable = false)
@@ -75,13 +86,42 @@ public class OutboxEvent {
     private Instant updatedAt;
 
     protected OutboxEvent() {
-        // Конструктор без аргументов нужен Hibernate; прикладной код использует конструктор ниже.
+        // Конструктор без аргументов нужен Hibernate; прикладной код использует конструктор ниже
+        // или метод aboutObject.
     }
 
+    /** Событие, не относящееся к конкретному объекту. */
     public OutboxEvent(UUID tenantId, String eventType, Map<String, Object> payload) {
+        this(tenantId, eventType, null, null, payload);
+    }
+
+    private OutboxEvent(UUID tenantId, String eventType, String aggregateType, UUID aggregateId,
+            Map<String, Object> payload) {
         this.tenantId = tenantId;
         this.eventType = eventType;
+        this.aggregateType = aggregateType;
+        this.aggregateId = aggregateId;
         this.payload = payload == null ? null : new LinkedHashMap<>(payload);
+    }
+
+    /**
+     * Событие об объекте: {@code aggregateType} — вид объекта (например, {@code REQUEST}),
+     * {@code aggregateId} — его идентификатор.
+     *
+     * <p>Фабричный метод, а не конструктор: ссылка проверяется до того, как объект начнёт
+     * создаваться. Исключение из конструктора оставило бы недособранный объект, а сделать класс
+     * {@code final}, чтобы это стало безопасно, нельзя — Hibernate создаёт от сущностей
+     * классы-заместители.
+     *
+     * @throws IllegalArgumentException если ссылка на объект задана не целиком
+     */
+    public static OutboxEvent aboutObject(UUID tenantId, String eventType, String aggregateType,
+            UUID aggregateId, Map<String, Object> payload) {
+        if (aggregateType == null || aggregateType.isBlank() || aggregateId == null) {
+            throw new IllegalArgumentException(
+                    "Ссылка на объект задаётся целиком: и вид объекта, и его идентификатор");
+        }
+        return new OutboxEvent(tenantId, eventType, aggregateType, aggregateId, payload);
     }
 
     public Map<String, Object> getPayload() {
