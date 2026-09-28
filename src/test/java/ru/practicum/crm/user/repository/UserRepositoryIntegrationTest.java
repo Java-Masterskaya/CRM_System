@@ -1,6 +1,7 @@
 package ru.practicum.crm.user.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import jakarta.persistence.EntityManager;
@@ -222,11 +223,85 @@ class UserRepositoryIntegrationTest extends BaseIntegrationTest {
         entityManager.flush();
 
         assertThat(user.getDeletedAt()).isNotNull();
-        assertThat(userRepository.findById(user.getId()))
-                .isPresent();
+        assertThat(userRepository.findById(user.getId(), tenantA))
+                .isEmpty();
 
         assertThat(userRepository.findAllActiveByTenantId(tenantA))
                 .extracting(UserEntity::getEmail)
                 .doesNotContain("deleted@example.com");
+    }
+
+    @Test
+    @DisplayName("Пользователь не находится через findById из другого арендатора")
+    void findById_withAnotherTenant_returnsEmpty() {
+        UserEntity user =
+                new UserEntity(
+                        tenantA,
+                        "user@example.com",
+                        "hash",
+                        UserStatus.ACTIVE);
+
+        userRepository.save(user);
+        entityManager.flush();
+
+        assertThat(userRepository.findById(user.getId(), tenantB))
+                .isEmpty();
+
+        assertThat(userRepository.findById(user.getId(), tenantA))
+                .isPresent();
+    }
+
+    @Test
+    @DisplayName("Поиск по email не возвращает мягко удалённого пользователя")
+    void findByTenantIdAndEmail_excludesDeletedUser() {
+        UserEntity user =
+                new UserEntity(
+                        tenantA,
+                        "deleted@example.com",
+                        "hash",
+                        UserStatus.ACTIVE);
+
+        userRepository.save(user);
+        entityManager.flush();
+
+        user.delete();
+        entityManager.flush();
+
+        assertThat(
+                userRepository.findByTenantIdAndEmail(
+                        tenantA,
+                        "deleted@example.com"))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("После мягкого удаления email можно повторно использовать")
+    void emailCanBeReused_afterSoftDelete() {
+        String email = "reusable@example.com";
+
+        UserEntity deletedUser =
+                new UserEntity(
+                        tenantA,
+                        email,
+                        "hash1",
+                        UserStatus.ACTIVE);
+
+        userRepository.save(deletedUser);
+        entityManager.flush();
+
+        deletedUser.delete();
+        entityManager.flush();
+
+        UserEntity newUser =
+                new UserEntity(
+                        tenantA,
+                        email,
+                        "hash2",
+                        UserStatus.ACTIVE);
+
+        userRepository.save(newUser);
+
+        assertThatCode(() -> entityManager.flush())
+                .doesNotThrowAnyException();
     }
 }

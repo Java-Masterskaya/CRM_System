@@ -23,4 +23,5 @@ CREATE TABLE users (
 
 -- 2. Составной уникальный индекс: email уникален строго внутри одного tenant_id
 CREATE UNIQUE INDEX uk_users_tenant_email
-    ON users (tenant_id, lower(email));
+    ON users (tenant_id, lower(email))
+    WHERE deleted_at IS NULL;
