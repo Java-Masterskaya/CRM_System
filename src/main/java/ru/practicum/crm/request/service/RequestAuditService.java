@@ -2,9 +2,12 @@ package ru.practicum.crm.request.service;
 
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import ru.practicum.crm.common.pagination.PageRequests;
 import ru.practicum.crm.request.domain.FieldChange;
 import ru.practicum.crm.request.domain.Request;
 import ru.practicum.crm.request.domain.RequestAuditEntry;
@@ -57,9 +60,21 @@ public class RequestAuditService {
         return changes;
     }
 
-    /** Журнал заявки арендатора в порядке изменений. */
+    /**
+     * Страница журнала заявки арендатора в порядке изменений (#161). Журнал часто правимой
+     * заявки растёт без ограничения, поэтому целиком он не читается.
+     *
+     * @param pageable номер и размер страницы; размер — не больше {@link PageRequests#MAX_SIZE},
+     *     как у остальных списков
+     * @throws IllegalArgumentException если страница не задана или больше допустимого размера
+     */
     @Transactional(readOnly = true)
-    public List<RequestAuditEntry> journal(UUID tenantId, UUID requestId) {
-        return repository.findByTenantIdAndRequestIdOrderByCreatedAtAscIdAsc(tenantId, requestId);
+    public Page<RequestAuditEntry> journal(UUID tenantId, UUID requestId, Pageable pageable) {
+        if (pageable.isUnpaged() || pageable.getPageSize() > PageRequests.MAX_SIZE) {
+            throw new IllegalArgumentException("Журнал читается страницами не больше "
+                    + PageRequests.MAX_SIZE + " записей");
+        }
+        return repository.findByTenantIdAndRequestIdOrderByCreatedAtAscIdAsc(tenantId, requestId,
+                pageable);
     }
 }

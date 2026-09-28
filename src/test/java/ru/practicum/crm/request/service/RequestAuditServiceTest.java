@@ -6,11 +6,15 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
+import ru.practicum.crm.common.pagination.PageRequests;
 import ru.practicum.crm.request.domain.AuditedField;
 import ru.practicum.crm.request.domain.Request;
 import ru.practicum.crm.request.domain.RequestAuditEntry;
@@ -69,11 +73,29 @@ class RequestAuditServiceTest {
     }
 
     @Test
-    void journal_readsOnlyGivenTenantsRequest() {
-        service.journal(TENANT_ID, REQUEST_ID);
+    void journal_readsGivenPageOfGivenTenantsRequest() {
+        PageRequest largestPage = PageRequest.of(1, PageRequests.MAX_SIZE);
+
+        service.journal(TENANT_ID, REQUEST_ID, largestPage);
 
         verify(repository).findByTenantIdAndRequestIdOrderByCreatedAtAscIdAsc(TENANT_ID,
-                REQUEST_ID);
+                REQUEST_ID, largestPage);
+    }
+
+    @Test
+    void journal_whenPageLargerThanLimit_isRejectedWithoutReading() {
+        PageRequest tooLarge = PageRequest.of(0, PageRequests.MAX_SIZE + 1);
+
+        assertThatThrownBy(() -> service.journal(TENANT_ID, REQUEST_ID, tooLarge))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void journal_withoutPaging_isRejectedWithoutReading() {
+        assertThatThrownBy(() -> service.journal(TENANT_ID, REQUEST_ID, Pageable.unpaged()))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(repository);
     }
 
     private static Request savedRequest() {
