@@ -11,14 +11,21 @@ CREATE TABLE IF NOT EXISTS users (
     status        VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
     deleted_at    TIMESTAMP WITH TIME ZONE,
     created_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    updated_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    updated_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT fk_users_tenant
+        FOREIGN KEY (tenant_id)
+        REFERENCES tenants (id)
 );
 
 -- 2. Составной уникальный индекс: email уникален строго внутри одного tenant_id
 CREATE UNIQUE INDEX IF NOT EXISTS uk_users_tenant_email
-    ON users (tenant_id, email);
+    ON users (tenant_id, lower(email));
 
 -- 3. Индексы для оптимизации поиска
-CREATE INDEX IF NOT EXISTS idx_users_tenant_id ON users (tenant_id);
-CREATE INDEX IF NOT EXISTS idx_users_status ON users (status);
+CREATE INDEX IF NOT EXISTS idx_users_tenant_id
+    ON users (tenant_id);
+
+CREATE INDEX IF NOT EXISTS idx_users_status
+    ON users (status);
 

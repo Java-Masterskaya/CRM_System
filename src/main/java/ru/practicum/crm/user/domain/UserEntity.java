@@ -4,20 +4,14 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import ru.practicum.crm.common.model.TenantScopedEntity;
 
 @Entity
 @Table(name = "users")
-public class UserEntity {
-
-    @Id
-    private UUID id;
-
-    @Column(name = "tenant_id", nullable = false)
-    private UUID tenantId;
+public class UserEntity extends TenantScopedEntity {
 
     @Column(name = "email", nullable = false)
     private String email;
@@ -29,44 +23,22 @@ public class UserEntity {
     @Column(name = "status", nullable = false)
     private UserStatus status;
 
-    @Column(name = "created_at", nullable = false)
-    private OffsetDateTime createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    private OffsetDateTime updatedAt;
-
     @Column(name = "deleted_at")
     private OffsetDateTime deletedAt;
 
-    public UserEntity() {
+    protected UserEntity() {
     }
 
-    public UserEntity(UUID id,
-                      UUID tenantId,
-                      String email,
-                      String passwordHash,
-                      UserStatus status) {
-        this.id = id;
-        this.tenantId = tenantId;
+    public UserEntity(
+            UUID tenantId,
+            String email,
+            String passwordHash,
+            UserStatus status
+    ) {
+        super(tenantId);
         this.email = email;
         this.passwordHash = passwordHash;
         this.status = status;
-    }
-
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public UUID getTenantId() {
-        return tenantId;
-    }
-
-    public void setTenantId(UUID tenantId) {
-        this.tenantId = tenantId;
     }
 
     public String getEmail() {
@@ -91,22 +63,6 @@ public class UserEntity {
 
     public void setStatus(UserStatus status) {
         this.status = status;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(OffsetDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public OffsetDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(OffsetDateTime updatedAt) {
-        this.updatedAt = updatedAt;
     }
 
     public OffsetDateTime getDeletedAt() {
