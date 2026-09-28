@@ -87,6 +87,9 @@ public class OutboxProcessor {
                             throw new IllegalStateException("Два отправителя для одного типа "
                                     + "событий: " + first.eventType());
                         }));
+        for (String eventType : this.senders.keySet()) {
+            metrics.registerEventType(eventType);
+        }
     }
 
     /**
@@ -169,49 +172,64 @@ public class OutboxProcessor {
                 event.getPayload(), event.getAttempts());
     }
 
+    /**
+     * Записывает результат попытки, а сообщает о нём — счётчиком и логом — только после фиксации
+     * транзакции (#154). {@link TransactionTemplate#execute} возвращает управление, когда
+     * транзакция уже зафиксирована; если фиксация не удалась, исключение выходит раньше, и
+     * попытка не считается. Событие тогда останется взятым, по истечении аренды вернётся в
+     * очередь и будет посчитано один раз — когда его результат действительно запишется.
+     */
     private void recordResult(OutboxEvent event, Instant leaseUntil,
             Optional<DeliveryFailure> failure) {
-        transactionTemplate.executeWithoutResult(status -> {
+        Runnable reportAfterCommit = transactionTemplate.execute(status -> {
             Optional<OutboxEvent> owned = findOwned(event.getId(), leaseUntil);
             if (owned.isEmpty()) {
                 LOG.warn("Событие {} за время отправки перешло к другому обработчику: "
                         + "результат не записан", event.getId());
-                return;
+                return null;
             }
             if (failure.isEmpty()) {
                 owned.get().markSent();
-                metrics.delivered(event.getEventType());
-            } else {
-                registerFailure(owned.get(), failure.get());
+                return () -> metrics.delivered(event.getEventType());
             }
+            return registerFailure(owned.get(), failure.get());
         });
+        if (reportAfterCommit != null) {
+            reportAfterCommit.run();
+        }
     }
 
     /**
-     * В лог попадают только идентификатор, тип, номер попытки и код причины — без полезной
+     * Переводит событие в очередь на повтор или в окончательный неуспех и возвращает, как
+     * сообщить об этом после фиксации.
+     *
+     * <p>В лог попадают только идентификатор, тип, номер попытки и код причины — без полезной
      * нагрузки и сообщения: так в нём не окажутся адреса, текст письма и токены.
      *
      * <p>Эти значения передаются как структурные поля ({@code eventId}, {@code eventType},
      * {@code attempts}, {@code errorCode}): в JSON-логе они лежат отдельными полями, и записи
      * можно отбирать по ним, а текст сообщения остаётся прежним.
      */
-    private void registerFailure(OutboxEvent event, DeliveryFailure failure) {
+    private Runnable registerFailure(OutboxEvent event, DeliveryFailure failure) {
         int attempts = event.getAttempts();
         if (failure.permanent() || retryPolicy.isExhausted(attempts)) {
             event.markFailed(failure);
-            metrics.failed(event.getEventType(), failure.code());
-            LOG.warn("Событие {} типа {} окончательно не доставлено после {} попыток: {}",
-                    value("eventId", event.getId()), value("eventType", event.getEventType()),
-                    value("attempts", attempts), value("errorCode", failure.code()));
-            return;
+            return () -> {
+                metrics.failed(event.getEventType(), failure.code());
+                LOG.warn("Событие {} типа {} окончательно не доставлено после {} попыток: {}",
+                        value("eventId", event.getId()), value("eventType", event.getEventType()),
+                        value("attempts", attempts), value("errorCode", failure.code()));
+            };
         }
         Duration delay = retryPolicy.delayAfter(attempts);
         event.retryAt(Instant.now().plus(delay), failure);
-        metrics.willRetry(event.getEventType(), failure.code());
-        LOG.warn("Событие {} типа {} не доставлено ({}), попытка {} из {}; следующая через {}",
-                value("eventId", event.getId()), value("eventType", event.getEventType()),
-                value("errorCode", failure.code()), value("attempts", attempts),
-                properties.maxAttempts(), delay);
+        return () -> {
+            metrics.willRetry(event.getEventType(), failure.code());
+            LOG.warn("Событие {} типа {} не доставлено ({}), попытка {} из {}; следующая через {}",
+                    value("eventId", event.getId()), value("eventType", event.getEventType()),
+                    value("errorCode", failure.code()), value("attempts", attempts),
+                    properties.maxAttempts(), delay);
+        };
     }
 
     private void release(List<OutboxEvent> unstarted, Instant leaseUntil) {
