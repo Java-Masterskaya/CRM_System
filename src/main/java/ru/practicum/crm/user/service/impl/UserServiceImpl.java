@@ -4,6 +4,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
@@ -35,6 +36,7 @@ public class UserServiceImpl implements UserService {
 
     // TODO: В случае необходимости внести изменения в метод create
     @Override
+    @Transactional
     public UserDto create(CreateUserRequest request) {
         UUID tenantId = tenantContext.getCurrentTenantId();
 

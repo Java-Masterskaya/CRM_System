@@ -54,7 +54,6 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
 
         UserDto result = userService.create(new CreateUserRequest(
                 "user@example.com",
-                "User",
                 VALID_PASSWORD
         ));
 
@@ -70,12 +69,10 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
         UUID tenantId = createTenant();
         userService.create(new CreateUserRequest(
                 "first@example.com",
-                "First",
                 VALID_PASSWORD
         ));
         userService.create(new CreateUserRequest(
                 "second@example.com",
-                "Second",
                 VALID_PASSWORD
         ));
 
@@ -94,7 +91,6 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
 
         assertThatThrownBy(() -> userService.create(new CreateUserRequest(
                 "user@example.com",
-                "User",
                 "weak"
         )))
                 .isInstanceOfSatisfying(ApiException.class, exception ->
@@ -170,7 +166,6 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
 
         assertThat(tooLongPassword).hasSize(73);
         assertThatThrownBy(() -> userService.create(new CreateUserRequest("user@example.com",
-                "User",
                 tooLongPassword
         ))).isInstanceOfSatisfying(ApiException.class, exception ->
                 assertThat(exception.getErrorCode())
