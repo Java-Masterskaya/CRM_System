@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -237,15 +238,61 @@ class OutboxEventRepositoryIntegrationTest extends BaseIntegrationTest {
         jdbcTemplate.update(insertManyEvents, tenantA);
         jdbcTemplate.execute("ANALYZE outbox_events");
 
-        List<String> claimPlan = jdbcTemplate.queryForList(
-                "EXPLAIN SELECT * FROM outbox_events WHERE status IN ('NEW', 'IN_PROGRESS')"
-                        + " AND next_attempt_at <= now() ORDER BY next_attempt_at LIMIT 100"
-                        + " FOR UPDATE SKIP LOCKED",
-                String.class);
-
-        assertThat(String.join("\n", claimPlan))
+        assertThat(claimPlan())
                 .as("запрос захвата порции, которым работает обработчик")
-                .contains("idx_outbox_events_status_next_attempt");
+                .contains("idx_outbox_events_claim")
+                .doesNotContain("Sort");
+    }
+
+    /**
+     * Затор (#166): готовых событий десятки тысяч. Захват берёт их в порядке индекса и
+     * останавливается на размере порции, а не читает и сортирует все готовые.
+     */
+    @Test
+    void readySelection_whenTensOfThousandsOfEventsAreReady_takesBatchWithoutSortingAll() {
+        String insertCongestedQueue =
+                """
+                INSERT INTO outbox_events (id, tenant_id, event_type, payload, status, attempts,
+                                           next_attempt_at, created_at, updated_at)
+                SELECT gen_random_uuid(), ?, 'REQUEST_CREATED', '{}'::jsonb,
+                       CASE WHEN i % 6 = 0 THEN 'SENT' ELSE 'NEW' END,
+                       0, now() - (i || ' seconds')::interval,
+                       now() - (i || ' seconds')::interval, now()
+                FROM generate_series(1, 60000) AS s(i)
+                """;
+        jdbcTemplate.update(insertCongestedQueue, tenantA);
+        jdbcTemplate.execute("ANALYZE outbox_events");
+
+        assertThat(claimPlan())
+                .contains("idx_outbox_events_claim")
+                .contains("Limit")
+                .doesNotContain("Sort");
+    }
+
+    /**
+     * События с одинаковым временем попытки захватываются в порядке {@code id} (#148). UUID в
+     * PostgreSQL сравниваются побайтово — это порядок их строкового вида, так и строится ожидание.
+     */
+    @Test
+    void lockReadyBatch_whenAttemptTimesAreEqual_returnsEventsInIdOrder() {
+        List<UUID> ids = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            ids.add(repository.save(new OutboxEvent(tenantA, "SAME_TIME", Map.of())).getId());
+        }
+        jdbcTemplate.update("UPDATE outbox_events SET next_attempt_at = ?",
+                Timestamp.from(Instant.now().minus(1, ChronoUnit.MINUTES)));
+
+        assertThat(findReady(10)).extracting(event -> event.getId().toString())
+                .containsExactlyElementsOf(ids.stream().map(UUID::toString).sorted().toList());
+    }
+
+    /** План запроса захвата — того же, что в {@link OutboxEventRepository#lockReadyBatch}. */
+    private String claimPlan() {
+        return String.join("\n", jdbcTemplate.queryForList(
+                "EXPLAIN SELECT * FROM outbox_events WHERE status IN ('NEW', 'IN_PROGRESS')"
+                        + " AND next_attempt_at <= now() ORDER BY next_attempt_at, id LIMIT 100"
+                        + " FOR UPDATE SKIP LOCKED",
+                String.class));
     }
 
     @Test

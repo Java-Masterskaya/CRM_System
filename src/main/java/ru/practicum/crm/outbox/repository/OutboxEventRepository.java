@@ -32,7 +32,13 @@ public interface OutboxEventRepository extends Repository<OutboxEvent, UUID> {
     /**
      * Блокирует и возвращает порцию событий, которые пора отправлять: новые с наступившим
      * временем попытки и взятые в работу, у которых истёк срок аренды (обработчик, взявший их,
-     * упал или не успел). Порядок — от самого давно ожидающего.
+     * упал или не успел). Порядок — от самого давно ожидающего; при одинаковом времени попытки —
+     * по {@code id} (#148), как и в остальных выборках проекта.
+     *
+     * <p>Условие и порядок совпадают с частичным индексом {@code idx_outbox_events_claim}: события
+     * берутся прямо в порядке индекса, и выборка останавливается, набрав порцию, — без сортировки
+     * всех готовых событий, даже при заторе (#166). Менять условие или порядок можно только вместе
+     * с индексом.
      *
      * <p>{@code FOR UPDATE SKIP LOCKED} — строки, которые уже заблокировал другой обработчик,
      * пропускаются, а не ждут: два экземпляра приложения одновременно получат разные события.
@@ -45,7 +51,7 @@ public interface OutboxEventRepository extends Repository<OutboxEvent, UUID> {
             """
             SELECT * FROM outbox_events
             WHERE status IN ('NEW', 'IN_PROGRESS') AND next_attempt_at <= :now
-            ORDER BY next_attempt_at
+            ORDER BY next_attempt_at, id
             LIMIT :limit
             FOR UPDATE SKIP LOCKED
             """)
