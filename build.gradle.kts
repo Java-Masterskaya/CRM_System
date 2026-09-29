@@ -66,6 +66,8 @@ dependencies {
 
 	implementation("org.mapstruct:mapstruct:1.6.3")
 	annotationProcessor("org.mapstruct:mapstruct-processor:1.6.3")
+
+	implementation("org.springframework.security:spring-security-crypto")
 }
 
 tasks.withType<Test> {

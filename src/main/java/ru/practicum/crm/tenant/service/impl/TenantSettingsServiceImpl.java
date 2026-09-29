@@ -5,12 +5,13 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.NotFoundException;
+import ru.practicum.crm.tenant.api.context.TenantContext;
 import ru.practicum.crm.tenant.api.dto.TenantSettingsDto;
 import ru.practicum.crm.tenant.api.mapper.TenantSettingsMapper;
-import ru.practicum.crm.tenant.context.TenantContext;
 import ru.practicum.crm.tenant.domain.TenantSettings;
 import ru.practicum.crm.tenant.repository.TenantSettingsRepository;
 import ru.practicum.crm.tenant.service.TenantSettingsService;
@@ -25,6 +26,7 @@ public class TenantSettingsServiceImpl implements TenantSettingsService {
     private final TenantContext tenantContext;
 
     @Override
+    @Transactional(readOnly = true)
     public TenantSettingsDto getTenantSettings() {
         UUID tenantId = tenantContext.getCurrentTenantId();
         TenantSettings settings = findByTenantId(tenantId);
