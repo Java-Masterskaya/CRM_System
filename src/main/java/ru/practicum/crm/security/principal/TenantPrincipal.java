@@ -20,6 +20,8 @@ public record TenantPrincipal(UUID tenantId) implements UserDetails {
 
     @Override
     public String getUsername() {
+        // TODO: временное решение — используем username как переносчик tenantId,
+        // пока не появится нормальный Principal с отдельным полем tenantId (T-026).
         return tenantId.toString();
     }
 }

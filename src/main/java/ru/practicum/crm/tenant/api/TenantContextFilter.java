@@ -1,36 +1,45 @@
 package ru.practicum.crm.tenant.api;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.filter.OncePerRequestFilter;
+import ru.practicum.crm.common.error.ErrorCode;
+import ru.practicum.crm.common.error.ProblemDetailFactory;
 
 public class TenantContextFilter extends OncePerRequestFilter {
 
-    private final TenantActiveChecker tenantActiveChecker;
-
-    public TenantContextFilter(TenantActiveChecker tenantActiveChecker) {
-        this.tenantActiveChecker = tenantActiveChecker;
-    }
-
-    private static final List<String> EXCLUDED_PREFIXES = List.of(
-            "/api/auth",
-            "/actuator",
-            "/swagger-ui",
-            "/v3/api-docs"
+    private static final List<String> PROTECTED_PREFIXES = List.of(
+            "/client",
+            "/admin",
+            "/test"
     );
+
+    private final TenantActiveChecker tenantActiveChecker;
+    private final ObjectWriter problemWriter;
+
+    public TenantContextFilter(TenantActiveChecker tenantActiveChecker, ObjectMapper objectMapper) {
+        this.tenantActiveChecker = tenantActiveChecker;
+        this.problemWriter = objectMapper.writer();
+    }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getRequestURI();
-        return EXCLUDED_PREFIXES.stream().anyMatch(path::startsWith);
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        return PROTECTED_PREFIXES.stream().noneMatch(path::startsWith);
     }
 
     @Override
@@ -39,6 +48,7 @@ public class TenantContextFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
+
         try {
             Authentication authentication =
                     SecurityContextHolder.getContext().getAuthentication();
@@ -46,15 +56,12 @@ public class TenantContextFilter extends OncePerRequestFilter {
             UUID tenantId = extractTenantId(authentication);
 
             if (tenantId == null) {
-                response.sendError(
-                        HttpServletResponse.SC_UNAUTHORIZED,
-                        "Tenant is not defined"
-                );
+                filterChain.doFilter(request, response);
                 return;
             }
 
             if (!tenantActiveChecker.isActive(tenantId)) {
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Tenant is not active");
+                writeUnauthorized(request, response, "Арендатор не активен");
                 return;
             }
 
@@ -63,6 +70,20 @@ public class TenantContextFilter extends OncePerRequestFilter {
         } finally {
             TenantContext.clear();
         }
+    }
+
+    private void writeUnauthorized(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            String detail
+    ) throws IOException {
+        response.setStatus(ErrorCode.UNAUTHENTICATED.getStatus().value());
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        ProblemDetail problem = ProblemDetailFactory.create(
+                ErrorCode.UNAUTHENTICATED, detail,
+                URI.create(request.getRequestURI()), List.of());
+        problemWriter.writeValue(response.getOutputStream(), problem);
     }
 
     private UUID extractTenantId(Authentication authentication) {

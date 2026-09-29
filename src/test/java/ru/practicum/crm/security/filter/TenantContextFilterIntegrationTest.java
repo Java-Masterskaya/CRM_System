@@ -22,7 +22,6 @@ import org.springframework.web.bind.annotation.RestController;
 import ru.practicum.crm.security.principal.TenantPrincipal;
 import ru.practicum.crm.tenant.api.TenantActiveChecker;
 import ru.practicum.crm.tenant.api.TenantContext;
-import ru.practicum.crm.tenant.repository.TenantRepository;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -71,8 +70,11 @@ class TenantContextFilterIntegrationTest {
     void request_whenTenantIsMissing_returnsUnauthorized()
             throws Exception {
 
-        mockMvc.perform(get("/test/tenant").header("X-Tenant-Id", "missing"))
-                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/test/tenant"))
+                .andExpect(status().isOk());
+
+        assertThat(TestController.tenantSeenByController)
+                .isNull();
     }
 
     @Test

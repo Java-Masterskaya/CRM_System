@@ -143,7 +143,7 @@ tasks.jacocoTestCoverageVerification {
 }
 
 tasks.check {
-	dependsOn(tasks.jacocoTestCoverageVerification)
+	dependsOn(tasks.jacocoTestCoverageVerification, itTest)
 }
 
 dependencyCheck {
