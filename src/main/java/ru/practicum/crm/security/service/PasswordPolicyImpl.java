@@ -1,5 +1,6 @@
 package ru.practicum.crm.security.service;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,14 @@ class PasswordPolicyImpl implements PasswordPolicy {
         if (length < properties.minLength()) {
             violations.add(
                     "минимальная длина — " + properties.minLength() + " символов"
+            );
+        }
+
+        int lengthInBytes = password.getBytes(StandardCharsets.UTF_8).length;
+
+        if (lengthInBytes > properties.maxLengthBytes()) {
+            violations.add(
+                    "Пароль не должен превышать " + properties.maxLengthBytes() + " байт"
             );
         }
 

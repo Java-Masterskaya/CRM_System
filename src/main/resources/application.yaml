@@ -55,6 +55,8 @@ crm:
   security:
     password:
       min-length: 12
+      max-length-bytes: 72
+      bcrypt-strength: 12
       require-uppercase: true
       require-lowercase: true
       require-digit: true

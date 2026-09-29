@@ -8,13 +8,12 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.tenant.api.context.TenantContext;
-import ru.practicum.crm.tenant.domain.Tenant;
-import ru.practicum.crm.tenant.repository.TenantRepository;
 import ru.practicum.crm.user.api.dto.ChangePasswordRequest;
 import ru.practicum.crm.user.api.dto.CreateUserRequest;
 import ru.practicum.crm.user.api.dto.UserDto;
@@ -23,7 +22,9 @@ import ru.practicum.crm.user.domain.UserEntity;
 import ru.practicum.crm.user.domain.UserStatus;
 import ru.practicum.crm.user.repository.UserRepository;
 import ru.practicum.crm.user.service.UserService;
+import ru.practicum.testsupport.TenantTestFixture;
 
+@Import(TenantTestFixture.class)
 class UserServiceImplIntegrationTest extends BaseIntegrationTest {
 
     private static final String VALID_PASSWORD = "StrongPassword1!";
@@ -36,7 +37,7 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
     private UserRepository userRepository;
 
     @Autowired
-    private TenantRepository tenantRepository;
+    private TenantTestFixture tenantTestFixture;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -49,7 +50,7 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void create_withValidPassword_persistsEncodedPasswordAndReturnsUser() {
-        Tenant tenant = createTenant();
+        UUID tenantId = createTenant();
 
         UserDto result = userService.create(new CreateUserRequest(
                 "user@example.com",
@@ -57,7 +58,7 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
                 VALID_PASSWORD
         ));
 
-        UserEntity savedUser = findUser(tenant.getId(), "user@example.com");
+        UserEntity savedUser = findUser(tenantId, "user@example.com");
         assertThat(savedUser.getPasswordHash()).isNotEqualTo(VALID_PASSWORD);
         assertThat(passwordEncoder.matches(VALID_PASSWORD, savedUser.getPasswordHash()))
                 .isTrue();
@@ -66,7 +67,7 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void create_withSamePasswordForDifferentUsers_persistsDifferentHashes() {
-        Tenant tenant = createTenant();
+        UUID tenantId = createTenant();
         userService.create(new CreateUserRequest(
                 "first@example.com",
                 "First",
@@ -78,8 +79,8 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
                 VALID_PASSWORD
         ));
 
-        UserEntity firstUser = findUser(tenant.getId(), "first@example.com");
-        UserEntity secondUser = findUser(tenant.getId(), "second@example.com");
+        UserEntity firstUser = findUser(tenantId, "first@example.com");
+        UserEntity secondUser = findUser(tenantId, "second@example.com");
         assertThat(firstUser.getPasswordHash()).isNotEqualTo(secondUser.getPasswordHash());
         assertThat(passwordEncoder.matches(VALID_PASSWORD, firstUser.getPasswordHash()))
                 .isTrue();
@@ -89,7 +90,7 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void create_withInvalidPassword_throwsValidationErrorAndDoesNotPersistUser() {
-        Tenant tenant = createTenant();
+        UUID tenantId = createTenant();
 
         assertThatThrownBy(() -> userService.create(new CreateUserRequest(
                 "user@example.com",
@@ -100,7 +101,7 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ErrorCode.VALIDATION_FAILED));
 
-        assertThat(userRepository.findAllActiveByTenantId(tenant.getId())).isEmpty();
+        assertThat(userRepository.findAllActiveByTenantId(tenantId)).isEmpty();
     }
 
     @Test
@@ -162,21 +163,36 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
                 .isTrue();
     }
 
-    private Tenant createTenant() {
-        Tenant tenant = tenantRepository.save(new Tenant("User service integration tenant"));
-        when(tenantContext.getCurrentTenantId()).thenReturn(tenant.getId());
-        return tenant;
+    @Test
+    void create_withPasswordLongerThan72Bytes_throwsValidationErrorAndDoesNotPersistUser() {
+        UUID tenantId = createTenant();
+        String tooLongPassword = "A" + "a".repeat(70) + "1!";
+
+        assertThat(tooLongPassword).hasSize(73);
+        assertThatThrownBy(() -> userService.create(new CreateUserRequest("user@example.com",
+                "User",
+                tooLongPassword
+        ))).isInstanceOfSatisfying(ApiException.class, exception ->
+                assertThat(exception.getErrorCode())
+                        .isEqualTo(ErrorCode.VALIDATION_FAILED));
+
+        assertThat(userRepository.findAllActiveByTenantId(tenantId)).isEmpty();
+    }
+
+    private UUID createTenant() {
+        UUID tenantId = tenantTestFixture.createTenant();
+        when(tenantContext.getCurrentTenantId()).thenReturn(tenantId);
+        return tenantId;
     }
 
     private UserEntity createUserWithPassword(String password) {
-        Tenant tenant = createTenant();
-        UserEntity user = userRepository.save(new UserEntity(
-                tenant.getId(),
+        UUID tenantId = createTenant();
+        return userRepository.save(new UserEntity(
+                tenantId,
                 "user@example.com",
                 passwordEncoder.encode(password),
                 UserStatus.ACTIVE
         ));
-        return user;
     }
 
     private UserEntity findUser(UUID tenantId, String email) {

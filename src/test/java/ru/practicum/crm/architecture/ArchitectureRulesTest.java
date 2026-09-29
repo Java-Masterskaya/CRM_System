@@ -7,7 +7,6 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaMethod;
-import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchCondition;
@@ -17,10 +16,7 @@ import com.tngtech.archunit.lang.SimpleConditionEvent;
 import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition;
 import org.junit.jupiter.api.Test;
 
-@AnalyzeClasses(
-        packages = "ru.practicum.crm",
-        importOptions = ImportOption.DoNotIncludeTests.class
-)
+@AnalyzeClasses(packages = "ru.practicum.crm")
 public class ArchitectureRulesTest {
 
     private static String getBasePackage(String postfix) {
