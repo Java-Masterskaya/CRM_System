@@ -2,15 +2,23 @@ package ru.practicum.crm.request.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
+import ru.practicum.crm.common.error.ApiException;
+import ru.practicum.crm.common.error.ErrorCode;
+import ru.practicum.crm.common.error.ValidationError;
+import ru.practicum.crm.common.pagination.PageRequests;
 import ru.practicum.crm.request.domain.AuditedField;
 import ru.practicum.crm.request.domain.Request;
 import ru.practicum.crm.request.domain.RequestAuditEntry;
@@ -69,11 +77,33 @@ class RequestAuditServiceTest {
     }
 
     @Test
-    void journal_readsOnlyGivenTenantsRequest() {
-        service.journal(TENANT_ID, REQUEST_ID);
+    void journal_readsGivenPageOfGivenTenantsRequest() {
+        PageRequest largestPage = PageRequest.of(1, PageRequests.MAX_SIZE);
+
+        service.journal(TENANT_ID, REQUEST_ID, largestPage);
 
         verify(repository).findByTenantIdAndRequestIdOrderByCreatedAtAscIdAsc(TENANT_ID,
-                REQUEST_ID);
+                REQUEST_ID, largestPage);
+    }
+
+    @Test
+    void journal_whenPageLargerThanLimit_isRejectedAsValidationErrorWithoutReading() {
+        PageRequest tooLarge = PageRequest.of(0, PageRequests.MAX_SIZE + 1);
+
+        ApiException thrown = catchThrowableOfType(
+                () -> service.journal(TENANT_ID, REQUEST_ID, tooLarge), ApiException.class);
+
+        assertThat(thrown.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+        assertThat(thrown.getErrors()).singleElement()
+                .extracting(ValidationError::parameter).isEqualTo("size");
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void journal_withoutPaging_isRejectedWithoutReading() {
+        assertThatThrownBy(() -> service.journal(TENANT_ID, REQUEST_ID, Pageable.unpaged()))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(repository);
     }
 
     private static Request savedRequest() {

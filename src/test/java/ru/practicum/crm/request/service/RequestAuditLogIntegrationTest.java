@@ -4,17 +4,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
+import ru.practicum.crm.common.pagination.PageRequests;
 import ru.practicum.crm.request.domain.AuditedField;
 import ru.practicum.crm.request.domain.Request;
 import ru.practicum.crm.request.domain.RequestAuditEntry;
@@ -24,8 +28,8 @@ import ru.practicum.crm.request.domain.RequestStatus;
 import ru.practicum.crm.request.repository.RequestRepository;
 
 /**
- * Журнал аудита на реальной базе: запись в одной транзакции с изменением, чтение с арендатором
- * и запрет изменять журнал в самой базе.
+ * Журнал аудита на реальной базе: запись в одной транзакции с изменением, постраничное чтение с
+ * арендатором и запрет изменять журнал в самой базе.
  */
 class RequestAuditLogIntegrationTest extends BaseIntegrationTest {
 
@@ -79,7 +83,7 @@ class RequestAuditLogIntegrationTest extends BaseIntegrationTest {
             audit.record(request, before, adminId);
         });
 
-        List<RequestAuditEntry> journal = audit.journal(tenantA, requestId);
+        List<RequestAuditEntry> journal = journal(tenantA, requestId);
         assertThat(journal).extracting(RequestAuditEntry::getField).containsExactlyInAnyOrder(
                 AuditedField.PRIORITY, AuditedField.TYPE, AuditedField.DESIRED_DUE_AT,
                 AuditedField.DESCRIPTION);
@@ -106,7 +110,7 @@ class RequestAuditLogIntegrationTest extends BaseIntegrationTest {
             throw new IllegalStateException("Сбой после записи в журнал");
         })).isInstanceOf(IllegalStateException.class);
 
-        assertThat(audit.journal(tenantA, requestId)).isEmpty();
+        assertThat(journal(tenantA, requestId)).isEmpty();
         assertThat(load(tenantA, requestId).getPriority()).isEqualTo(RequestPriority.FALLBACK);
     }
 
@@ -123,8 +127,36 @@ class RequestAuditLogIntegrationTest extends BaseIntegrationTest {
         UUID requestId = saveRequest(tenantA);
         changePriority(tenantA, requestId);
 
-        assertThat(audit.journal(tenantB, requestId)).isEmpty();
-        assertThat(audit.journal(tenantA, requestId)).hasSize(1);
+        assertThat(journal(tenantB, requestId)).isEmpty();
+        assertThat(journal(tenantA, requestId)).hasSize(1);
+    }
+
+    @Test
+    void journal_whenReadPageByPage_returnsEveryEntryOnceInSameOrder() {
+        UUID requestId = saveRequest(tenantA);
+        UUID typeId = insertRequestType(tenantA);
+        transaction.executeWithoutResult(status -> {
+            Request request = load(tenantA, requestId);
+            final RequestSnapshot before = RequestSnapshot.of(request);
+            request.setPriority(RequestPriority.HIGH);
+            request.setTypeId(typeId);
+            request.setDesiredDueAt(DUE_AT);
+            request.setDescription("Нужен отчёт с разбивкой по месяцам");
+            audit.record(request, before, adminId);
+        });
+        changePriority(tenantA, requestId, RequestPriority.LOW);
+
+        Page<RequestAuditEntry> page = audit.journal(tenantA, requestId, PageRequest.of(0, 2));
+        List<UUID> pageByPage = new ArrayList<>(ids(page.getContent()));
+        while (page.hasNext()) {
+            page = audit.journal(tenantA, requestId, page.nextPageable());
+            pageByPage.addAll(ids(page.getContent()));
+        }
+
+        assertThat(page.getTotalElements()).isEqualTo(5);
+        assertThat(page.getTotalPages()).isEqualTo(3);
+        assertThat(pageByPage).doesNotHaveDuplicates()
+                .containsExactlyElementsOf(ids(journal(tenantA, requestId)));
     }
 
     @Test
@@ -138,15 +170,29 @@ class RequestAuditLogIntegrationTest extends BaseIntegrationTest {
         assertThatThrownBy(() -> jdbcTemplate.update(
                 "DELETE FROM request_audit_log WHERE request_id = ?", requestId))
                 .isInstanceOf(DataIntegrityViolationException.class);
-        assertThat(audit.journal(tenantA, requestId)).singleElement()
+        assertThat(journal(tenantA, requestId)).singleElement()
                 .extracting(RequestAuditEntry::getNewValue).isEqualTo("HIGH");
     }
 
+    /** Журнал заявки целиком — первая страница наибольшего размера; в тестах записей меньше. */
+    private List<RequestAuditEntry> journal(UUID tenantId, UUID requestId) {
+        return audit.journal(tenantId, requestId, PageRequest.of(0, PageRequests.MAX_SIZE))
+                .getContent();
+    }
+
+    private static List<UUID> ids(List<RequestAuditEntry> entries) {
+        return entries.stream().map(RequestAuditEntry::getId).toList();
+    }
+
     private void changePriority(UUID tenantId, UUID requestId) {
+        changePriority(tenantId, requestId, RequestPriority.HIGH);
+    }
+
+    private void changePriority(UUID tenantId, UUID requestId, RequestPriority priority) {
         transaction.executeWithoutResult(status -> {
             Request request = load(tenantId, requestId);
             final RequestSnapshot before = RequestSnapshot.of(request);
-            request.setPriority(RequestPriority.HIGH);
+            request.setPriority(priority);
             audit.record(request, before, adminId);
         });
     }

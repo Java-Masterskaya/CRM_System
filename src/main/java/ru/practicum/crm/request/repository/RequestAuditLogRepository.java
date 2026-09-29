@@ -2,6 +2,8 @@ package ru.practicum.crm.request.repository;
 
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.Repository;
 import ru.practicum.crm.request.domain.RequestAuditEntry;
 
@@ -13,7 +15,11 @@ public interface RequestAuditLogRepository extends Repository<RequestAuditEntry,
 
     <S extends RequestAuditEntry> List<S> saveAll(Iterable<S> entries);
 
-    /** Журнал одной заявки в порядке изменений; {@code id} — последний ключ сортировки. */
-    List<RequestAuditEntry> findByTenantIdAndRequestIdOrderByCreatedAtAscIdAsc(UUID tenantId,
-            UUID requestId);
+    /**
+     * Страница журнала одной заявки в порядке изменений. {@code id} — последний ключ сортировки,
+     * поэтому записи с одинаковым временем идут в одном и том же порядке на всех страницах.
+     * Сортировка из {@code pageable} добавляется после этой и порядок журнала не меняет.
+     */
+    Page<RequestAuditEntry> findByTenantIdAndRequestIdOrderByCreatedAtAscIdAsc(UUID tenantId,
+            UUID requestId, Pageable pageable);
 }

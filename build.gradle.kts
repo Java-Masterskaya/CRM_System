@@ -61,6 +61,7 @@ dependencies {
 	testImplementation("com.tngtech.archunit:archunit-junit5:1.5.0")
 	testImplementation(platform("org.testcontainers:testcontainers-bom:2.0.5"))
 	testImplementation("org.testcontainers:postgresql")
+	testImplementation("org.testcontainers:junit-jupiter")
 	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
 
 	implementation("org.mapstruct:mapstruct:1.6.3")
