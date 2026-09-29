@@ -218,6 +218,11 @@ class OutboxEventRepositoryIntegrationTest extends BaseIntegrationTest {
                 .doesNotThrowAnyException();
     }
 
+    /**
+     * План запроса, которым обработчик захватывает порцию
+     * ({@link OutboxEventRepository#lockReadyBatch}). Проверяется именно он: другой выборки
+     * готовых событий в приложении нет.
+     */
     @Test
     void readySelection_whenTableHasHundredsOfThousandsOfRows_usesIndex() {
         String insertManyEvents =
@@ -232,13 +237,6 @@ class OutboxEventRepositoryIntegrationTest extends BaseIntegrationTest {
         jdbcTemplate.update(insertManyEvents, tenantA);
         jdbcTemplate.execute("ANALYZE outbox_events");
 
-        List<String> plan = jdbcTemplate.queryForList(
-                "EXPLAIN SELECT id FROM outbox_events WHERE status = 'NEW'"
-                        + " AND next_attempt_at <= now() ORDER BY next_attempt_at LIMIT 100",
-                String.class);
-
-        assertThat(String.join("\n", plan)).contains("idx_outbox_events_status_next_attempt");
-
         List<String> claimPlan = jdbcTemplate.queryForList(
                 "EXPLAIN SELECT * FROM outbox_events WHERE status IN ('NEW', 'IN_PROGRESS')"
                         + " AND next_attempt_at <= now() ORDER BY next_attempt_at LIMIT 100"
@@ -248,6 +246,57 @@ class OutboxEventRepositoryIntegrationTest extends BaseIntegrationTest {
         assertThat(String.join("\n", claimPlan))
                 .as("запрос захвата порции, которым работает обработчик")
                 .contains("idx_outbox_events_status_next_attempt");
+    }
+
+    @Test
+    void findOldestCreatedAt_returnsOldestEventOfGivenStatusOnly() {
+        saveWithStatus(OutboxStatus.NEW, "2026-09-28T10:10:00Z");
+        saveWithStatus(OutboxStatus.NEW, "2026-09-28T10:05:00Z");
+        saveWithStatus(OutboxStatus.IN_PROGRESS, "2026-09-28T10:00:00Z");
+        saveWithStatus(OutboxStatus.SENT, "2026-09-28T09:00:00Z");
+
+        assertThat(repository.findOldestCreatedAt(OutboxStatus.NEW))
+                .contains(Instant.parse("2026-09-28T10:05:00Z"));
+        assertThat(repository.findOldestCreatedAt(OutboxStatus.IN_PROGRESS))
+                .contains(Instant.parse("2026-09-28T10:00:00Z"));
+        assertThat(repository.findOldestCreatedAt(OutboxStatus.FAILED)).isEmpty();
+    }
+
+    /**
+     * Затор: в очереди десятки тысяч недоставленных событий. Самое давнее берётся из первой
+     * записи индекса ({@code Limit} в плане), а не перебором всех ожидающих (#154).
+     */
+    @Test
+    void oldestPendingSelection_whenQueueIsCongested_readsFirstIndexEntryOnly() {
+        String insertCongestedQueue =
+                """
+                INSERT INTO outbox_events (id, tenant_id, event_type, payload, status, attempts,
+                                           next_attempt_at, created_at, updated_at)
+                SELECT gen_random_uuid(), ?, 'REQUEST_CREATED', '{}'::jsonb,
+                       CASE WHEN i % 10 = 0 THEN 'SENT' ELSE 'NEW' END,
+                       0, now(), now() - (i || ' seconds')::interval, now()
+                FROM generate_series(1, 50000) AS s(i)
+                """;
+        jdbcTemplate.update(insertCongestedQueue, tenantA);
+        jdbcTemplate.execute("ANALYZE outbox_events");
+
+        List<String> plan = jdbcTemplate.queryForList(
+                "EXPLAIN SELECT min(created_at) FROM outbox_events WHERE status = 'NEW'",
+                String.class);
+
+        assertThat(String.join("\n", plan))
+                .contains("idx_outbox_events_new_created_at")
+                .contains("Limit");
+    }
+
+    /**
+     * Событие в нужном состоянии и с нужным временем создания. Не для {@code FAILED}: у него
+     * база требует код причины ({@code outbox_events_failed_has_reason_check}).
+     */
+    private void saveWithStatus(OutboxStatus status, String createdAt) {
+        UUID id = repository.save(new OutboxEvent(tenantA, "REQUEST_CREATED", Map.of())).getId();
+        jdbcTemplate.update("UPDATE outbox_events SET status = ?, created_at = ?::timestamptz"
+                + " WHERE id = ?", status.name(), createdAt, id);
     }
 
     private List<OutboxEvent> findReady(int limit) {

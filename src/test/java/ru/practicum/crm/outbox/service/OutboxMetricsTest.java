@@ -1,16 +1,16 @@
 package ru.practicum.crm.outbox.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
@@ -55,18 +55,43 @@ class OutboxMetricsTest {
     }
 
     @Test
-    void oldestPendingAge_whenEventWaits_isItsAgeInSecondsAmongUndeliveredOnly() {
-        when(repository.findOldestCreatedAt(anyCollection()))
+    void registerEventType_createsSuccessSeriesAtZeroBeforeAnyAttempt() {
+        metrics.registerEventType("EMAIL_NOTIFICATION");
+
+        assertThat(registry.find(OutboxMetrics.ATTEMPTS)
+                .tags("event_type", "EMAIL_NOTIFICATION", "outcome", "success",
+                        "reason", OutboxMetrics.NO_REASON)
+                .counter())
+                .isNotNull()
+                .extracting(Counter::count).isEqualTo(0.0);
+    }
+
+    @Test
+    void oldestPendingAge_whenEventsWait_isAgeOfOldestAmongUndeliveredOnly() {
+        when(repository.findOldestCreatedAt(OutboxStatus.NEW))
+                .thenReturn(Optional.of(Instant.now().minusSeconds(60)));
+        when(repository.findOldestCreatedAt(OutboxStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(Instant.now().minusSeconds(120)));
 
         assertThat(oldestPendingAge()).isBetween(119.0, 130.0);
-        verify(repository).findOldestCreatedAt(
-                List.of(OutboxStatus.NEW, OutboxStatus.IN_PROGRESS));
+        verify(repository).findOldestCreatedAt(OutboxStatus.NEW);
+        verify(repository).findOldestCreatedAt(OutboxStatus.IN_PROGRESS);
+        verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void oldestPendingAge_whenOnlyOneStateHasEvents_isTheirAge() {
+        when(repository.findOldestCreatedAt(OutboxStatus.NEW))
+                .thenReturn(Optional.of(Instant.now().minusSeconds(60)));
+        when(repository.findOldestCreatedAt(OutboxStatus.IN_PROGRESS))
+                .thenReturn(Optional.empty());
+
+        assertThat(oldestPendingAge()).isBetween(59.0, 70.0);
     }
 
     @Test
     void oldestPendingAge_whenNothingWaits_isZero() {
-        when(repository.findOldestCreatedAt(anyCollection())).thenReturn(Optional.empty());
+        when(repository.findOldestCreatedAt(any(OutboxStatus.class))).thenReturn(Optional.empty());
 
         assertThat(oldestPendingAge()).isZero();
     }

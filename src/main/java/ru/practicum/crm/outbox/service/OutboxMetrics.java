@@ -7,7 +7,9 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.TimeGauge;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import org.springframework.stereotype.Component;
 import ru.practicum.crm.outbox.domain.OutboxStatus;
@@ -34,6 +36,8 @@ public class OutboxMetrics {
     /** Значение метки причины у успешной попытки — как {@code exception="none"} у HTTP-метрик. */
     static final String NO_REASON = "none";
 
+    private static final String SUCCESS = "success";
+
     private static final List<OutboxStatus> COUNTED =
             List.of(OutboxStatus.NEW, OutboxStatus.IN_PROGRESS, OutboxStatus.FAILED);
     private static final List<OutboxStatus> PENDING =
@@ -57,9 +61,19 @@ public class OutboxMetrics {
                 .register(registry);
     }
 
+    /**
+     * Заводит ряд успешных попыток для этого типа событий со значением 0, не дожидаясь первой
+     * попытки (#154). Иначе на пустой очереди ряда нет вовсе, и правило оповещения на
+     * {@code rate(...)} молчит, а не показывает ноль. Ряды неудач заранее не заводятся: коды
+     * причин известны только отправителю.
+     */
+    void registerEventType(String eventType) {
+        counter(eventType, SUCCESS, NO_REASON);
+    }
+
     /** Попытка удалась. */
     void delivered(String eventType) {
-        count(eventType, "success", NO_REASON);
+        count(eventType, SUCCESS, NO_REASON);
     }
 
     /** Попытка не удалась, событие вернулось в очередь. */
@@ -73,12 +87,20 @@ public class OutboxMetrics {
     }
 
     private void count(String eventType, String outcome, String reason) {
-        attempts.withTags("event_type", eventType, "outcome", outcome, "reason", reason)
-                .increment();
+        counter(eventType, outcome, reason).increment();
     }
 
+    /** Счётчик с этими метками; при первом обращении Micrometer регистрирует его с нулём. */
+    private Counter counter(String eventType, String outcome, String reason) {
+        return attempts.withTags("event_type", eventType, "outcome", outcome, "reason", reason);
+    }
+
+    /** Самое давнее из недоставленных: по отдельному запросу на каждое состояние (#154). */
     private static double oldestPendingAgeSeconds(OutboxEventRepository repository) {
-        return repository.findOldestCreatedAt(PENDING)
+        return PENDING.stream()
+                .map(repository::findOldestCreatedAt)
+                .flatMap(Optional::stream)
+                .min(Comparator.naturalOrder())
                 .map(oldest -> Duration.between(oldest, Instant.now()).toMillis() / 1000.0)
                 .map(seconds -> Math.max(0, seconds))
                 .orElse(0.0);

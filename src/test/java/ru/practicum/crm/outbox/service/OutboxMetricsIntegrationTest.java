@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -26,6 +27,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import ru.practicum.crm.base.BaseIntegrationTest;
+import ru.practicum.crm.outbox.api.OutboxEventSender;
 import ru.practicum.crm.outbox.domain.OutboxEvent;
 import ru.practicum.crm.outbox.repository.OutboxEventRepository;
 
@@ -67,6 +69,9 @@ class OutboxMetricsIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private TestRestTemplate rest;
+
+    @Autowired
+    private List<OutboxEventSender> senders;
 
     @LocalManagementPort
     private int managementPort;
@@ -165,6 +170,26 @@ class OutboxMetricsIntegrationTest extends BaseIntegrationTest {
                 .contains("crm_outbox_events{")
                 .contains("status=\"FAILED\"")
                 .contains("crm_outbox_oldest_pending_age_seconds");
+    }
+
+    /**
+     * Ряд успешных попыток есть у каждого отправителя без ожидания первой попытки (#154). У
+     * {@code TEST_FAILING} успешных попыток не бывает вовсе — его ряд появляется только благодаря
+     * регистрации при запуске, в каком бы порядке ни шли тесты.
+     */
+    @Test
+    void prometheusEndpoint_withoutWaitingForAttempts_exposesSuccessSeriesForEverySender() {
+        String metrics = rest.getForObject(
+                "http://localhost:" + managementPort + "/actuator/prometheus", String.class);
+
+        assertThat(senders).extracting(OutboxEventSender::eventType).contains(FAILING);
+        for (OutboxEventSender sender : senders) {
+            assertThat(metrics.lines())
+                    .as("ряд успешных попыток для %s", sender.eventType())
+                    .anyMatch(line -> line.startsWith("crm_outbox_delivery_attempts_total{")
+                            && line.contains("event_type=\"" + sender.eventType() + "\"")
+                            && line.contains("outcome=\"success\""));
+        }
     }
 
     private UUID saveEvent(String type) {

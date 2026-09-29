@@ -1,7 +1,6 @@
 package ru.practicum.crm.outbox.repository;
 
 import java.time.Instant;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -58,9 +57,16 @@ public interface OutboxEventRepository extends Repository<OutboxEvent, UUID> {
     /** Сколько событий в этом состоянии во всей очереди — для метрик. */
     long countByStatus(OutboxStatus status);
 
-    /** Когда создано самое давнее событие в этих состояниях; пусто, если таких событий нет. */
-    @Query("SELECT min(e.createdAt) FROM OutboxEvent e WHERE e.status IN :statuses")
-    Optional<Instant> findOldestCreatedAt(@Param("statuses") Collection<OutboxStatus> statuses);
+    /**
+     * Когда создано самое давнее событие в этом состоянии; пусто, если таких событий нет.
+     *
+     * <p>Состояние одно, а не список: при условии {@code status = ?} PostgreSQL берёт минимум из
+     * первой записи частичного индекса этого состояния ({@code idx_outbox_events_new_created_at},
+     * {@code idx_outbox_events_in_progress_created_at}). Условие со списком состояний такие
+     * индексы не покрывает, и пришлось бы перебрать все события в этих состояниях.
+     */
+    @Query("SELECT min(e.createdAt) FROM OutboxEvent e WHERE e.status = :status")
+    Optional<Instant> findOldestCreatedAt(@Param("status") OutboxStatus status);
 
     Optional<OutboxEvent> findByIdAndTenantId(UUID id, UUID tenantId);
 
