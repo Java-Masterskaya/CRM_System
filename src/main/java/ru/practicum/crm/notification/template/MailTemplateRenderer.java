@@ -14,6 +14,7 @@ import org.thymeleaf.context.Context;
 import org.thymeleaf.exceptions.TemplateEngineException;
 import org.thymeleaf.templatemode.TemplateMode;
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
+import ru.practicum.crm.notification.api.NotificationType;
 
 /**
  * Собирает письмо по событию из шаблонов в ресурсах.

@@ -30,6 +30,32 @@ class OutboxEventTest {
         assertThat(event.getPayload()).containsEntry("requestId", "42");
         assertThat(event.getStatus()).isEqualTo(OutboxStatus.NEW);
         assertThat(event.getAttempts()).isZero();
+        assertThat(event.getAggregateType()).isNull();
+        assertThat(event.getAggregateId()).isNull();
+    }
+
+    @Test
+    void newEvent_withObjectReference_keepsIt() {
+        UUID requestId = UUID.randomUUID();
+
+        OutboxEvent aboutRequest = OutboxEvent.aboutObject(TENANT_ID, "REQUEST_CREATED",
+                "REQUEST", requestId, Map.of());
+
+        assertThat(aboutRequest.getAggregateType()).isEqualTo("REQUEST");
+        assertThat(aboutRequest.getAggregateId()).isEqualTo(requestId);
+        assertThat(aboutRequest.getStatus()).isEqualTo(OutboxStatus.NEW);
+    }
+
+    @Test
+    void newEvent_withIncompleteObjectReference_isRejected() {
+        UUID requestId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> OutboxEvent.aboutObject(TENANT_ID, "REQUEST_CREATED", "REQUEST",
+                null, Map.of())).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> OutboxEvent.aboutObject(TENANT_ID, "REQUEST_CREATED", null,
+                requestId, Map.of())).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> OutboxEvent.aboutObject(TENANT_ID, "REQUEST_CREATED", " ",
+                requestId, Map.of())).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

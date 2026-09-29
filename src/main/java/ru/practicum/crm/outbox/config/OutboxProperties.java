@@ -1,6 +1,8 @@
 package ru.practicum.crm.outbox.config;
 
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -18,6 +20,10 @@ import org.springframework.validation.annotation.Validated;
  *     идёт
  * @param retryDelay задержка после первой неудачной попытки; каждая следующая вдвое больше
  * @param maxRetryDelay верхняя граница задержки между попытками
+ * @param retryJitter доля случайного разброса задержки от 0 до 0.9: задержка берётся из
+ *     промежутка от {@code (1 − retryJitter) × d} до {@code d}, где {@code d} — расчётная
+ *     задержка; 0 — без разброса. Верхняя граница 0.9 оставляет паузу не короче десятой части
+ *     расчётной: при 1 повтор мог бы пойти сразу после неудачи
  * @param maxAttempts сколько всего попыток доставки, включая первую; после последней неудачной
  *     событие переходит в окончательный неуспех
  */
@@ -34,6 +40,9 @@ public record OutboxProperties(
         @NotNull Duration retryDelay,
 
         @NotNull Duration maxRetryDelay,
+
+        @DecimalMin("0.0") @DecimalMax("0.9")
+        double retryJitter,
 
         @Min(1) @Max(100)
         int maxAttempts

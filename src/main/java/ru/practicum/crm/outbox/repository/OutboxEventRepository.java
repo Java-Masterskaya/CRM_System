@@ -17,10 +17,10 @@ import ru.practicum.crm.outbox.domain.OutboxStatus;
 /**
  * Доступ к исходящим событиям.
  *
- * <p>Здесь две разные по смыслу группы методов. Захват порции и поиск взятого события — работа
- * фонового обработчика, который обслуживает всех арендаторов сразу, поэтому арендатора они не
- * принимают. Всё остальное — просмотр журнала событий конкретного арендатора, и такие методы
- * без арендатора не вызываются.
+ * <p>Здесь две разные по смыслу группы методов. Захват порции, поиск взятого события и
+ * показатели очереди для метрик — служебная работа, которая охватывает всех арендаторов сразу,
+ * поэтому арендатора эти методы не принимают. Всё остальное — просмотр журнала событий
+ * конкретного арендатора, и такие методы без арендатора не вызываются.
  *
  * <p>Как и в остальных репозиториях проекта, интерфейс наследует маркерный {@link Repository}
  * и перечисляет операции поимённо: удаления и слепого {@code findAll} здесь нет.
@@ -54,9 +54,30 @@ public interface OutboxEventRepository extends Repository<OutboxEvent, UUID> {
     /** Событие, взятое в обработку, — чтобы записать результат попытки. */
     Optional<OutboxEvent> findByIdAndStatus(UUID id, OutboxStatus status);
 
+    /** Сколько событий в этом состоянии во всей очереди — для метрик. */
+    long countByStatus(OutboxStatus status);
+
+    /**
+     * Когда создано самое давнее событие в этом состоянии; пусто, если таких событий нет.
+     *
+     * <p>Состояние одно, а не список: при условии {@code status = ?} PostgreSQL берёт минимум из
+     * первой записи частичного индекса этого состояния ({@code idx_outbox_events_new_created_at},
+     * {@code idx_outbox_events_in_progress_created_at}). Условие со списком состояний такие
+     * индексы не покрывает, и пришлось бы перебрать все события в этих состояниях.
+     */
+    @Query("SELECT min(e.createdAt) FROM OutboxEvent e WHERE e.status = :status")
+    Optional<Instant> findOldestCreatedAt(@Param("status") OutboxStatus status);
+
     Optional<OutboxEvent> findByIdAndTenantId(UUID id, UUID tenantId);
 
     Page<OutboxEvent> findByTenantIdOrderByCreatedAtDesc(UUID tenantId, Pageable pageable);
+
+    /**
+     * События одного объекта в порядке создания. {@code id} — последний ключ сортировки, чтобы
+     * события, созданные в одну и ту же микросекунду, всегда шли в одном порядке.
+     */
+    List<OutboxEvent> findByTenantIdAndAggregateTypeAndAggregateIdOrderByCreatedAtAscIdAsc(
+            UUID tenantId, String aggregateType, UUID aggregateId);
 
     long countByTenantIdAndStatus(UUID tenantId, OutboxStatus status);
 }
