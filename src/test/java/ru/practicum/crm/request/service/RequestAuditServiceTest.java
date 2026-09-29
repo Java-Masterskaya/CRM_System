@@ -2,6 +2,7 @@ package ru.practicum.crm.request.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -14,6 +15,9 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
+import ru.practicum.crm.common.error.ApiException;
+import ru.practicum.crm.common.error.ErrorCode;
+import ru.practicum.crm.common.error.ValidationError;
 import ru.practicum.crm.common.pagination.PageRequests;
 import ru.practicum.crm.request.domain.AuditedField;
 import ru.practicum.crm.request.domain.Request;
@@ -83,11 +87,15 @@ class RequestAuditServiceTest {
     }
 
     @Test
-    void journal_whenPageLargerThanLimit_isRejectedWithoutReading() {
+    void journal_whenPageLargerThanLimit_isRejectedAsValidationErrorWithoutReading() {
         PageRequest tooLarge = PageRequest.of(0, PageRequests.MAX_SIZE + 1);
 
-        assertThatThrownBy(() -> service.journal(TENANT_ID, REQUEST_ID, tooLarge))
-                .isInstanceOf(IllegalArgumentException.class);
+        ApiException thrown = catchThrowableOfType(
+                () -> service.journal(TENANT_ID, REQUEST_ID, tooLarge), ApiException.class);
+
+        assertThat(thrown.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+        assertThat(thrown.getErrors()).singleElement()
+                .extracting(ValidationError::parameter).isEqualTo("size");
         verifyNoInteractions(repository);
     }
 
