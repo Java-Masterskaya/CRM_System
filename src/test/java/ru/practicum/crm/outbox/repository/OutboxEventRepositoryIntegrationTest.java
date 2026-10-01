@@ -16,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import org.assertj.core.api.SoftAssertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -238,10 +239,17 @@ class OutboxEventRepositoryIntegrationTest extends BaseIntegrationTest {
         jdbcTemplate.update(insertManyEvents, tenantA);
         jdbcTemplate.execute("ANALYZE outbox_events");
 
-        assertThat(claimPlan())
-                .as("запрос захвата порции, которым работает обработчик")
-                .contains("idx_outbox_events_claim")
-                .doesNotContain("Sort");
+        SoftAssertions.assertSoftly(softly -> {
+            softly.assertThat(claimPlan())
+                    .as("запрос захвата порции, которым работает обработчик")
+                    .contains("idx_outbox_events_claim");
+
+            softly.assertThat(claimPlan())
+                    .as("планировщик не должен добавлять Sort при текущем объёме данных "
+                            + "в фикстуре (порог переключения ~120–200 строк); "
+                            + "если урежете generate_series ради скорости — тест упадёт здесь")
+                    .doesNotContain("Sort");
+        });
     }
 
     /**
@@ -263,10 +271,17 @@ class OutboxEventRepositoryIntegrationTest extends BaseIntegrationTest {
         jdbcTemplate.update(insertCongestedQueue, tenantA);
         jdbcTemplate.execute("ANALYZE outbox_events");
 
-        assertThat(claimPlan())
-                .contains("idx_outbox_events_claim")
-                .contains("Limit")
-                .doesNotContain("Sort");
+        SoftAssertions.assertSoftly(softly -> {
+            softly.assertThat(claimPlan())
+                    .as("запрос захвата использует индекс idx_outbox_events_claim")
+                    .contains("idx_outbox_events_claim");
+
+            softly.assertThat(claimPlan())
+                    .as("планировщик берёт порцию через Limit, а не сортирует все готовые; "
+                            + "порог переключения ~120–200 строк — не урезайте generate_series")
+                    .contains("Limit")
+                    .doesNotContain("Sort");
+        });
     }
 
     /**
