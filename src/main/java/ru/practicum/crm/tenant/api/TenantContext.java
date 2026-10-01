@@ -2,22 +2,11 @@ package ru.practicum.crm.tenant.api;
 
 import java.util.UUID;
 
-public final class TenantContext {
+public interface TenantContext {
 
-    private static final ThreadLocal<UUID> CONTEXT = new ThreadLocal<>();
+    UUID getCurrentTenantId();
 
-    private TenantContext() {
-    }
+    void setTenantId(UUID tenantId);
 
-    public static void setTenantId(UUID tenantId) {
-        CONTEXT.set(tenantId);
-    }
-
-    public static UUID getTenantId() {
-        return CONTEXT.get();
-    }
-
-    public static void clear() {
-        CONTEXT.remove();
-    }
+    void clear();
 }

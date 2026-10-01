@@ -2,6 +2,7 @@ package ru.practicum.crm.tenant.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,18 +23,28 @@ import ru.practicum.crm.common.error.ProblemDetailFactory;
 
 public class TenantContextFilter extends OncePerRequestFilter {
 
+    @SuppressFBWarnings(
+            value = "EI_EXPOSE_REP2",
+            justification = "TenantContext is a Spring-managed dependency injected into the filter."
+    )
+    private final TenantContext tenantContext;
+
     private static final List<String> PROTECTED_PREFIXES = List.of(
             "/client",
-            "/admin",
-            "/test"
+            "/admin"
     );
 
     private final TenantActiveChecker tenantActiveChecker;
     private final ObjectWriter problemWriter;
 
-    public TenantContextFilter(TenantActiveChecker tenantActiveChecker, ObjectMapper objectMapper) {
+    public TenantContextFilter(
+            TenantActiveChecker tenantActiveChecker,
+            ObjectMapper objectMapper,
+            TenantContext tenantContext
+    ) {
         this.tenantActiveChecker = tenantActiveChecker;
         this.problemWriter = objectMapper.writer();
+        this.tenantContext = tenantContext;
     }
 
     @Override
@@ -65,10 +76,10 @@ public class TenantContextFilter extends OncePerRequestFilter {
                 return;
             }
 
-            TenantContext.setTenantId(tenantId);
+            tenantContext.setTenantId(tenantId);
             filterChain.doFilter(request, response);
         } finally {
-            TenantContext.clear();
+            tenantContext.clear();
         }
     }
 

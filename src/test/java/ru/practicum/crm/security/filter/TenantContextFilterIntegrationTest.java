@@ -11,7 +11,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -19,14 +18,17 @@ import org.springframework.security.core.Authentication;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
+import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.security.principal.TenantPrincipal;
 import ru.practicum.crm.tenant.api.TenantActiveChecker;
 import ru.practicum.crm.tenant.api.TenantContext;
 
-@SpringBootTest
 @AutoConfigureMockMvc
 @Import(TenantContextFilterIntegrationTest.TestController.class)
-class TenantContextFilterIntegrationTest {
+class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
+
+    @Autowired
+    private TenantContext tenantContext;
 
     private static final UUID TENANT_ID =
             UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -39,7 +41,7 @@ class TenantContextFilterIntegrationTest {
 
     @AfterEach
     void tearDown() {
-        TenantContext.clear();
+        tenantContext.clear();
     }
 
     @Test
@@ -57,8 +59,7 @@ class TenantContextFilterIntegrationTest {
                         List.of());
 
         mockMvc.perform(
-                        get("/test/tenant")
-                                .header("X-Tenant-Id", TENANT_ID.toString())
+                        get("/admin/test/tenant")
                                 .with(authentication(authentication)))
                 .andExpect(status().isOk());
 
@@ -67,10 +68,10 @@ class TenantContextFilterIntegrationTest {
     }
 
     @Test
-    void request_whenTenantIsMissing_returnsUnauthorized()
+    void request_whenAuthenticationIsMissing_passesWithoutTenant()
             throws Exception {
 
-        mockMvc.perform(get("/test/tenant"))
+        mockMvc.perform(get("/admin/test/tenant"))
                 .andExpect(status().isOk());
 
         assertThat(TestController.tenantSeenByController)
@@ -92,8 +93,7 @@ class TenantContextFilterIntegrationTest {
                         List.of());
 
         mockMvc.perform(
-                        get("/test/tenant")
-                                .header("X-Tenant-Id", TENANT_ID.toString())
+                        get("/admin/test/tenant")
                                 .with(authentication(authentication)))
                 .andExpect(status().isUnauthorized());
     }
@@ -112,23 +112,30 @@ class TenantContextFilterIntegrationTest {
                         List.of());
 
         mockMvc.perform(
-                        get("/test/tenant")
-                                .header("X-Tenant-Id", TENANT_ID.toString())
+                        get("/admin/test/tenant")
                                 .with(authentication(authentication)))
                 .andExpect(status().isOk());
 
-        assertThat(TenantContext.getTenantId()).isNull();
+        assertThat(tenantContext.getCurrentTenantId()).isNull();
     }
 
     @RestController
     static class TestController {
 
+        @Autowired
+        private TenantContext tenantContext;
+
         private static UUID tenantSeenByController;
 
-        @GetMapping("/test/tenant")
+        private static void setTenantSeen(UUID value) {
+            tenantSeenByController = value;
+        }
+
+        @GetMapping("/admin/test/tenant")
         UUID tenant() {
-            tenantSeenByController = TenantContext.getTenantId();
-            return tenantSeenByController;
+            UUID currentTenant = tenantContext.getCurrentTenantId();
+            setTenantSeen(currentTenant);
+            return currentTenant;
         }
     }
 }
