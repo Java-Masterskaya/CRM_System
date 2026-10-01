@@ -51,6 +51,17 @@ app:
     retry-jitter: ${OUTBOX_RETRY_JITTER:0.5}
     max-attempts: ${OUTBOX_MAX_ATTEMPTS:8}
 
+crm:
+  security:
+    password:
+      min-length: 12
+      max-length-bytes: 72
+      bcrypt-strength: 12
+      require-uppercase: true
+      require-lowercase: true
+      require-digit: true
+      require-special: true
+
 server:
   port: ${SERVER_PORT:8080}
 
