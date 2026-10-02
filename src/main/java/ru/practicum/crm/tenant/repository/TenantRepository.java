@@ -9,4 +9,6 @@ public interface TenantRepository extends Repository<Tenant, UUID> {
     Tenant save(Tenant tenant);
 
     Optional<Tenant> findById(UUID id);
+
+    boolean existsByIdAndActiveTrue(UUID id);
 }

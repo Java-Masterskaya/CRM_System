@@ -14,12 +14,15 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,9 +31,11 @@ import org.springframework.web.bind.annotation.RestController;
 import ru.practicum.crm.common.error.GlobalExceptionHandler;
 import ru.practicum.crm.platform.web.RequestIdFilter;
 
-@WebMvcTest(controllers = StructuredLoggingTest.ProbeConfiguration.ProbeController.class)
+@WebMvcTest(
+        controllers = StructuredLoggingTest.ProbeConfiguration.ProbeController.class)
 @Import(GlobalExceptionHandler.class)
 @ExtendWith(OutputCaptureExtension.class)
+@WithMockUser
 class StructuredLoggingTest {
 
     private static final ObjectMapper JSON = new ObjectMapper();

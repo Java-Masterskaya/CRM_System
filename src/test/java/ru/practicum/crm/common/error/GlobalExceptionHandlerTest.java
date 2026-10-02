@@ -1,5 +1,6 @@
 package ru.practicum.crm.common.error;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -17,6 +18,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
@@ -26,8 +28,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-@WebMvcTest(controllers = GlobalExceptionHandlerTest.ProbeConfiguration.ProbeController.class)
+@WebMvcTest(
+        controllers = GlobalExceptionHandlerTest.ProbeConfiguration.ProbeController.class)
 @Import(GlobalExceptionHandler.class)
+@WithMockUser
 class GlobalExceptionHandlerTest {
 
     @Autowired
@@ -89,27 +93,32 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void body_whenEnumValueUnknown_returnsValidationErrorForThatField() throws Exception {
-        mockMvc.perform(post("/test-errors/level").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/test-errors/level").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"level\": \"SUPER\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.errors.length()").value(1))
                 .andExpect(jsonPath("$.errors[0].pointer").value("#/level"))
-                .andExpect(jsonPath("$.errors[0].detail").value("допустимые значения: LOW, HIGH"));
+                .andExpect(jsonPath("$.errors[0].detail")
+                        .value("допустимые значения: LOW, HIGH"));
     }
 
     @Test
     void body_whenEnumInsideListUnknown_pointsToThatElement() throws Exception {
-        mockMvc.perform(post("/test-errors/level").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/test-errors/level")
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"items\": [{\"level\": \"LOW\"}, {\"level\": \"SUPER\"}]}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.errors[0].pointer").value("#/items/1/level"));
+                .andExpect(jsonPath("$.errors[0].pointer")
+                        .value("#/items/1/level"));
     }
 
     @Test
     void body_whenTopLevelArrayHasUnknownEnum_pointsToElementWithSingleSlash() throws Exception {
-        mockMvc.perform(post("/test-errors/levels").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/test-errors/levels")
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content("[\"LOW\", \"SUPER\"]"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
@@ -119,16 +128,19 @@ class GlobalExceptionHandlerTest {
     @Test
     void body_whenTopLevelArrayOfObjectsHasUnknownEnum_pointsToFieldOfElement()
             throws Exception {
-        mockMvc.perform(post("/test-errors/items").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/test-errors/items")
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content("[{\"level\": \"SUPER\"}]"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.errors[0].pointer").value("#/0/level"));
+                .andExpect(jsonPath("$.errors[0].pointer")
+                        .value("#/0/level"));
     }
 
     @Test
     void body_whenJsonItselfBroken_staysMalformedRequest() throws Exception {
-        mockMvc.perform(post("/test-errors/level").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/test-errors/level")
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"level\": "))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"))
@@ -137,10 +149,11 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void springOwnError_whenMethodNotAllowed_isReturnedInSameFormat() throws Exception {
-        mockMvc.perform(post("/test-errors/not-found"))
+        mockMvc.perform(post("/test-errors/not-found").with(csrf()))
                 .andExpect(status().isMethodNotAllowed())
                 .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"))
-                .andExpect(jsonPath("$.title").value("Метод не поддерживается"))
+                .andExpect(jsonPath("$.title")
+                        .value("Метод не поддерживается"))
                 .andExpect(jsonPath("$.type")
                         .value("https://crm.example/problems/method-not-allowed"));
     }
@@ -195,10 +208,12 @@ class GlobalExceptionHandlerTest {
                 Method method = ProbeController.class.getDeclaredMethod("invalid");
                 BeanPropertyBindingResult binding =
                         new BeanPropertyBindingResult(new Object(), "request");
-                binding.addError(new FieldError("request", "subject", "не должно быть пустым"));
+                binding.addError(new FieldError("request", "subject",
+                        "не должно быть пустым"));
                 binding.addError(new FieldError("request", "items[0].name",
                         "не должно быть пустым"));
-                throw new MethodArgumentNotValidException(new MethodParameter(method, -1),
+                throw new MethodArgumentNotValidException(
+                        new MethodParameter(method, -1),
                         binding);
             }
         }
