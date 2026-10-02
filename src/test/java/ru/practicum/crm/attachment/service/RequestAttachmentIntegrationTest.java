@@ -141,6 +141,26 @@ class RequestAttachmentIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    void attach_byUnknownAuthor_isRejectedByDatabase() {
+        assertThatThrownBy(() -> attachments.attach(tenantA, requestA, UUID.randomUUID(), REPORT))
+                .rootCause().hasMessageContaining("request_attachments_author_id_fkey");
+    }
+
+    /**
+     * Сейчас база не проверяет, что автор из того же арендатора, что и заявка: для составного
+     * внешнего ключа в {@code users} нет уникальности {@code (tenant_id, id)}. Тест фиксирует это
+     * поведение, как и такой же тест комментариев (T-074): когда проверка появится, он упадёт и
+     * напомнит обновить описание модели.
+     */
+    @Test
+    void attach_byAuthorOfAnotherTenant_isNotRejectedByDatabaseYet() {
+        UUID id = attachments.attach(tenantA, requestA, authorB, REPORT).getId();
+
+        assertThat(repository.findByIdAndTenantId(id, tenantA))
+                .map(RequestAttachment::getAuthorId).contains(authorB);
+    }
+
+    @Test
     void attachments_ofRequest_containOnlyItsOwnInOrderOfAdding() {
         UUID anotherRequest = insertRequest(tenantA, authorA);
         attachments.attach(tenantA, requestA, authorA, file("object-1", "первый.pdf"));
