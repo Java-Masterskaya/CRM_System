@@ -1,11 +1,13 @@
 package ru.practicum.crm.user.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
 
@@ -64,37 +66,27 @@ class PermissionRepositoryIntegrationTest extends BaseIntegrationTest {
         UUID operatorRoleId = insertRole(tenantId, "TEST_OPERATOR", "Test operator");
         UUID adminRoleId = insertRole(tenantId, "TEST_ADMIN", "Test administrator");
 
-        UUID statusChangePermissionId = insertPermission(tenantId, "TEST_STATUS_CHANGE");
-        UUID userManagePermissionId = insertPermission(tenantId, "TEST_USER_MANAGE");
-
         UUID userId = UUID.randomUUID();
+        insertUser(tenantId, userId);
 
         jdbcTemplate.update(
-                "INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)",
+                "INSERT INTO user_roles (tenant_id, user_id, role_id) VALUES (?, ?, ?)",
+                tenantId,
                 userId,
                 operatorRoleId
         );
         jdbcTemplate.update(
-                "INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)",
+                "INSERT INTO user_roles (tenant_id, user_id, role_id) VALUES (?, ?, ?)",
+                tenantId,
                 userId,
                 adminRoleId
         );
 
-        jdbcTemplate.update(
-                "INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)",
-                operatorRoleId,
-                statusChangePermissionId
-        );
-        jdbcTemplate.update(
-                "INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)",
-                operatorRoleId,
-                userManagePermissionId
-        );
-        jdbcTemplate.update(
-                "INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)",
-                adminRoleId,
-                userManagePermissionId
-        );
+        grantPermission(tenantId, operatorRoleId,
+                insertPermission(tenantId, "TEST_STATUS_CHANGE"));
+        UUID userManagePermissionId = insertPermission(tenantId, "TEST_USER_MANAGE");
+        grantPermission(tenantId, operatorRoleId, userManagePermissionId);
+        grantPermission(tenantId, adminRoleId, userManagePermissionId);
 
         Set<String> permissions =
                 permissionRepository.findAllPermissionCodesByUserId(userId);
@@ -114,6 +106,38 @@ class PermissionRepositoryIntegrationTest extends BaseIntegrationTest {
                 permissionRepository.findAllPermissionCodesByUserId(userId);
 
         assertThat(permissions).isEmpty();
+    }
+
+    @Test
+    void insertRolePermission_whenPermissionBelongsToAnotherTenant_isRejected() {
+        UUID roleTenantId = createTenant();
+        UUID permissionTenantId = createTenant();
+        UUID roleId = insertRole(roleTenantId, "CROSS_ROLE", "Cross tenant role");
+        UUID permissionId = insertPermission(permissionTenantId, "CROSS_PERMISSION");
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO role_permissions (tenant_id, role_id, permission_id) "
+                        + "VALUES (?, ?, ?)",
+                roleTenantId,
+                roleId,
+                permissionId
+        )).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void insertUserRole_whenUserAndRoleBelongToDifferentTenants_isRejected() {
+        UUID userTenantId = createTenant();
+        UUID roleTenantId = createTenant();
+        UUID userId = UUID.randomUUID();
+        UUID roleId = insertRole(roleTenantId, "CROSS_ROLE", "Cross tenant role");
+        insertUser(userTenantId, userId);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO user_roles (tenant_id, user_id, role_id) VALUES (?, ?, ?)",
+                userTenantId,
+                userId,
+                roleId
+        )).isInstanceOf(DataIntegrityViolationException.class);
     }
 
     private UUID createTenant() {
@@ -162,5 +186,25 @@ class PermissionRepositoryIntegrationTest extends BaseIntegrationTest {
         );
 
         return permissionId;
+    }
+
+    private void insertUser(UUID tenantId, UUID userId) {
+        jdbcTemplate.update(
+                "INSERT INTO users (id, tenant_id, email, password_hash, status, created_at, "
+                        + "updated_at) VALUES (?, ?, ?, 'test-hash', 'ACTIVE', NOW(), NOW())",
+                userId,
+                tenantId,
+                userId + "@example.test"
+        );
+    }
+
+    private void grantPermission(UUID tenantId, UUID roleId, UUID permissionId) {
+        jdbcTemplate.update(
+                "INSERT INTO role_permissions (tenant_id, role_id, permission_id) "
+                        + "VALUES (?, ?, ?)",
+                tenantId,
+                roleId,
+                permissionId
+        );
     }
 }

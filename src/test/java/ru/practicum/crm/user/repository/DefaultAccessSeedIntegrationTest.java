@@ -2,19 +2,26 @@ package ru.practicum.crm.user.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
+import ru.practicum.crm.tenant.api.seeding.TenantAccessSeeder;
+import ru.practicum.crm.user.domain.PermissionCode;
 
 class DefaultAccessSeedIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private TenantAccessSeeder tenantAccessSeeder;
 
     @Test
     void creatingTenant_seedsRolesAndPermissionsWithSafeRoleAssignments() {
@@ -25,7 +32,10 @@ class DefaultAccessSeedIntegrationTest extends BaseIntegrationTest {
         assertThat(codes("SELECT code FROM permissions WHERE tenant_id = ?", tenantId))
                 .hasSize(25)
                 .contains("REQUEST_READ_OWN", "REQUEST_READ_ALL", "REQUEST_STATUS_CHANGE",
-                        "USER_MANAGE", "TENANT_SETTINGS_MANAGE", "ANALYTICS_READ");
+                        "USER_MANAGE", "TENANT_SETTINGS_MANAGE", "ANALYTICS_READ")
+                .containsExactlyInAnyOrderElementsOf(Arrays.stream(PermissionCode.values())
+                        .map(Enum::name)
+                        .collect(Collectors.toSet()));
 
         Map<String, Set<String>> grants = Map.of(
                 "CLIENT", grantsFor(tenantId, "CLIENT"),
@@ -50,8 +60,8 @@ class DefaultAccessSeedIntegrationTest extends BaseIntegrationTest {
         UUID tenantId = createTenant();
         int[] originalCounts = countsFor(tenantId);
 
-        jdbcTemplate.query("SELECT seed_tenant_access_defaults(?)", rs -> null, tenantId);
-        jdbcTemplate.query("SELECT seed_tenant_access_defaults(?)", rs -> null, tenantId);
+        tenantAccessSeeder.seedDefaults(tenantId);
+        tenantAccessSeeder.seedDefaults(tenantId);
 
         assertThat(countsFor(tenantId)).containsExactly(originalCounts);
     }
@@ -64,6 +74,7 @@ class DefaultAccessSeedIntegrationTest extends BaseIntegrationTest {
                 tenantId,
                 "Access seed integration tenant"
         );
+        tenantAccessSeeder.seedDefaults(tenantId);
         return tenantId;
     }
 
@@ -76,8 +87,8 @@ class DefaultAccessSeedIntegrationTest extends BaseIntegrationTest {
                 """
                 SELECT p.code
                 FROM permissions p
-                JOIN role_permissions rp ON rp.permission_id = p.id
-                JOIN roles r ON r.id = rp.role_id
+                JOIN role_permissions rp ON rp.permission_id = p.id AND rp.tenant_id = p.tenant_id
+                JOIN roles r ON r.id = rp.role_id AND r.tenant_id = rp.tenant_id
                 WHERE p.tenant_id = ? AND r.code = ?
                 """,
                 String.class,
@@ -92,7 +103,8 @@ class DefaultAccessSeedIntegrationTest extends BaseIntegrationTest {
             count("SELECT COUNT(*) FROM roles WHERE tenant_id = ?", tenantId),
             count(
                     "SELECT COUNT(*) FROM role_permissions rp "
-                            + "JOIN roles r ON r.id = rp.role_id WHERE r.tenant_id = ?",
+                            + "JOIN roles r ON r.id = rp.role_id AND r.tenant_id = rp.tenant_id "
+                            + "WHERE r.tenant_id = ?",
                     tenantId
             )
         };
