@@ -60,6 +60,8 @@ CREATE TABLE role_permissions (
 );
 
 -- 4. Связь M2M: Пользователи <-> Роли (user_roles)
+-- Внешний ключ на users(id) не добавляем,
+-- так как таблица users создается в T-019.
 CREATE TABLE user_roles (
     user_id UUID NOT NULL,
     role_id UUID NOT NULL,
