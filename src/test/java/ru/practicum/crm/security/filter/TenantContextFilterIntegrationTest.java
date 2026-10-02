@@ -15,6 +15,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -56,7 +57,7 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
                 new UsernamePasswordAuthenticationToken(
                         new TenantPrincipal(TENANT_ID),
                         null,
-                        List.of());
+                        List.of(new SimpleGrantedAuthority("REQUEST_READ_ALL")));
 
         mockMvc.perform(
                         get("/admin/test/tenant")
@@ -68,11 +69,12 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void request_whenAuthenticationIsMissing_passesWithoutTenant()
+    void request_whenAuthenticationIsMissing_isRejected()
             throws Exception {
 
+        TestController.setTenantSeen(null);
         mockMvc.perform(get("/admin/test/tenant"))
-                .andExpect(status().isOk());
+                .andExpect(status().isUnauthorized());
 
         assertThat(TestController.tenantSeenByController)
                 .isNull();
@@ -90,7 +92,7 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
                 new UsernamePasswordAuthenticationToken(
                         new TenantPrincipal(TENANT_ID),
                         null,
-                        List.of());
+                        List.of(new SimpleGrantedAuthority("REQUEST_READ_ALL")));
 
         mockMvc.perform(
                         get("/admin/test/tenant")
@@ -109,7 +111,7 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
                 new UsernamePasswordAuthenticationToken(
                         new TenantPrincipal(TENANT_ID),
                         null,
-                        List.of());
+                        List.of(new SimpleGrantedAuthority("REQUEST_READ_ALL")));
 
         mockMvc.perform(
                         get("/admin/test/tenant")
