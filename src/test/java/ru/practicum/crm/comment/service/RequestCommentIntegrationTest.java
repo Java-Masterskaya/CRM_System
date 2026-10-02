@@ -28,6 +28,7 @@ import ru.practicum.crm.common.pagination.PageRequests;
 class RequestCommentIntegrationTest extends BaseIntegrationTest {
 
     private static final String MIGRATION_VERSION = "202610020810";
+    private static final PageRequest FIRST_PAGE = PageRequest.of(0, PageRequests.MAX_SIZE);
 
     @Autowired
     private RequestCommentService comments;
@@ -109,6 +110,34 @@ class RequestCommentIntegrationTest extends BaseIntegrationTest {
                 .rootCause().hasMessageContaining("request_comments_author_id_fkey");
     }
 
+    /**
+     * Сейчас база не проверяет, что автор из того же арендатора, что и заявка: для составного
+     * внешнего ключа в {@code users} нет уникальности {@code (tenant_id, id)}. Тест фиксирует это
+     * поведение: когда такая проверка появится, он упадёт и напомнит обновить описание модели.
+     */
+    @Test
+    void add_byAuthorOfAnotherTenant_isNotRejectedByDatabaseYet() {
+        UUID id = comments.add(tenantA, requestA, authorB, "Автор из другого арендатора", false)
+                .getId();
+
+        assertThat(repository.findByIdAndTenantId(id, tenantA)).map(RequestComment::getAuthorId)
+                .contains(authorB);
+    }
+
+    @Test
+    void commentsForClient_containOnlyCommentsVisibleToClient() {
+        comments.add(tenantA, requestA, authorA, "Уточните период", true);
+        comments.add(tenantA, requestA, authorA, "Клиент путает отчёты, проверить вручную", false);
+        comments.add(tenantA, requestA, authorA, "Отчёт готов", true);
+
+        assertThat(comments.commentsForClient(tenantA, requestA, FIRST_PAGE).getContent())
+                .extracting(RequestComment::getText)
+                .containsExactly("Уточните период", "Отчёт готов");
+        assertThat(comments.commentsForClient(tenantB, requestA, FIRST_PAGE).getContent())
+                .as("клиентский список тоже читается только в своём арендаторе").isEmpty();
+        assertThat(firstPage(tenantA, requestA)).as("команда видит и внутренние").hasSize(3);
+    }
+
     @Test
     void text_longerThanLimit_isRejectedByDatabaseEvenWithoutService() {
         assertThatThrownBy(() -> jdbcTemplate.update("INSERT INTO request_comments (id, tenant_id,"
@@ -125,10 +154,11 @@ class RequestCommentIntegrationTest extends BaseIntegrationTest {
             comments.add(tenantA, requestA, authorA, "Комментарий " + number, number % 2 == 0);
         }
 
-        Page<RequestComment> page = comments.comments(tenantA, requestA, PageRequest.of(0, 2));
+        Page<RequestComment> page = comments.commentsForTeam(tenantA, requestA,
+                PageRequest.of(0, 2));
         List<UUID> pageByPage = new ArrayList<>(ids(page.getContent()));
         while (page.hasNext()) {
-            page = comments.comments(tenantA, requestA, page.nextPageable());
+            page = comments.commentsForTeam(tenantA, requestA, page.nextPageable());
             pageByPage.addAll(ids(page.getContent()));
         }
 
@@ -168,8 +198,7 @@ class RequestCommentIntegrationTest extends BaseIntegrationTest {
 
     /** Все комментарии заявки — первая страница наибольшего размера; в тестах их меньше. */
     private List<RequestComment> firstPage(UUID tenantId, UUID requestId) {
-        return comments.comments(tenantId, requestId, PageRequest.of(0, PageRequests.MAX_SIZE))
-                .getContent();
+        return comments.commentsForTeam(tenantId, requestId, FIRST_PAGE).getContent();
     }
 
     private static List<UUID> ids(List<RequestComment> list) {

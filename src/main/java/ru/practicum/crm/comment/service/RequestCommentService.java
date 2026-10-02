@@ -16,9 +16,11 @@ import ru.practicum.crm.common.pagination.PageRequests;
 /**
  * Комментарии заявок (T-074): хранение и чтение.
  *
- * <p>Кто вправе писать и читать комментарии, решает вызывающий код: клиентский контур показывает
- * только видимые клиенту комментарии своей заявки (T-075), команда видит все (T-076). Автор
- * приходит параметром — его источником станет пользователь из токена (T-026).
+ * <p>Кто вправе писать и читать комментарии, решает вызывающий код: клиентский контур (T-075)
+ * показывает только видимые клиенту комментарии своей заявки — {@link #commentsForClient},
+ * команда (T-076) видит все — {@link #commentsForTeam}. Методы названы по тому, кому отдают
+ * список, чтобы выбор был явным. Автор приходит параметром — его источником станет пользователь
+ * из токена (T-026).
  *
  * <p>Что заявка существует и принадлежит тому же арендатору, гарантирует база: внешний ключ
  * {@code request_comments_request_fkey} не даст сохранить комментарий к чужой или несуществующей
@@ -52,15 +54,32 @@ public class RequestCommentService {
     }
 
     /**
-     * Страница комментариев заявки арендатора в порядке написания — все, включая внутренние.
+     * Страница комментариев заявки для команды — все, включая внутренние, в порядке написания.
+     * Клиенту этот список отдавать нельзя: для него есть {@link #commentsForClient}.
      *
      * @param pageable номер и размер страницы; ограничения — в
      *     {@link PageRequests#requireBounded}
      */
     @Transactional(readOnly = true)
-    public Page<RequestComment> comments(UUID tenantId, UUID requestId, Pageable pageable) {
+    public Page<RequestComment> commentsForTeam(UUID tenantId, UUID requestId,
+            Pageable pageable) {
         return repository.findByTenantIdAndRequestIdOrderByCreatedAtAscIdAsc(tenantId, requestId,
                 PageRequests.requireBounded(pageable));
+    }
+
+    /**
+     * Страница комментариев заявки для клиента — только видимые клиенту, в порядке написания.
+     * Внутренние комментарии сюда не попадают (SPEC §5.2).
+     *
+     * @param pageable номер и размер страницы; ограничения — в
+     *     {@link PageRequests#requireBounded}
+     */
+    @Transactional(readOnly = true)
+    public Page<RequestComment> commentsForClient(UUID tenantId, UUID requestId,
+            Pageable pageable) {
+        return repository
+                .findByTenantIdAndRequestIdAndVisibleToClientTrueOrderByCreatedAtAscIdAsc(
+                        tenantId, requestId, PageRequests.requireBounded(pageable));
     }
 
     /**

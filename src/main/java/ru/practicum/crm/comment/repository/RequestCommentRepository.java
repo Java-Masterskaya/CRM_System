@@ -18,10 +18,17 @@ public interface RequestCommentRepository extends Repository<RequestComment, UUI
     Optional<RequestComment> findByIdAndTenantId(UUID id, UUID tenantId);
 
     /**
-     * Страница комментариев одной заявки в порядке написания. {@code id} — последний ключ
-     * сортировки, поэтому комментарии с одинаковым временем идут в одном и том же порядке на всех
-     * страницах.
+     * Страница всех комментариев одной заявки, включая внутренние, в порядке написания — только
+     * для команды. {@code id} — последний ключ сортировки, поэтому комментарии с одинаковым
+     * временем идут в одном и том же порядке на всех страницах.
      */
     Page<RequestComment> findByTenantIdAndRequestIdOrderByCreatedAtAscIdAsc(UUID tenantId,
             UUID requestId, Pageable pageable);
+
+    /**
+     * Страница комментариев заявки, видимых клиенту, в том же порядке. Клиентский контур читает
+     * комментарии только этим методом: внутренние в выборку не попадают (SPEC §5.2).
+     */
+    Page<RequestComment> findByTenantIdAndRequestIdAndVisibleToClientTrueOrderByCreatedAtAscIdAsc(
+            UUID tenantId, UUID requestId, Pageable pageable);
 }
