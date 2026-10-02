@@ -52,6 +52,26 @@ public final class PageRequests {
         return PageRequest.of(resolvedPage, resolvedSize, resolvedSort);
     }
 
+    /**
+     * Проверяет страницу, которую сервис получил от вызывающего кода, и возвращает её же: список
+     * нельзя прочитать целиком ни из API, ни изнутри приложения.
+     *
+     * @throws IllegalArgumentException если страница не задана ({@link Pageable#unpaged()}) — это
+     *     ошибка вызывающего кода, клиент такой запрос прислать не может
+     * @throws ApiException {@code VALIDATION_FAILED} с параметром {@code size}, если страница
+     *     больше {@link #MAX_SIZE}: размер приходит от клиента, и ответ должен быть 400
+     */
+    public static Pageable requireBounded(Pageable pageable) {
+        if (pageable.isUnpaged()) {
+            throw new IllegalArgumentException("Список читается только постранично");
+        }
+        if (pageable.getPageSize() > MAX_SIZE) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, null, List.of(ValidationError
+                    .ofParameter(SIZE_PARAM, "должно быть не больше " + MAX_SIZE)));
+        }
+        return pageable;
+    }
+
     private static Sort withTieBreaker(Sort sort) {
         if (sort.getOrderFor(TIE_BREAKER_FIELD) != null) {
             return sort;
