@@ -1,28 +1,79 @@
 package ru.practicum.crm.security.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
+import ru.practicum.crm.common.error.ErrorCode;
+import ru.practicum.crm.common.error.ProblemDetailFactory;
 import ru.practicum.crm.tenant.api.TenantContextFilter;
 
 @Configuration
+@EnableMethodSecurity
 public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            TenantContextFilter tenantContextFilter
+            TenantContextFilter tenantContextFilter,
+            ObjectMapper objectMapper
     ) throws Exception {
         http.csrf(AbstractHttpConfigurer::disable)
-                .authorizeHttpRequests(authorize ->
-                        authorize.anyRequest().permitAll())
+                .requestCache(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable)
+                .httpBasic(AbstractHttpConfigurer::disable)
+                .logout(AbstractHttpConfigurer::disable)
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(HttpMethod.POST,
+                                "/auth/register", "/auth/login", "/auth/refresh").permitAll()
+                        .requestMatchers("/system/**", "/actuator/**", "/v3/api-docs/**",
+                                "/swagger-ui/**", "/swagger-ui.html").denyAll()
+                        .requestMatchers(HttpMethod.GET, "/admin/tenant/settings")
+                        .hasAuthority("TENANT_SETTINGS_READ")
+                        .requestMatchers(HttpMethod.PUT, "/admin/tenant/settings")
+                        .hasAuthority("TENANT_SETTINGS_MANAGE")
+                        .requestMatchers("/admin/tenant/settings/**").denyAll()
+                        .requestMatchers("/admin/**").hasAuthority("REQUEST_READ_ALL")
+                        .requestMatchers("/client/**").hasAnyAuthority(
+                                "REQUEST_CREATE", "REQUEST_READ_OWN", "REQUEST_CANCEL_OWN",
+                                "COMMENT_PUBLIC_CREATE_OWN", "ATTACHMENT_CREATE_OWN",
+                                "ATTACHMENT_READ_OWN")
+                        .anyRequest().authenticated())
+                .exceptionHandling(errors -> errors
+                        .authenticationEntryPoint((request, response, exception) -> writeProblem(
+                                request.getRequestURI(), response, objectMapper,
+                                ErrorCode.UNAUTHENTICATED))
+                        .accessDeniedHandler((request, response, exception) -> writeProblem(
+                                request.getRequestURI(), response, objectMapper,
+                                ErrorCode.ACCESS_DENIED)))
                 .addFilterAfter(tenantContextFilter, SecurityContextHolderFilter.class);
 
         return http.build();
+    }
+
+    private static void writeProblem(String requestUri,
+            HttpServletResponse response,
+            ObjectMapper objectMapper, ErrorCode errorCode) throws IOException {
+        response.setStatus(errorCode.getStatus().value());
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        objectMapper.writeValue(response.getOutputStream(), ProblemDetailFactory.create(
+                errorCode, null, URI.create(requestUri), List.of()));
     }
 
     @Bean

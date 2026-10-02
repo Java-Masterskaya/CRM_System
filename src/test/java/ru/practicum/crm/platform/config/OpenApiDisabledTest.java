@@ -27,9 +27,10 @@ class OpenApiDisabledTest extends BaseIntegrationTest {
     private MockMvc mockMvc;
 
     @Test
-    void apiDocs_whenDocumentationDisabled_isNotAvailable() throws Exception {
+    void apiDocs_whenDocumentationDisabled_isDeniedBeforeDocumentationLookup()
+            throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
