@@ -4,6 +4,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.practicum.crm.user.domain.PermissionCode;
 import ru.practicum.crm.user.repository.PermissionRepository;
 
 @Service
@@ -24,12 +25,12 @@ public class UserPermissionService {
     }
 
     @Transactional(readOnly = true)
-    public boolean hasPermission(UUID userId, String permissionCode) {
-        if (userId == null || permissionCode == null || permissionCode.isBlank()) {
+    public boolean hasPermission(UUID userId, PermissionCode permissionCode) {
+        if (userId == null || permissionCode == null) {
             return false;
         }
 
         Set<String> userPermissions = getUserPermissionCodes(userId);
-        return userPermissions.contains(permissionCode);
+        return userPermissions.contains(permissionCode.name());
     }
 }
