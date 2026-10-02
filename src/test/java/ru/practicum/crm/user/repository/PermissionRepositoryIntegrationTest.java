@@ -22,14 +22,14 @@ class PermissionRepositoryIntegrationTest extends BaseIntegrationTest {
         UUID firstTenantId = createTenant();
         UUID secondTenantId = createTenant();
 
-        insertPermission(firstTenantId, "USER_MANAGE");
-        insertPermission(secondTenantId, "USER_MANAGE");
+        insertPermission(firstTenantId, "CUSTOM_PERMISSION");
+        insertPermission(secondTenantId, "CUSTOM_PERMISSION");
 
         Integer count = jdbcTemplate.queryForObject(
                 """
                 SELECT COUNT(*)
                 FROM permissions
-                WHERE code = 'USER_MANAGE'
+                WHERE code = 'CUSTOM_PERMISSION'
                 """,
                 Integer.class
         );
@@ -42,14 +42,14 @@ class PermissionRepositoryIntegrationTest extends BaseIntegrationTest {
         UUID firstTenantId = createTenant();
         UUID secondTenantId = createTenant();
 
-        insertRole(firstTenantId, "ADMIN", "Administrator");
-        insertRole(secondTenantId, "ADMIN", "Administrator");
+        insertRole(firstTenantId, "CUSTOM_ROLE", "Custom role");
+        insertRole(secondTenantId, "CUSTOM_ROLE", "Custom role");
 
         Integer count = jdbcTemplate.queryForObject(
                 """
                 SELECT COUNT(*)
                 FROM roles
-                WHERE code = 'ADMIN'
+                WHERE code = 'CUSTOM_ROLE'
                 """,
                 Integer.class
         );
@@ -61,11 +61,11 @@ class PermissionRepositoryIntegrationTest extends BaseIntegrationTest {
     void findAllPermissionCodesByUserId_whenUserHasMultipleRoles_returnsUnionOfPermissions() {
         UUID tenantId = createTenant();
 
-        UUID operatorRoleId = insertRole(tenantId, "OPERATOR", "Operator");
-        UUID adminRoleId = insertRole(tenantId, "ADMIN", "Administrator");
+        UUID operatorRoleId = insertRole(tenantId, "TEST_OPERATOR", "Test operator");
+        UUID adminRoleId = insertRole(tenantId, "TEST_ADMIN", "Test administrator");
 
-        UUID statusChangePermissionId = insertPermission(tenantId, "REQUEST_STATUS_CHANGE");
-        UUID userManagePermissionId = insertPermission(tenantId, "USER_MANAGE");
+        UUID statusChangePermissionId = insertPermission(tenantId, "TEST_STATUS_CHANGE");
+        UUID userManagePermissionId = insertPermission(tenantId, "TEST_USER_MANAGE");
 
         UUID userId = UUID.randomUUID();
 
@@ -101,8 +101,8 @@ class PermissionRepositoryIntegrationTest extends BaseIntegrationTest {
 
         assertThat(permissions)
                 .containsExactlyInAnyOrder(
-                        "REQUEST_STATUS_CHANGE",
-                        "USER_MANAGE"
+                        "TEST_STATUS_CHANGE",
+                        "TEST_USER_MANAGE"
                 );
     }
 
