@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import ru.practicum.crm.common.error.ApiException;
@@ -110,5 +111,29 @@ class PageRequestsTest {
     void toPageable_whenSortIsBlank_rejectsWithValidationError() {
         assertThatThrownBy(() -> PageRequests.toPageable(0, 20, List.of(" "), ALLOWED))
                 .isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void requireBounded_whenPageWithinLimit_returnsSamePage() {
+        Pageable largestPage = PageRequest.of(3, PageRequests.MAX_SIZE);
+
+        assertThat(PageRequests.requireBounded(largestPage)).isSameAs(largestPage);
+    }
+
+    @Test
+    void requireBounded_whenPageLargerThanLimit_rejectsWithValidationError() {
+        ApiException thrown = catchThrowableOfType(
+                () -> PageRequests.requireBounded(PageRequest.of(0, PageRequests.MAX_SIZE + 1)),
+                ApiException.class);
+
+        assertThat(thrown.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+        assertThat(thrown.getErrors())
+                .containsExactly(ValidationError.ofParameter("size", "должно быть не больше 100"));
+    }
+
+    @Test
+    void requireBounded_whenListIsRequestedWhole_refusesAsCallerError() {
+        assertThatThrownBy(() -> PageRequests.requireBounded(Pageable.unpaged()))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }
