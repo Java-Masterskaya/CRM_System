@@ -20,7 +20,7 @@ import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.NotFoundException;
-import ru.practicum.crm.tenant.api.context.TenantContext;
+import ru.practicum.crm.tenant.api.TenantContext;
 import ru.practicum.crm.tenant.api.dto.TenantSettingsDto;
 import ru.practicum.crm.tenant.api.mapper.TenantSettingsMapper;
 import ru.practicum.crm.tenant.domain.Tenant;

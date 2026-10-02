@@ -13,7 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
-import ru.practicum.crm.tenant.api.context.TenantContext;
+import ru.practicum.crm.tenant.api.TenantContext;
 import ru.practicum.crm.user.api.dto.ChangePasswordRequest;
 import ru.practicum.crm.user.api.dto.CreateUserRequest;
 import ru.practicum.crm.user.api.dto.UserDto;

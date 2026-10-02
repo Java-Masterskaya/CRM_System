@@ -2,6 +2,7 @@ package ru.practicum.crm.common.error;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasItem;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -22,6 +23,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.server.ServletServerHttpRequest;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
         properties = "app.web.max-request-body-size=1KB"
 )
 @Import(RequestValidationTest.ProbeController.class)
+@WithMockUser
 class RequestValidationTest {
 
     private static final String BODY_URL = "/test-validation/requests";
@@ -44,7 +47,7 @@ class RequestValidationTest {
 
     @Test
     void body_whenSeveralFieldsInvalid_returnsAllProblemsInOneResponse() throws Exception {
-        mockMvc.perform(post(BODY_URL).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post(BODY_URL).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"subject\":\"\",\"email\":\"not-an-email\",\"count\":null}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
@@ -56,7 +59,7 @@ class RequestValidationTest {
 
     @Test
     void body_whenFieldIsBlank_returnsRussianMessage() throws Exception {
-        mockMvc.perform(post(BODY_URL).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post(BODY_URL).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content(body("", "user@example.com", "1")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].pointer").value("#/subject"))
@@ -65,7 +68,7 @@ class RequestValidationTest {
 
     @Test
     void body_whenTextLongerThanLimit_returnsSizeError() throws Exception {
-        mockMvc.perform(post(BODY_URL).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post(BODY_URL).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content(body("x".repeat(256), "user@example.com", "1")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].pointer").value("#/subject"))
@@ -74,7 +77,7 @@ class RequestValidationTest {
 
     @Test
     void body_whenEmailMalformed_returnsFormatError() throws Exception {
-        mockMvc.perform(post(BODY_URL).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post(BODY_URL).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content(body("Выгрузка", "not-an-email", "1")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].pointer").value("#/email"))
@@ -84,7 +87,7 @@ class RequestValidationTest {
 
     @Test
     void body_whenJsonMalformed_returnsMalformedRequest() throws Exception {
-        mockMvc.perform(post(BODY_URL).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post(BODY_URL).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content("{not json"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
@@ -92,7 +95,7 @@ class RequestValidationTest {
 
     @Test
     void body_whenLargerThanLimit_isRejectedWithoutProcessing() throws Exception {
-        mockMvc.perform(post(BODY_URL).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post(BODY_URL).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content(body("x".repeat(2000), "user@example.com", "1")))
                 .andExpect(status().isPayloadTooLarge())
                 .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
@@ -101,7 +104,7 @@ class RequestValidationTest {
 
     @Test
     void body_whenLimitExceededWhileReading_returnsPayloadTooLarge() throws Exception {
-        mockMvc.perform(post("/test-validation/stream"))
+        mockMvc.perform(post("/test-validation/stream").with(csrf()))
                 .andExpect(status().isPayloadTooLarge())
                 .andExpect(jsonPath("$.code").value("PAYLOAD_TOO_LARGE"));
     }

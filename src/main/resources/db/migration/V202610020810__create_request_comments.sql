@@ -2,7 +2,9 @@
 
 -- Пара «арендатор + заявка» объявляется уникальной, чтобы на неё мог сослаться составной внешний
 -- ключ комментария. id заявки уникален сам по себе, поэтому существующие данные это ограничение
--- нарушить не могут.
+-- нарушить не могут. Команда блокирует таблицу заявок, пока строится индекс; на большой таблице
+-- его стоит заранее построить отдельно (CREATE UNIQUE INDEX CONCURRENTLY) и подключить через
+-- ADD CONSTRAINT ... USING INDEX.
 ALTER TABLE requests ADD CONSTRAINT requests_tenant_id_id_unique UNIQUE (tenant_id, id);
 
 CREATE TABLE request_comments (

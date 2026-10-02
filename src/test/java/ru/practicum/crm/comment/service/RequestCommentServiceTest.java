@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.UUID;
@@ -96,21 +97,41 @@ class RequestCommentServiceTest {
     }
 
     @Test
-    void comments_readsGivenPageOfGivenTenantsRequest() {
+    void commentsForTeam_readsGivenPageOfAllCommentsOfGivenTenantsRequest() {
         PageRequest page = PageRequest.of(2, 20);
 
-        service.comments(TENANT_ID, REQUEST_ID, page);
+        service.commentsForTeam(TENANT_ID, REQUEST_ID, page);
 
         verify(repository).findByTenantIdAndRequestIdOrderByCreatedAtAscIdAsc(TENANT_ID,
                 REQUEST_ID, page);
+        verifyNoMoreInteractions(repository);
     }
 
     @Test
-    void comments_whenPageLargerThanLimit_isRejectedWithoutReading() {
-        ApiException thrown = catchThrowableOfType(() -> service.comments(TENANT_ID, REQUEST_ID,
-                PageRequest.of(0, PageRequests.MAX_SIZE + 1)), ApiException.class);
+    void commentsForClient_readsOnlyCommentsVisibleToClient() {
+        PageRequest page = PageRequest.of(0, 20);
 
-        assertThat(thrown.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+        service.commentsForClient(TENANT_ID, REQUEST_ID, page);
+
+        verify(repository)
+                .findByTenantIdAndRequestIdAndVisibleToClientTrueOrderByCreatedAtAscIdAsc(
+                        TENANT_ID, REQUEST_ID, page);
+        verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void comments_whenPageLargerThanLimit_areRejectedWithoutReadingForTeamAndClient() {
+        PageRequest tooLarge = PageRequest.of(0, PageRequests.MAX_SIZE + 1);
+
+        ApiException forTeam = catchThrowableOfType(
+                () -> service.commentsForTeam(TENANT_ID, REQUEST_ID, tooLarge),
+                ApiException.class);
+        ApiException forClient = catchThrowableOfType(
+                () -> service.commentsForClient(TENANT_ID, REQUEST_ID, tooLarge),
+                ApiException.class);
+
+        assertThat(forTeam.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+        assertThat(forClient.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
         verifyNoInteractions(repository);
     }
 }
