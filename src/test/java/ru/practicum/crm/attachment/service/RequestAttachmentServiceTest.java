@@ -11,6 +11,8 @@ import static org.mockito.Mockito.when;
 
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.data.domain.PageRequest;
 import ru.practicum.crm.attachment.domain.FileReference;
 import ru.practicum.crm.attachment.domain.RequestAttachment;
@@ -79,6 +81,23 @@ class RequestAttachmentServiceTest {
                 ValidationError.ofField("fileName", "не должно быть пустым"),
                 ValidationError.ofField("contentType", "не должно быть пустым"),
                 ValidationError.ofField("sizeBytes", "не может быть отрицательным"));
+        verifyNoInteractions(repository);
+    }
+
+    /** Иначе {@code " media-object-42"} привязался бы к заявке вторым объектом рядом с исходным. */
+    @ParameterizedTest
+    @ValueSource(strings = {" media-object-42", "media-object-42 ", "\tmedia-object-42"})
+    void attach_whenObjectIdHasSpaceAtEdge_isRejectedWithThatFieldAndNothingRead(
+            String objectId) {
+        FileReference spaced = new FileReference(objectId, "отчёт.pdf", 2048, "application/pdf");
+
+        ApiException thrown = catchThrowableOfType(
+                () -> service.attach(TENANT_ID, REQUEST_ID, AUTHOR_ID, spaced),
+                ApiException.class);
+
+        assertThat(thrown.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+        assertThat(thrown.getErrors()).containsExactly(ValidationError.ofField("objectId",
+                "не должно начинаться или заканчиваться пробелом"));
         verifyNoInteractions(repository);
     }
 

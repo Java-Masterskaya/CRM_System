@@ -70,7 +70,7 @@ public class RequestAttachmentService {
     /** Собирает все ошибки сразу, чтобы вызывающий получил полный перечень полей. */
     private static void validate(FileReference file) {
         List<ValidationError> errors = new ArrayList<>();
-        requireText(errors, "objectId", file.objectId());
+        requireIdentifier(errors, "objectId", file.objectId());
         requireText(errors, "fileName", file.fileName());
         requireText(errors, "contentType", file.contentType());
         if (file.sizeBytes() < 0) {
@@ -78,6 +78,21 @@ public class RequestAttachmentService {
         }
         if (!errors.isEmpty()) {
             throw new ApiException(ErrorCode.VALIDATION_FAILED, null, errors);
+        }
+    }
+
+    /**
+     * Идентификатор объекта сравнивается с уже привязанными как есть, и {@code " abc"} оказался бы
+     * другим объектом, чем {@code "abc"}. Пробелы по краям не обрезаются, а отклоняются:
+     * идентификатор выдаёт медиа-сервис, и CRM его не меняет.
+     */
+    private static void requireIdentifier(List<ValidationError> errors, String field,
+            String value) {
+        if (value != null && !value.isBlank() && !value.equals(value.strip())) {
+            errors.add(ValidationError.ofField(field, "не должно начинаться или заканчиваться"
+                    + " пробелом"));
+        } else {
+            requireText(errors, field, value);
         }
     }
 
