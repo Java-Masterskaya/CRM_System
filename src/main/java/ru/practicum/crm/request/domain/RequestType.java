@@ -13,6 +13,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.Getter;
+import ru.practicum.crm.common.model.RequestPriority;
 
 /**
  * Тип заявки — категория обращения, принадлежащая арендатору (ТЗ §4.1).
