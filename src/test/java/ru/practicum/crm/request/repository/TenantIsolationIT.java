@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.assertj.core.api.AssertionsForClassTypes;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -105,10 +106,10 @@ public class TenantIsolationIT extends BaseIntegrationTest {
         UUID foreignId = insertRequest(tenantA, "Живая");
 
         tenantContext.setTenantId(tenantB);
-        int deleted = transactionTemplate.execute(status ->
+        Integer deleted = transactionTemplate.execute(status ->
                 requestRepository.deleteById(foreignId));
 
-        assertThat(deleted).isZero();
+        assertThat(deleted).isNotNull().isZero();
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM requests WHERE id = ?",
                 Integer.class, foreignId)).isEqualTo(1);
     }
@@ -118,14 +119,14 @@ public class TenantIsolationIT extends BaseIntegrationTest {
         UUID foreignId = insertRequest(tenantA, "Исходная");
 
         tenantContext.setTenantId(tenantB);
-        int updated = transactionTemplate.execute(status ->
+        Integer updated = transactionTemplate.execute(status ->
                 entityManager.createQuery(
                                 "update Request as r set r.subject = :subject where r.id = :id")
                         .setParameter("subject", "Подмена")
                         .setParameter("id", foreignId)
                         .executeUpdate());
 
-        assertThat(updated).isZero();
+        assertThat(updated).isNotNull().isZero();
         assertThat(subjectOf(foreignId)).isEqualTo("Исходная");
     }
 
