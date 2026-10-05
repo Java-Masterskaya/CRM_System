@@ -141,8 +141,11 @@ public class TenantIsolationIT extends BaseIntegrationTest {
                 RequestStatus.NEW
         );
 
-        UUID id = transactionTemplate.execute(status ->
-                requestRepository.save(request)).getId();
+        Request findRequest = transactionTemplate.execute(status ->
+                requestRepository.save(request));
+
+        Assertions.assertNotNull(findRequest);
+        UUID id = findRequest.getId();
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT tenant_id FROM requests WHERE id = ?", UUID.class, id)
         ).isEqualTo(tenantA);
