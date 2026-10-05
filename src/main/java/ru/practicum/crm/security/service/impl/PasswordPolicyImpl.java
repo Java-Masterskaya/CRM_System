@@ -1,4 +1,4 @@
-package ru.practicum.crm.security.service;
+package ru.practicum.crm.security.service.impl;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;

@@ -9,7 +9,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.security.api.PasswordPolicy;
-import ru.practicum.crm.tenant.api.context.TenantContext;
+import ru.practicum.crm.tenant.api.TenantContext;
+import ru.practicum.crm.user.api.dto.AuthenticatedUserDto;
 import ru.practicum.crm.user.api.dto.ChangePasswordRequest;
 import ru.practicum.crm.user.api.dto.CreateUserRequest;
 import ru.practicum.crm.user.api.dto.UserDto;
@@ -78,6 +79,23 @@ public class UserServiceImpl implements UserService {
                     passwordEncoder.encode(request.newPassword())
             );
         });
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AuthenticatedUserDto authenticate(UUID tenantId, String email, String password) {
+        UserEntity user = userRepository.findByTenantIdAndEmail(tenantId, email)
+                .orElseThrow(() -> new ApiException(
+                        ErrorCode.INVALID_CREDENTIALS,
+                        ErrorCode.INVALID_CREDENTIALS.getDefaultDetail()
+                ));
+
+        if (!user.canLogIn() || !passwordEncoder.matches(password, user.getPasswordHash())) {
+            throw new ApiException(ErrorCode.INVALID_CREDENTIALS,
+                    ErrorCode.INVALID_CREDENTIALS.getDefaultDetail());
+        }
+
+        return userMapper.toAuthenticatedUserDto(user);
     }
 
     private UserEntity findUserById(UUID userId, UUID tenantId) {
