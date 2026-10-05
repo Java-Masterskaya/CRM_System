@@ -15,8 +15,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import lombok.Getter;
+import org.hibernate.annotations.Filter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import ru.practicum.crm.common.model.TenantIds;
 
 /**
  * Исходящее событие: факт изменения, который нужно доставить наружу — письмом или вебхуком.
@@ -40,6 +42,9 @@ import org.hibernate.type.SqlTypes;
 @Entity
 @Table(name = "outbox_events")
 @Getter
+@Filter(name = TenantIds.FILTER_NAME,
+        condition = "tenant_id = :" + TenantIds.PARAM
+)
 public class OutboxEvent {
 
     @Id

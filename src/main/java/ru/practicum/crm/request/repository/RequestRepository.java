@@ -4,7 +4,10 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
+import org.springframework.data.repository.query.Param;
 import ru.practicum.crm.request.domain.Request;
 import ru.practicum.crm.request.domain.RequestStatus;
 
@@ -29,4 +32,12 @@ public interface RequestRepository extends Repository<Request, UUID> {
             Pageable pageable);
 
     boolean existsByIdAndTenantIdAndDeletedFalse(UUID id, UUID tenantId);
+
+    Optional<Request> findByIdAndDeletedFalse(UUID id);
+
+    Page<Request> findByDeletedFalse(UUID tenantId, Pageable pageable);
+
+    @Modifying(clearAutomatically = true)
+    @Query(value = "delete from requests r where r.id = :id", nativeQuery = true)
+    int deleteById(@Param("id") UUID id);
 }

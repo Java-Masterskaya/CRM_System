@@ -13,6 +13,8 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.Getter;
+import org.hibernate.annotations.Filter;
+import ru.practicum.crm.common.model.TenantIds;
 
 /**
  * Тип заявки — категория обращения, принадлежащая арендатору (ТЗ §4.1).
@@ -27,6 +29,9 @@ import lombok.Getter;
 @Entity
 @Table(name = "request_types")
 @Getter
+@Filter(name = TenantIds.FILTER_NAME,
+        condition = "tenant_id = :" + TenantIds.PARAM
+)
 public class RequestType {
 
     @Id
