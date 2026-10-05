@@ -6,6 +6,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import jakarta.persistence.EntityManager;
 import java.time.ZoneId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,8 +15,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 import ru.practicum.crm.tenant.api.dto.TenantDto;
 import ru.practicum.crm.tenant.api.mapper.TenantMapper;
+import ru.practicum.crm.tenant.api.seeding.TenantAccessSeeder;
 import ru.practicum.crm.tenant.domain.Tenant;
 import ru.practicum.crm.tenant.domain.TenantSettings;
 import ru.practicum.crm.tenant.repository.TenantRepository;
@@ -29,11 +32,22 @@ class TenantServiceImplTest {
     @Mock
     private TenantMapper mapper;
 
+    @Mock
+    private EntityManager entityManager;
+
+    @Mock
+    private TenantAccessSeeder tenantAccessSeeder;
+
     private TenantServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new TenantServiceImpl(tenantRepository, mapper);
+        service = new TenantServiceImpl(
+                tenantRepository,
+                mapper,
+                tenantAccessSeeder,
+                entityManager
+        );
     }
 
     @Test
@@ -42,7 +56,11 @@ class TenantServiceImplTest {
         TenantDto expected = new TenantDto("Tenant name", true);
 
         when(tenantRepository.save(any(Tenant.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+                .thenAnswer(invocation -> {
+                    Tenant tenant = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(tenant, "id", java.util.UUID.randomUUID());
+                    return tenant;
+                });
 
         when(mapper.toDto(any(Tenant.class)))
                 .thenReturn(expected);
@@ -76,8 +94,10 @@ class TenantServiceImplTest {
         assertThat(settings.getTimezone())
                 .isEqualTo(ZoneId.of("UTC"));
 
-        InOrder order = inOrder(tenantRepository, mapper);
+        InOrder order = inOrder(tenantRepository, entityManager, tenantAccessSeeder, mapper);
         order.verify(tenantRepository).save(savedTenant);
+        order.verify(entityManager).flush();
+        order.verify(tenantAccessSeeder).seedDefaults(savedTenant.getId());
         order.verify(mapper).toDto(savedTenant);
     }
 }
