@@ -10,7 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.common.error.NotFoundException;
-import ru.practicum.crm.tenant.api.context.TenantContext;
+import ru.practicum.crm.tenant.api.TenantContext;
 import ru.practicum.crm.tenant.domain.Tenant;
 import ru.practicum.crm.tenant.domain.TenantSettings;
 import ru.practicum.crm.tenant.repository.TenantRepository;
@@ -34,8 +34,8 @@ class TenantSettingsServiceIntegrationTest extends BaseIntegrationTest {
     @Test
     @Transactional
     void getTenantSettings_whenCurrentTenantIsB_doesNotReturnSettingsOfA() {
-        Tenant tenantA = tenantRepository.save(new Tenant("Tenant A"));
-        Tenant tenantB = tenantRepository.save(new Tenant("Tenant B"));
+        Tenant tenantA = tenantRepository.save(new Tenant("Tenant A", "tenant-a"));
+        Tenant tenantB = tenantRepository.save(new Tenant("Tenant B", "tenant-b"));
 
         TenantSettings settingsA = new TenantSettings(
                 tenantA,

@@ -32,11 +32,12 @@ class TenantServiceIntegrationTest extends BaseIntegrationTest {
     @Test
     void createTenant_savesTenantAndDefaultSettings() {
         TenantDto actual = service.createTenant(
-                new TenantDto("Integration Tenant", false)
+                new TenantDto("Integration Tenant", "tenant-slug", false)
         );
 
         assertThat(actual)
-                .isEqualTo(new TenantDto("Integration Tenant", true));
+                .isEqualTo(new TenantDto("Integration Tenant",
+                        "tenant-slug", true));
 
         UUID tenantId = jdbcTemplate.queryForObject(
                 "SELECT id FROM tenants WHERE name = ?",
@@ -52,5 +53,16 @@ class TenantServiceIntegrationTest extends BaseIntegrationTest {
                 .orElseThrow();
         assertThat(savedSettings.getTenantId()).isEqualTo(tenantId);
         assertThat(savedSettings.getTimezone()).isEqualTo(ZoneId.of("UTC"));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM roles WHERE tenant_id = ?",
+                Integer.class,
+                tenantId
+        )).isEqualTo(3);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM permissions WHERE tenant_id = ?",
+                Integer.class,
+                tenantId
+        )).isEqualTo(25);
     }
 }

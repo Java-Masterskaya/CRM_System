@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import ru.practicum.crm.user.domain.PermissionCode;
 import ru.practicum.crm.user.repository.PermissionRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -72,7 +73,7 @@ class UserPermissionServiceTest {
         assertThat(
                 userPermissionService.hasPermission(
                         userId,
-                        "USER_MANAGE"
+                        PermissionCode.USER_MANAGE
                 )
         ).isTrue();
     }
@@ -88,7 +89,7 @@ class UserPermissionServiceTest {
         assertThat(
                 userPermissionService.hasPermission(
                         userId,
-                        "USER_READ"
+                        PermissionCode.USER_READ
                 )
         ).isFalse();
     }
@@ -99,7 +100,7 @@ class UserPermissionServiceTest {
         assertThat(
                 userPermissionService.hasPermission(
                         null,
-                        "USER_MANAGE"
+                        PermissionCode.USER_MANAGE
                 )
         ).isFalse();
 
@@ -107,20 +108,12 @@ class UserPermissionServiceTest {
     }
 
     @Test
-    @DisplayName("hasPermission должен возвращать false для null или пустого кода")
+    @DisplayName("hasPermission должен возвращать false для null кода")
     void hasPermission_shouldReturnFalse_whenPermissionCodeIsInvalid() {
         UUID userId = UUID.randomUUID();
 
         assertThat(
                 userPermissionService.hasPermission(userId, null)
-        ).isFalse();
-
-        assertThat(
-                userPermissionService.hasPermission(userId, "")
-        ).isFalse();
-
-        assertThat(
-                userPermissionService.hasPermission(userId, "   ")
         ).isFalse();
 
         verifyNoInteractions(permissionRepository);

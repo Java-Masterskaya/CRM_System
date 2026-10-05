@@ -14,7 +14,7 @@ public class TenantTestFixture {
 
     public UUID createTenant() {
         return tenantRepository.save(
-                new Tenant("Integration test tenant")
+                new Tenant("Integration test tenant", "integration-test-tenant")
         ).getId();
     }
 }

@@ -61,7 +61,12 @@ crm:
       require-lowercase: true
       require-digit: true
       require-special: true
-
+    jwt:
+      secret: ${CRM_JWT_SECRET}
+      access-ttl: ${CRM_JWT_ACCESS_TTL:15m}
+      refresh-ttl: ${CRM_JWT_REFRESH_TTL:7d}
+      algorithm: HMAC_SHA256
+      min-secret-length-bytes: 32
 server:
   port: ${SERVER_PORT:8080}
 

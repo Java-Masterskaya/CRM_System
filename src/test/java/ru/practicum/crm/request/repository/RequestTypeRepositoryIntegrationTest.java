@@ -189,8 +189,8 @@ class RequestTypeRepositoryIntegrationTest extends BaseIntegrationTest {
 
     private UUID createTenant(String name) {
         UUID id = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO tenants (id, name, active, created_at, updated_at)"
-                + " VALUES (?, ?, true, now(), now())", id, name);
+        jdbcTemplate.update("INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
+                + " VALUES (?, ?, ?, true, now(), now())", id, name, name.toLowerCase());
         return id;
     }
 }

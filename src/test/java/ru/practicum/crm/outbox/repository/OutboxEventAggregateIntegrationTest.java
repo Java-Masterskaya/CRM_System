@@ -22,7 +22,9 @@ import ru.practicum.crm.outbox.domain.OutboxEvent;
  */
 class OutboxEventAggregateIntegrationTest extends BaseIntegrationTest {
 
-    /** Последняя миграция перед этой: до неё накатывается схема в проверке на заполненной базе. */
+    /**
+     * Последняя миграция перед этой: до неё накатывается схема в проверке на заполненной базе.
+     */
     private static final String PREVIOUS_MIGRATION = "202609261000";
     private static final String REQUEST = "REQUEST";
 
@@ -71,7 +73,7 @@ class OutboxEventAggregateIntegrationTest extends BaseIntegrationTest {
                 "UPDATE outbox_events SET aggregate_type = 'COMMENT' WHERE id = ?", withReference))
                 .isInstanceOf(DataIntegrityViolationException.class);
         assertThatThrownBy(() -> jdbcTemplate.update("UPDATE outbox_events"
-                + " SET aggregate_type = 'REQUEST', aggregate_id = ? WHERE id = ?",
+                                                     + " SET aggregate_type = 'REQUEST', aggregate_id = ? WHERE id = ?",
                 UUID.randomUUID(), withoutReference))
                 .as("дописать ссылку задним числом тоже нельзя")
                 .isInstanceOf(DataIntegrityViolationException.class);
@@ -80,9 +82,9 @@ class OutboxEventAggregateIntegrationTest extends BaseIntegrationTest {
     @Test
     void incompleteObjectReference_isRejectedByDatabase() {
         assertThatThrownBy(() -> jdbcTemplate.update("INSERT INTO outbox_events (id, tenant_id,"
-                + " event_type, payload, status, next_attempt_at, created_at, updated_at,"
-                + " aggregate_type) VALUES (?, ?, 'REQUEST_CREATED', '{}', 'NEW', now(), now(),"
-                + " now(), 'REQUEST')", UUID.randomUUID(), tenantA))
+                                                     + " event_type, payload, status, next_attempt_at, created_at, updated_at,"
+                                                     + " aggregate_type) VALUES (?, ?, 'REQUEST_CREATED', '{}', 'NEW', now(), now(),"
+                                                     + " now(), 'REQUEST')", UUID.randomUUID(), tenantA))
                 .isInstanceOf(DataIntegrityViolationException.class)
                 .hasMessageContaining("outbox_events_aggregate_complete_check");
     }
@@ -90,14 +92,14 @@ class OutboxEventAggregateIntegrationTest extends BaseIntegrationTest {
     @Test
     void findEventsOfObject_onLargeQueue_usesAggregateIndex() {
         jdbcTemplate.update("INSERT INTO outbox_events (id, tenant_id, event_type, payload,"
-                + " status, next_attempt_at, created_at, updated_at, aggregate_type, aggregate_id)"
-                + " SELECT gen_random_uuid(), ?, 'REQUEST_CREATED', '{}', 'SENT', now(), now(),"
-                + " now(), 'REQUEST', gen_random_uuid() FROM generate_series(1, 5000)", tenantA);
+                            + " status, next_attempt_at, created_at, updated_at, aggregate_type, aggregate_id)"
+                            + " SELECT gen_random_uuid(), ?, 'REQUEST_CREATED', '{}', 'SENT', now(), now(),"
+                            + " now(), 'REQUEST', gen_random_uuid() FROM generate_series(1, 5000)", tenantA);
         jdbcTemplate.execute("ANALYZE outbox_events");
 
         List<String> plan = jdbcTemplate.queryForList("EXPLAIN SELECT * FROM outbox_events"
-                + " WHERE tenant_id = '" + tenantA + "' AND aggregate_type = 'REQUEST'"
-                + " AND aggregate_id = '" + UUID.randomUUID() + "' ORDER BY created_at, id",
+                                                      + " WHERE tenant_id = '" + tenantA + "' AND aggregate_type = 'REQUEST'"
+                                                      + " AND aggregate_id = '" + UUID.randomUUID() + "' ORDER BY created_at, id",
                 String.class);
 
         assertThat(String.join("\n", plan)).contains("idx_outbox_events_aggregate");
@@ -114,14 +116,14 @@ class OutboxEventAggregateIntegrationTest extends BaseIntegrationTest {
                     + " created_at, updated_at) VALUES (?, 'Арендатор', true, now(), now())",
                     tenantId);
             jdbcTemplate.update("INSERT INTO " + schema + ".outbox_events (id, tenant_id,"
-                    + " event_type, payload, status, next_attempt_at, created_at, updated_at)"
-                    + " VALUES (?, ?, 'REQUEST_CREATED', '{}', 'NEW', now(), now(), now())",
+                                + " event_type, payload, status, next_attempt_at, created_at, updated_at)"
+                                + " VALUES (?, ?, 'REQUEST_CREATED', '{}', 'NEW', now(), now(), now())",
                     eventId, tenantId);
 
             migrate(schema, null);
 
             assertThat(jdbcTemplate.queryForMap("SELECT event_type, aggregate_type, aggregate_id"
-                    + " FROM " + schema + ".outbox_events WHERE id = ?", eventId))
+                                                + " FROM " + schema + ".outbox_events WHERE id = ?", eventId))
                     .containsEntry("event_type", "REQUEST_CREATED")
                     .containsEntry("aggregate_type", null)
                     .containsEntry("aggregate_id", null);
@@ -140,8 +142,9 @@ class OutboxEventAggregateIntegrationTest extends BaseIntegrationTest {
 
     private UUID insertTenant() {
         UUID id = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO tenants (id, name, active, created_at, updated_at)"
-                + " VALUES (?, 'Арендатор', true, now(), now())", id);
+        jdbcTemplate.update("INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
+                            + " VALUES (?, 'Арендатор', ?, true, now(), now())",
+                id, "test-" + id);
         return id;
     }
 

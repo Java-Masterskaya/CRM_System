@@ -20,7 +20,7 @@ import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.NotFoundException;
-import ru.practicum.crm.tenant.api.context.TenantContext;
+import ru.practicum.crm.tenant.api.TenantContext;
 import ru.practicum.crm.tenant.api.dto.TenantSettingsDto;
 import ru.practicum.crm.tenant.api.mapper.TenantSettingsMapper;
 import ru.practicum.crm.tenant.domain.Tenant;
@@ -59,7 +59,7 @@ class TenantSettingsServiceImplTest {
 
     @Test
     void getTenantSettings_whenSettingsExist_returnsMappedDto() {
-        Tenant tenant = new Tenant("Test Tenant");
+        Tenant tenant = new Tenant("Test Tenant", "test-tenant");
         TenantSettings settings = new TenantSettings(tenant,
                 ZoneId.of("Europe/Moscow"));
         TenantSettingsDto expected = new TenantSettingsDto("Europe/Moscow");
@@ -87,7 +87,7 @@ class TenantSettingsServiceImplTest {
 
     @Test
     void updateTenantSettings_whenTimezoneProvided_updatesAndReturnsMappedDto() {
-        Tenant tenant = new Tenant("Test Tenant");
+        Tenant tenant = new Tenant("Test Tenant", "test-tenant");
         TenantSettings settings = new TenantSettings(tenant,
                 ZoneId.of("UTC"));
         final TenantSettingsDto request = new TenantSettingsDto("Europe/Paris");
@@ -106,7 +106,7 @@ class TenantSettingsServiceImplTest {
 
     @Test
     void updateTenantSettings_whenTimezoneIsNull_keepsExistingTimezone() {
-        Tenant tenant = new Tenant("Test Tenant");
+        Tenant tenant = new Tenant("Test Tenant", "test-tenant");
         TenantSettings settings = new TenantSettings(tenant, ZoneId.of("Europe/Moscow"));
         final TenantSettingsDto request = new TenantSettingsDto(null);
         TenantSettingsDto expected = new TenantSettingsDto("Europe/Moscow");

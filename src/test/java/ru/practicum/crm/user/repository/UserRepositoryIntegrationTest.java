@@ -37,10 +37,10 @@ class UserRepositoryIntegrationTest extends BaseIntegrationTest {
 
         entityManager.createNativeQuery(
                         """
-                        INSERT INTO tenants (id, name, active, created_at, updated_at)
+                        INSERT INTO tenants (id, name, slug, active, created_at, updated_at)
                         VALUES
-                            (:tenantA, 'Tenant A', true, NOW(), NOW()),
-                            (:tenantB, 'Tenant B', true, NOW(), NOW())
+                            (:tenantA, 'Tenant A', 'tenant-a', true, NOW(), NOW()),
+                            (:tenantB, 'Tenant B', 'tenant-b', true, NOW(), NOW())
                         """)
                 .setParameter("tenantA", tenantA)
                 .setParameter("tenantB", tenantB)
