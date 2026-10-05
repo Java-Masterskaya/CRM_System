@@ -8,6 +8,7 @@ import ru.practicum.crm.tenant.api.TenantContext;
 @Component
 public class ThreadLocalTenantContext implements TenantContext {
 
+    @Override
     public void setTenantId(UUID tenantId) {
         TenantIds.set(tenantId);
     }
@@ -17,6 +18,7 @@ public class ThreadLocalTenantContext implements TenantContext {
         return TenantIds.get();
     }
 
+    @Override
     public void clear() {
         TenantIds.clear();
     }

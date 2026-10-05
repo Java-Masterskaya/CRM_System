@@ -10,10 +10,7 @@ import ru.practicum.crm.tenant.api.TenantContext;
 
 public class TenantAwareJpaTransactionManager extends JpaTransactionManager {
 
-    @SuppressFBWarnings(
-            value = "EI_EXPOSE_REP2",
-            justification = "TenantContext is a Spring singleton; the transaction manager keeps is."
-    )
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP2")
     private final TenantContext tenantContext;
 
     public TenantAwareJpaTransactionManager(

@@ -1,4 +1,4 @@
-package ru.practicum.crm.tenant.repository;
+package ru.practicum.crm.request.repository;
 
 import static org.assertj.core.api.AssertionsForClassTypes.catchThrowableOfType;
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
@@ -27,9 +27,7 @@ import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.NotFoundException;
 import ru.practicum.crm.request.domain.Request;
 import ru.practicum.crm.request.domain.RequestStatus;
-import ru.practicum.crm.request.repository.RequestRepository;
 import ru.practicum.crm.tenant.api.TenantContext;
-
 
 public class TenantIsolationIT extends BaseIntegrationTest {
 
@@ -122,7 +120,7 @@ public class TenantIsolationIT extends BaseIntegrationTest {
         tenantContext.setTenantId(tenantB);
         int updated = transactionTemplate.execute(status ->
                 entityManager.createQuery(
-                "update Request as r set r.subject = :subject where r.id = :id")
+                                "update Request as r set r.subject = :subject where r.id = :id")
                         .setParameter("subject", "Подмена")
                         .setParameter("id", foreignId)
                         .executeUpdate());
@@ -159,7 +157,7 @@ public class TenantIsolationIT extends BaseIntegrationTest {
             boolean previewsAutoCommit = con.getAutoCommit();
             con.setAutoCommit(false);
             try {
-                try(Statement reset = con.createStatement()) {
+                try (Statement reset = con.createStatement()) {
                     reset.execute("SET SESSION AUTHORIZATION crm_app");
                 }
                 try (PreparedStatement setting = con.prepareStatement(
@@ -169,9 +167,9 @@ public class TenantIsolationIT extends BaseIntegrationTest {
                 }
 
                 List<UUID> ids = new ArrayList<>();
-                try (PreparedStatement query = con.prepareStatement(
-                        "SELECT id FROM requests ORDER BY subject");
-                     ResultSet resultSet = query.executeQuery()) {
+                try (var query =
+                             con.prepareStatement("SELECT id FROM requests ORDER BY subject");
+                             ResultSet resultSet = query.executeQuery()) {
                     while (resultSet.next()) {
                         ids.add(resultSet.getObject(1, UUID.class));
                     }
@@ -207,21 +205,23 @@ public class TenantIsolationIT extends BaseIntegrationTest {
 
     private UUID insertTenant(String name) {
         UUID id = UUID.randomUUID();
-        jdbcTemplate.update("""
-        INSERT INTO tenants (id, name, active, created_at, updated_at)
-        VALUES (?, ?, true, now(), now())
-    """, id, name);
+        jdbcTemplate.update(
+                """
+                INSERT INTO tenants (id, name, active, created_at, updated_at)
+                VALUES (?, ?, true, now(), now())
+                """, id, name);
         return id;
     }
 
     private UUID insertRequest(UUID tenantId, String subject) {
         UUID id = UUID.randomUUID();
-        jdbcTemplate.update("""
-        INSERT INTO requests
-            (id, tenant_id, subject, description, status, author_id, overdue, deleted,
-             version, created_at, updated_at)
-        VALUES (?, ?, ?, 'Описание', 'NEW', ?, false, false, 0, now(), now())
-    """, id, tenantId, subject, authorId);
+        jdbcTemplate.update(
+                """
+                INSERT INTO requests
+                    (id, tenant_id, subject, description, status, author_id, overdue, deleted,
+                     version, created_at, updated_at)
+                VALUES (?, ?, ?, 'Описание', 'NEW', ?, false, false, 0, now(), now())
+                """, id, tenantId, subject, authorId);
         return id;
     }
 
