@@ -23,6 +23,9 @@ public class Tenant extends BaseEntity {
     @Column(nullable = false)
     private boolean active;
 
+    @Column
+    private String slug;
+
     @OneToOne(
             mappedBy = "tenant",
             cascade = CascadeType.ALL,
@@ -39,6 +42,12 @@ public class Tenant extends BaseEntity {
     public Tenant(String name, boolean active) {
         this.name = name;
         this.active = active;
+    }
+
+    public Tenant(String name, String slug) {
+        this.name = name;
+        this.slug = slug;
+        this.active = true;
     }
 
     @SuppressFBWarnings(

@@ -10,5 +10,9 @@ public interface TenantRepository extends Repository<Tenant, UUID> {
 
     Optional<Tenant> findById(UUID id);
 
+    Optional<Tenant> findBySlug(String slug);
+
     boolean existsByIdAndActiveTrue(UUID id);
+
+    boolean existsBySlug(String slug);
 }

@@ -47,4 +47,17 @@ public class TenantRepositoryIntegrationTest extends BaseIntegrationTest {
         assertThat(repository.findById(second.getId()).orElseThrow().getName())
                 .isEqualTo("Tenant B");
     }
+
+    @Test
+    void findBySlug_whenTenantExists_returnsTenant() {
+        Tenant saved = repository.save(
+                new Tenant("Tenant A", "tenant-a")
+        );
+
+        Tenant found = repository.findBySlug("tenant-a").orElseThrow();
+
+        assertThat(found.getId()).isEqualTo(saved.getId());
+        assertThat(found.getName()).isEqualTo("Tenant A");
+        assertThat(found.getSlug()).isEqualTo("tenant-a");
+    }
 }
