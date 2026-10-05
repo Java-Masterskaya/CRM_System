@@ -5,6 +5,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -15,6 +16,8 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -42,29 +45,20 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
     @AfterEach
     void tearDown() {
         tenantContext.clear();
+        TestController.tenantSeenByController = null;
     }
 
     @Test
-    void request_whenAuthenticatedWithTenant_passesTenantToBusinessLayer()
-            throws Exception {
+    void request_whenAuthenticatedWithTenant_passesTenantToBusinessLayer() throws Exception {
 
-        org.mockito.Mockito.when(
-                        tenantActiveChecker.isActive(TENANT_ID))
+        org.mockito.Mockito.when(tenantActiveChecker.isActive(TENANT_ID))
                 .thenReturn(true);
 
-        Authentication authentication =
-                new UsernamePasswordAuthenticationToken(
-                        new TenantPrincipal(TENANT_ID),
-                        null,
-                        List.of());
-
-        mockMvc.perform(
-                        get("/admin/test/tenant")
-                                .with(authentication(authentication)))
+        mockMvc.perform(get("/admin/test/tenant")
+                        .with(authentication(jwtAuthentication())))
                 .andExpect(status().isOk());
 
-        assertThat(TestController.tenantSeenByController)
-                .isEqualTo(TENANT_ID);
+        assertThat(TestController.tenantSeenByController).isEqualTo(TENANT_ID);
     }
 
     @Test
@@ -79,22 +73,12 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void request_whenTenantIsInactive_returnsUnauthorized()
-            throws Exception {
+    void request_whenTenantIsInactive_returnsUnauthorized() throws Exception {
 
-        org.mockito.Mockito.when(
-                        tenantActiveChecker.isActive(TENANT_ID))
-                .thenReturn(false);
+        org.mockito.Mockito.when(tenantActiveChecker.isActive(TENANT_ID)).thenReturn(false);
 
-        Authentication authentication =
-                new UsernamePasswordAuthenticationToken(
-                        new TenantPrincipal(TENANT_ID),
-                        null,
-                        List.of());
-
-        mockMvc.perform(
-                        get("/admin/test/tenant")
-                                .with(authentication(authentication)))
+        mockMvc.perform(get("/admin/test/tenant")
+                        .with(authentication(jwtAuthentication())))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -117,6 +101,20 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isOk());
 
         assertThat(tenantContext.getCurrentTenantId()).isNull();
+    }
+
+    private Authentication jwtAuthentication() {
+        Instant now = Instant.now();
+
+        Jwt jwt = Jwt.withTokenValue("test-token")
+                .header("alg", "HS256")
+                .subject("test-user-id")
+                .claim("tenant_id", TENANT_ID.toString())
+                .issuedAt(now)
+                .expiresAt(now.plusSeconds(3600))
+                .build();
+
+        return new JwtAuthenticationToken(jwt, List.of());
     }
 
     @RestController

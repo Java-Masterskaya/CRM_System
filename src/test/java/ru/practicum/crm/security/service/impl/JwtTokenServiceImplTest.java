@@ -1,4 +1,4 @@
-package ru.practicum.crm.security.service;
+package ru.practicum.crm.security.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -25,7 +25,7 @@ import ru.practicum.crm.security.config.JwtAlgorithm;
 import ru.practicum.crm.security.config.JwtProperties;
 
 @ExtendWith(MockitoExtension.class)
-class JwtTokenServiceTest {
+class JwtTokenServiceImplTest {
 
     private static final Instant ISSUED_AT = Instant.parse("2026-01-01T12:00:00Z");
     private static final Duration ACCESS_TTL = Duration.ofMinutes(15);
@@ -51,7 +51,7 @@ class JwtTokenServiceTest {
         when(jwtEncoder.encode(any(JwtEncoderParameters.class)))
                 .thenReturn(encodedJwt);
 
-        JwtTokenService service = new JwtTokenService(
+        JwtTokenServiceImpl service = new JwtTokenServiceImpl(
                 jwtEncoder,
                 new JwtProperties(
                         "test-secret",
