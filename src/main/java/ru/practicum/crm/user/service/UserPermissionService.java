@@ -4,7 +4,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.practicum.crm.user.domain.PermissionCode;
+import ru.practicum.crm.security.api.PermissionCode;
 import ru.practicum.crm.user.repository.PermissionRepository;
 
 @Service

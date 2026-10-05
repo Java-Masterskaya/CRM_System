@@ -1,8 +1,11 @@
 package ru.practicum.crm.platform.config;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -18,21 +21,25 @@ class OpenApiDocsTest extends BaseIntegrationTest {
     private MockMvc mockMvc;
 
     @Test
-    void apiDocs_whenRequested_isUnavailableFromExternalContour() throws Exception {
+    void apiDocs_whenRequestedInDevelopment_returnsOpenApiDocument() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.openapi").isNotEmpty())
+                .andExpect(jsonPath("$.paths").isNotEmpty());
     }
 
     @Test
-    void apiDocs_whenControllerExists_isUnavailableFromExternalContour() throws Exception {
-        mockMvc.perform(get("/v3/api-docs"))
-                .andExpect(status().isUnauthorized());
+    void swagger_whenConfigurationRequested_returnsApiDocsUrl() throws Exception {
+        mockMvc.perform(get("/v3/api-docs/swagger-config"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.url").value("/v3/api-docs"));
     }
 
     @Test
-    void swaggerUi_whenRequestedInDevelopment_isUnavailableFromExternalContour()
+    void swaggerUi_whenRequestedInDevelopment_servesUiPage()
             throws Exception {
-        mockMvc.perform(get("/swagger-ui.html"))
-                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/swagger-ui/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(Matchers.containsString("swagger-ui")));
     }
 }

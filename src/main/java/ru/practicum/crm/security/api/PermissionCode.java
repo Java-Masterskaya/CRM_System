@@ -1,4 +1,4 @@
-package ru.practicum.crm.user.domain;
+package ru.practicum.crm.security.api;
 
 /** Допустимые коды прав, хранящихся в каталоге доступа. */
 public enum PermissionCode {

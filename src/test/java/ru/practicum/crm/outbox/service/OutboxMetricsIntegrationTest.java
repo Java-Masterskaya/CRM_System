@@ -1,7 +1,7 @@
 package ru.practicum.crm.outbox.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.http.HttpStatus.UNAUTHORIZED;
+import static org.springframework.http.HttpStatus.OK;
 
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
@@ -158,13 +158,21 @@ class OutboxMetricsIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void prometheusEndpoint_afterDelivery_isUnavailableFromExternalContour() {
+    void prometheusEndpoint_afterDelivery_exposesQueueMetrics() {
         saveEvent(DELIVERED);
         processor.processBatch();
 
-        assertThat(rest.getForEntity(
-                "http://localhost:" + managementPort + "/actuator/prometheus", String.class)
-                .getStatusCode()).isEqualTo(UNAUTHORIZED);
+        var response = rest.getForEntity(
+                "http://localhost:" + managementPort + "/actuator/prometheus", String.class);
+        String metrics = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(OK);
+        assertThat(metrics).isNotNull();
+        assertThat(metrics).contains("crm_outbox_delivery_attempts_total{");
+        assertThat(metrics).contains("outcome=\"success\"");
+        assertThat(metrics).contains("crm_outbox_events{");
+        assertThat(metrics).contains("status=\"FAILED\"");
+        assertThat(metrics).contains("crm_outbox_oldest_pending_age_seconds");
     }
 
     /**
@@ -173,11 +181,18 @@ class OutboxMetricsIntegrationTest extends BaseIntegrationTest {
      * регистрации при запуске, в каком бы порядке ни шли тесты.
      */
     @Test
-    void prometheusEndpoint_withoutWaitingForAttempts_isUnavailableFromExternalContour() {
+    void prometheusEndpoint_withoutWaitingForAttempts_exposesSuccessSeriesForEverySender() {
         assertThat(senders).extracting(OutboxEventSender::eventType).contains(FAILING);
-        assertThat(rest.getForEntity(
-                "http://localhost:" + managementPort + "/actuator/prometheus", String.class)
-                .getStatusCode()).isEqualTo(UNAUTHORIZED);
+        var response = rest.getForEntity(
+                "http://localhost:" + managementPort + "/actuator/prometheus", String.class);
+        String metrics = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(OK);
+        assertThat(metrics).isNotNull();
+        assertThat(metrics).contains("crm_outbox_delivery_attempts_total{");
+        assertThat(senders).allSatisfy(sender -> assertThat(metrics)
+                .contains("event_type=\"" + sender.eventType() + "\"",
+                        "outcome=\"success\""));
     }
 
     private UUID saveEvent(String type) {

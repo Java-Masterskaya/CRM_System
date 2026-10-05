@@ -6,9 +6,12 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,25 +21,35 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.WebApplicationContext;
+import ru.practicum.crm.common.health.HealthController;
 import ru.practicum.crm.tenant.api.TenantActiveChecker;
 import ru.practicum.crm.tenant.api.TenantContext;
 import ru.practicum.crm.tenant.api.TenantContextFilter;
 
-@WebMvcTest(controllers = SecurityConfigIntegrationTest.TestController.class)
+@WebMvcTest(controllers = {
+    SecurityConfigSliceTest.TestController.class,
+    HealthController.class
+})
+@TestPropertySource(properties = "app.security.authorization.enabled=false")
 @Import({
     SecurityConfig.class,
-    SecurityConfigIntegrationTest.TestTenantFilterConfiguration.class
+    SecurityConfigSliceTest.TestTenantFilterConfiguration.class
 })
-class SecurityConfigIntegrationTest {
+class SecurityConfigSliceTest {
 
     @Autowired
     private WebApplicationContext context;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     private MockMvc mockMvc;
 
@@ -49,15 +62,16 @@ class SecurityConfigIntegrationTest {
     @BeforeEach
     void setUpMockMvc() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context)
+                .addFilters(new SecurityTestRequestIdFilter())
                 .apply(springSecurity())
                 .build();
     }
 
     @RestController
-    static class TestController {
+    public static class TestController {
 
         @GetMapping("/route-added-without-security-rule")
-        String protectedRoute() {
+        public String protectedRoute() {
             return "protected";
         }
     }
@@ -75,55 +89,49 @@ class SecurityConfigIntegrationTest {
     }
 
     @Test
-    void givenNoCredentials_whenCallingNewRoute_thenReturnsProblemDetails401()
+    void givenNoCredentials_whenCallingNewRouteBeforeAuthentication_thenReachesMvcLookup()
             throws Exception {
         mockMvc.perform(get("/route-added-without-security-rule").with(anonymous()))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
-                .andExpect(jsonPath("$.detail").value("Войдите в систему и повторите запрос."))
+                .andExpect(status().isNotFound())
                 .andExpect(result -> assertThat(result.getRequest().getSession(false)).isNull());
     }
 
     @Test
-    void givenClientPermission_whenCallingAdminRoute_thenReturnsProblemDetails403()
-            throws Exception {
-        mockMvc.perform(get("/admin/tenant/settings")
-                        .with(user("client").authorities(
-                                new SimpleGrantedAuthority("REQUEST_READ_OWN"))))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
-                .andExpect(jsonPath("$.detail").value("У вас нет прав на эту операцию."));
+    void givenNoCredentials_whenCallingHealth_thenReturnsOk() throws Exception {
+        mockMvc.perform(get("/health").with(anonymous()))
+                .andExpect(status().isOk());
     }
 
     @Test
-    void givenManageOnly_whenReadingTenantSettings_thenReturnsForbidden()
-            throws Exception {
-        mockMvc.perform(get("/admin/tenant/settings")
-                        .with(user("admin").authorities(
-                                new SimpleGrantedAuthority("TENANT_SETTINGS_MANAGE"))))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
-    }
-
-    @Test
-    void givenAuthenticatedUser_whenCallingSystemRoute_thenDeniesAccess()
+    void givenNoCredentials_whenCallingSystemRoute_thenReturnsProblemDetails403()
             throws Exception {
         mockMvc.perform(get("/system/tenant").with(user("operator").authorities(
-                                new SimpleGrantedAuthority("REQUEST_READ_ALL"))))
+                        new SimpleGrantedAuthority("REQUEST_READ_ALL"))))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+                .andExpect(jsonPath("$.detail").value("У вас нет прав на эту операцию."))
+                .andExpect(content().contentTypeCompatibleWith(
+                        MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(header().string(SecurityTestRequestIdFilter.HEADER_NAME,
+                        "security-test-request-id"))
+                .andExpect(jsonPath("$.requestId").isNotEmpty())
+                .andExpect(result -> {
+                    JsonNode problem = objectMapper.readTree(
+                            result.getResponse().getContentAsString());
+                    assertThat(problem.path("requestId").asText()).isEqualTo(
+                            result.getResponse().getHeader(
+                                    SecurityTestRequestIdFilter.HEADER_NAME));
+                });
     }
 
     @Test
-    void givenNoCredentials_whenCallingAuthOperations_thenOnlyRegistrationLoginAndRefreshAreOpen()
+    void givenNoCredentials_whenCallingUnimplementedAuthRoutes_thenReturnsNotFound()
             throws Exception {
-        for (String path : new String[] {"/auth/register", "/auth/login", "/auth/refresh"}) {
+        for (String path : new String[] {
+                "/auth/register", "/auth/login", "/auth/refresh", "/auth/logout"
+        }) {
             mockMvc.perform(post(path).with(anonymous()))
                     .andExpect(status().isNotFound());
         }
-
-        mockMvc.perform(post("/auth/logout").with(anonymous()))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
     }
 }

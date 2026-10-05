@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,6 +26,7 @@ import ru.practicum.crm.tenant.api.TenantActiveChecker;
 import ru.practicum.crm.tenant.api.TenantContext;
 
 @AutoConfigureMockMvc
+@TestPropertySource(properties = "app.security.authorization.enabled=false")
 @Import(TenantContextFilterIntegrationTest.TestController.class)
 class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
 
@@ -69,12 +71,12 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void request_whenAuthenticationIsMissing_isRejected()
+    void request_whenAuthenticationIsMissing_passesWithoutTenantContext()
             throws Exception {
 
         TestController.setTenantSeen(null);
         mockMvc.perform(get("/admin/test/tenant"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isOk());
 
         assertThat(TestController.tenantSeenByController)
                 .isNull();

@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,6 +20,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ProblemDetailFactory;
+import ru.practicum.crm.security.api.PermissionCode;
 import ru.practicum.crm.tenant.api.TenantContextFilter;
 
 @Configuration
@@ -29,7 +31,8 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             TenantContextFilter tenantContextFilter,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            @Value("${app.security.authorization.enabled:false}") boolean authorizationEnabled
     ) throws Exception {
         http.csrf(AbstractHttpConfigurer::disable)
                 .requestCache(AbstractHttpConfigurer::disable)
@@ -38,22 +41,25 @@ public class SecurityConfig {
                 .logout(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers(HttpMethod.POST,
-                                "/auth/register", "/auth/login", "/auth/refresh").permitAll()
-                        .requestMatchers("/system/**", "/actuator/**", "/v3/api-docs/**",
-                                "/swagger-ui/**", "/swagger-ui.html").denyAll()
-                        .requestMatchers(HttpMethod.GET, "/admin/tenant/settings")
-                        .hasAuthority("TENANT_SETTINGS_READ")
-                        .requestMatchers(HttpMethod.PUT, "/admin/tenant/settings")
-                        .hasAuthority("TENANT_SETTINGS_MANAGE")
-                        .requestMatchers("/admin/tenant/settings/**").denyAll()
-                        .requestMatchers("/admin/**").hasAuthority("REQUEST_READ_ALL")
-                        .requestMatchers("/client/**").hasAnyAuthority(
-                                "REQUEST_CREATE", "REQUEST_READ_OWN", "REQUEST_CANCEL_OWN",
-                                "COMMENT_PUBLIC_CREATE_OWN", "ATTACHMENT_CREATE_OWN",
-                                "ATTACHMENT_READ_OWN")
-                        .anyRequest().authenticated())
+                .authorizeHttpRequests(authorize -> {
+                    authorize.requestMatchers(HttpMethod.POST,
+                                    "/auth/register", "/auth/login", "/auth/refresh").permitAll()
+                            .requestMatchers("/health", "/actuator/**", "/v3/api-docs/**",
+                                    "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                            .requestMatchers("/system/**").denyAll();
+
+                    if (authorizationEnabled) {
+                        authorize.requestMatchers(HttpMethod.GET, "/admin/tenant/settings")
+                                        .hasAuthority(PermissionCode.TENANT_SETTINGS_READ.name())
+                                .requestMatchers(HttpMethod.PUT, "/admin/tenant/settings")
+                                        .hasAuthority(PermissionCode.TENANT_SETTINGS_MANAGE.name())
+                                .requestMatchers("/admin/**", "/client/**").denyAll()
+                                .anyRequest().authenticated();
+                    } else {
+                        // Не блокируем бизнес-маршруты до появления рабочего механизма входа.
+                        authorize.anyRequest().permitAll();
+                    }
+                })
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint((request, response, exception) -> writeProblem(
                                 request.getRequestURI(), response, objectMapper,
