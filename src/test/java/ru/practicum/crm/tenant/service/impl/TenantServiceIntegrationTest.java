@@ -52,5 +52,16 @@ class TenantServiceIntegrationTest extends BaseIntegrationTest {
                 .orElseThrow();
         assertThat(savedSettings.getTenantId()).isEqualTo(tenantId);
         assertThat(savedSettings.getTimezone()).isEqualTo(ZoneId.of("UTC"));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM roles WHERE tenant_id = ?",
+                Integer.class,
+                tenantId
+        )).isEqualTo(3);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM permissions WHERE tenant_id = ?",
+                Integer.class,
+                tenantId
+        )).isEqualTo(25);
     }
 }
