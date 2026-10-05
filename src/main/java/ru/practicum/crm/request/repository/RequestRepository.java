@@ -35,7 +35,7 @@ public interface RequestRepository extends Repository<Request, UUID> {
 
     Optional<Request> findByIdAndDeletedFalse(UUID id);
 
-    Page<Request> findByDeletedFalse(UUID tenantId, Pageable pageable);
+    Page<Request> findByDeletedFalse(Pageable pageable);
 
     @Modifying(clearAutomatically = true)
     @Query(value = "delete from requests r where r.id = :id", nativeQuery = true)
