@@ -7,7 +7,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
-import ru.practicum.crm.system.api.SystemSecretFilter;
+import ru.practicum.crm.security.system.SystemSecretFilter;
 import ru.practicum.crm.tenant.api.TenantContextFilter;
 
 @Configuration
@@ -16,13 +16,12 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            TenantContextFilter tenantContextFilter, SystemSecretFilter systemSecretFilter
+            TenantContextFilter tenantContextFilter
     ) throws Exception {
         http.csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(authorize ->
                         authorize.anyRequest().permitAll())
-                .addFilterAfter(tenantContextFilter, SecurityContextHolderFilter.class)
-                .addFilterAfter(systemSecretFilter,SecurityContextHolderFilter.class);
+                .addFilterAfter(tenantContextFilter, SecurityContextHolderFilter.class);
 
         return http.build();
     }

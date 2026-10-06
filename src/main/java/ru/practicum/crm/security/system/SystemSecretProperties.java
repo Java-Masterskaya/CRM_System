@@ -1,4 +1,4 @@
-package ru.practicum.crm.system.config;
+package ru.practicum.crm.security.system;
 
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;

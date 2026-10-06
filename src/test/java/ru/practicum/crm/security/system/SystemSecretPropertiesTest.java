@@ -1,4 +1,4 @@
-package ru.practicum.crm.system.config;
+package ru.practicum.crm.security.system;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

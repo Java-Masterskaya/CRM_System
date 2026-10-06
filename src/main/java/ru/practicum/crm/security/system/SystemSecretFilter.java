@@ -1,22 +1,21 @@
-package ru.practicum.crm.system.api;
+package ru.practicum.crm.security.system;
 
-import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.http.MediaType;
-import org.springframework.http.ProblemDetail;
-import org.springframework.web.filter.OncePerRequestFilter;
-import ru.practicum.crm.common.error.ErrorCode;
-import ru.practicum.crm.common.error.ProblemDetailFactory;
-import ru.practicum.crm.system.config.SystemSecretProperties;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.filter.OncePerRequestFilter;
+import ru.practicum.crm.common.error.ErrorCode;
+import ru.practicum.crm.common.error.ProblemDetailFactory;
 
 public class SystemSecretFilter extends OncePerRequestFilter {
 
@@ -31,11 +30,11 @@ public class SystemSecretFilter extends OncePerRequestFilter {
     }
 
     @Override
-   protected boolean shouldNotFilter(HttpServletRequest request) {
-String path = request.getRequestURI()
-        .substring(request.getContextPath().length());
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI()
+                .substring(request.getContextPath().length());
 
-return !path.startsWith("/system");
+        return !path.startsWith("/system");
     }
 
     @Override
@@ -47,10 +46,10 @@ return !path.startsWith("/system");
         String providedSecret = request.getHeader(SECRET_HEADER);
 
         if (providedSecret == null || !constantTimeEquals(properties.secret(), providedSecret)) {
- writeUnauthorized(request, response);
- return;
+            writeUnauthorized(request, response);
+            return;
         }
-filterChain.doFilter(request, response);
+        filterChain.doFilter(request, response);
     }
 
     private boolean constantTimeEquals(String expected, String actual) {
@@ -61,9 +60,9 @@ filterChain.doFilter(request, response);
     private void writeUnauthorized(HttpServletRequest request,
                                    HttpServletResponse response) throws IOException {
 
-response.setStatus(ErrorCode.UNAUTHENTICATED.getStatus().value());
-response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setStatus(ErrorCode.UNAUTHENTICATED.getStatus().value());
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
 
         ProblemDetail problem = ProblemDetailFactory.create(ErrorCode.UNAUTHENTICATED,
                 "требуется корректный секрет служебного контура",

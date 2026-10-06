@@ -1,10 +1,9 @@
-package ru.practicum.crm.system.config;
+package ru.practicum.crm.security.system;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import ru.practicum.crm.system.api.SystemSecretFilter;
 
 @Configuration
 public class SystemFilterConfig {
@@ -19,9 +18,6 @@ public class SystemFilterConfig {
     public FilterRegistrationBean<SystemSecretFilter> systemSecretFilterRegistration(
             SystemSecretFilter filter
     ) {
-        FilterRegistrationBean<SystemSecretFilter> registration =
-                new FilterRegistrationBean<>(filter);
-        registration.setEnabled(false);
-        return registration;
+        return new FilterRegistrationBean<>(filter);
     }
 }
