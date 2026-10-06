@@ -67,4 +67,5 @@ class TenantSettingsControllerTest {
 
         verify(service, never()).updateTenantSettings(any(TenantSettingsDto.class));
     }
+
 }
