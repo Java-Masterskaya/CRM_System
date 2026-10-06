@@ -15,6 +15,7 @@ import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import ru.practicum.crm.common.model.RequestPriority;
 import ru.practicum.crm.common.model.TenantScopedEntity;
 
 /**
