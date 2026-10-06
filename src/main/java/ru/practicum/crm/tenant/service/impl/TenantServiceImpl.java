@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
+import ru.practicum.crm.tenant.api.TenantService;
 import ru.practicum.crm.tenant.api.dto.TenantAuthDto;
 import ru.practicum.crm.tenant.api.dto.TenantDto;
 import ru.practicum.crm.tenant.api.mapper.TenantMapper;
@@ -13,7 +14,6 @@ import ru.practicum.crm.tenant.api.seeding.TenantAccessSeeder;
 import ru.practicum.crm.tenant.domain.Tenant;
 import ru.practicum.crm.tenant.domain.TenantSettings;
 import ru.practicum.crm.tenant.repository.TenantRepository;
-import ru.practicum.crm.tenant.service.TenantService;
 
 @Service
 @RequiredArgsConstructor

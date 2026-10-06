@@ -8,11 +8,11 @@ import ru.practicum.crm.security.api.dto.LoginRequest;
 import ru.practicum.crm.security.service.AuthService;
 import ru.practicum.crm.security.service.JwtTokenService;
 import ru.practicum.crm.security.service.RefreshTokenService;
+import ru.practicum.crm.tenant.api.TenantService;
 import ru.practicum.crm.tenant.api.dto.TenantAuthDto;
-import ru.practicum.crm.tenant.service.TenantService;
+import ru.practicum.crm.user.api.UserPermissionService;
+import ru.practicum.crm.user.api.UserService;
 import ru.practicum.crm.user.api.dto.AuthenticatedUserDto;
-import ru.practicum.crm.user.service.UserPermissionService;
-import ru.practicum.crm.user.service.UserService;
 
 @Service
 @RequiredArgsConstructor

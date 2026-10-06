@@ -1,4 +1,4 @@
-package ru.practicum.crm.tenant.service;
+package ru.practicum.crm.tenant.api;
 
 import ru.practicum.crm.tenant.api.dto.TenantAuthDto;
 import ru.practicum.crm.tenant.api.dto.TenantDto;

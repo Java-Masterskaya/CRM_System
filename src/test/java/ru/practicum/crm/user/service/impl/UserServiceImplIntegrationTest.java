@@ -14,6 +14,7 @@ import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.tenant.api.TenantContext;
+import ru.practicum.crm.user.api.UserService;
 import ru.practicum.crm.user.api.dto.ChangePasswordRequest;
 import ru.practicum.crm.user.api.dto.CreateUserRequest;
 import ru.practicum.crm.user.api.dto.UserDto;
@@ -21,7 +22,6 @@ import ru.practicum.crm.user.context.UserContext;
 import ru.practicum.crm.user.domain.UserEntity;
 import ru.practicum.crm.user.domain.UserStatus;
 import ru.practicum.crm.user.repository.UserRepository;
-import ru.practicum.crm.user.service.UserService;
 import ru.practicum.testsupport.TenantTestFixture;
 
 @Import(TenantTestFixture.class)

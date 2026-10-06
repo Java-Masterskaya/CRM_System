@@ -8,8 +8,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
-import ru.practicum.crm.security.api.PasswordPolicy;
 import ru.practicum.crm.tenant.api.TenantContext;
+import ru.practicum.crm.user.api.PasswordPolicy;
+import ru.practicum.crm.user.api.UserService;
 import ru.practicum.crm.user.api.dto.AuthenticatedUserDto;
 import ru.practicum.crm.user.api.dto.ChangePasswordRequest;
 import ru.practicum.crm.user.api.dto.CreateUserRequest;
@@ -19,7 +20,6 @@ import ru.practicum.crm.user.context.UserContext;
 import ru.practicum.crm.user.domain.UserEntity;
 import ru.practicum.crm.user.domain.UserStatus;
 import ru.practicum.crm.user.repository.UserRepository;
-import ru.practicum.crm.user.service.UserService;
 
 @Service
 @RequiredArgsConstructor

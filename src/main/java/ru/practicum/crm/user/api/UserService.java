@@ -1,4 +1,4 @@
-package ru.practicum.crm.user.service;
+package ru.practicum.crm.user.api;
 
 import java.util.UUID;
 import ru.practicum.crm.user.api.dto.AuthenticatedUserDto;

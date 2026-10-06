@@ -8,8 +8,8 @@ import org.springframework.stereotype.Component;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ValidationError;
-import ru.practicum.crm.security.api.PasswordPolicy;
 import ru.practicum.crm.security.config.PasswordPolicyProperties;
+import ru.practicum.crm.user.api.PasswordPolicy;
 
 @Component
 @RequiredArgsConstructor
@@ -80,5 +80,4 @@ class PasswordPolicyImpl implements PasswordPolicy {
             );
         }
     }
-
 }
