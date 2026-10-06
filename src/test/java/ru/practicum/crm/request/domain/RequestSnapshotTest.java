@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import ru.practicum.crm.common.model.RequestPriority;
 
 class RequestSnapshotTest {
 

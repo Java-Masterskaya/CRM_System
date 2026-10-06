@@ -41,6 +41,10 @@ spring:
         await-termination-period: 30s
 
 app:
+  security:
+    authorization:
+      # Включить после появления входа и пользователей с назначенными правами.
+      enabled: ${APP_SECURITY_AUTHORIZATION_ENABLED:false}
   outbox:
     scheduler-enabled: ${OUTBOX_SCHEDULER_ENABLED:true}
     batch-size: ${OUTBOX_BATCH_SIZE:50}
