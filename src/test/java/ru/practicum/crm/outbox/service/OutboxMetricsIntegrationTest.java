@@ -190,9 +190,10 @@ class OutboxMetricsIntegrationTest extends BaseIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(OK);
         assertThat(metrics).isNotNull();
         assertThat(metrics).contains("crm_outbox_delivery_attempts_total{");
-        assertThat(senders).allSatisfy(sender -> assertThat(metrics)
-                .contains("event_type=\"" + sender.eventType() + "\"",
-                        "outcome=\"success\""));
+        List<String> metricLines = metrics.lines().toList();
+        assertThat(senders).allSatisfy(sender -> assertThat(metricLines)
+                .anyMatch(line -> line.contains("event_type=\"" + sender.eventType() + "\"")
+                        && line.contains("outcome=\"success\"")));
     }
 
     private UUID saveEvent(String type) {
