@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.Objects;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -213,8 +214,15 @@ class AuthServiceImplIntegrationTest extends BaseIntegrationTest {
     }
 
     private int refreshTokenCount() {
-        return jdbcTemplate.queryForObject("SELECT COUNT(*) FROM refresh_tokens",
-                Integer.class);
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM refresh_tokens",
+                Integer.class
+        );
+
+        return Objects.requireNonNull(
+                count,
+                "COUNT(*) query returned null"
+        );
     }
 
     private String sha256(String token)

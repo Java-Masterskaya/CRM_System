@@ -22,6 +22,7 @@ spring:
       connection-timeout: 2000
       validation-timeout: 1000
       initialization-fail-timeout: -1
+      maximum-pool-size: 10
 
   # У Jakarta Mail тайм-ауты по умолчанию не ограничены: неотвечающий почтовый сервер держал бы
   # отправку бесконечно. Значения — в миллисекундах.

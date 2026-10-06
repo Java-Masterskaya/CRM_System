@@ -39,13 +39,16 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private TestController testController;
+
     @MockBean
     private TenantActiveChecker tenantActiveChecker;
 
     @AfterEach
     void tearDown() {
         tenantContext.clear();
-        TestController.tenantSeenByController = null;
+        testController.clear();
     }
 
     @Test
@@ -58,7 +61,7 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
                         .with(authentication(jwtAuthentication())))
                 .andExpect(status().isOk());
 
-        assertThat(TestController.tenantSeenByController).isEqualTo(TENANT_ID);
+        assertThat(testController.getTenantSeenByController()).isEqualTo(TENANT_ID);
     }
 
     @Test
@@ -68,8 +71,7 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(get("/admin/test/tenant"))
                 .andExpect(status().isOk());
 
-        assertThat(TestController.tenantSeenByController)
-                .isNull();
+        assertThat(testController.getTenantSeenByController()).isNull();
     }
 
     @Test
@@ -123,16 +125,20 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
         @Autowired
         private TenantContext tenantContext;
 
-        private static UUID tenantSeenByController;
+        private UUID tenantSeenByController;
 
-        private static void setTenantSeen(UUID value) {
-            tenantSeenByController = value;
+        void clear() {
+            tenantSeenByController = null;
+        }
+
+        UUID getTenantSeenByController() {
+            return tenantSeenByController;
         }
 
         @GetMapping("/admin/test/tenant")
         UUID tenant() {
             UUID currentTenant = tenantContext.getCurrentTenantId();
-            setTenantSeen(currentTenant);
+            tenantSeenByController = currentTenant;
             return currentTenant;
         }
     }

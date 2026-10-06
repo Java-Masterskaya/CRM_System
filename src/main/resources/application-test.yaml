@@ -9,6 +9,13 @@ spring:
     password: ${app.database.password}
     driver-class-name: org.postgresql.Driver
 
+    hikari:
+      maximum-pool-size: 2
+      minimum-idle: 0
+      connection-timeout: 2000
+      validation-timeout: 1000
+      initialization-fail-timeout: -1
+
   mail:
     host: ${app.mail.host}
     port: ${app.mail.port}

@@ -57,7 +57,7 @@ public class AuthTestFixture {
     }
 
     public void blockUser(UUID tenantId, UUID userId) {
-        UserEntity user = userRepository.findById(tenantId, userId)
+        UserEntity user = userRepository.findById(userId, tenantId)
                 .orElseThrow();
 
         user.block();
@@ -65,7 +65,7 @@ public class AuthTestFixture {
     }
 
     public void deleteUser(UUID tenantId, UUID userId) {
-        UserEntity user = userRepository.findById(tenantId, userId)
+        UserEntity user = userRepository.findById(userId, tenantId)
                 .orElseThrow();
 
         user.delete();
