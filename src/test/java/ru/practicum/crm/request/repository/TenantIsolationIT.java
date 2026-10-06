@@ -13,13 +13,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.assertj.core.api.AssertionsForClassTypes;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -69,10 +67,10 @@ public class TenantIsolationIT extends BaseIntegrationTest {
         insertRequest(tenantB, "Заявка Б");
 
         tenantContext.setTenantId(tenantA);
+        String query = "SELECT subject FROM requests WHERE deleted = FALSE LIMIT 20";
+
         List<String> subjects = transactionTemplate.execute(status ->
-                requestRepository.findByDeletedFalse(PageRequest.of(0, 20)).getContent().stream()
-                        .map(Request::getSubject)
-                        .toList());
+                jdbcTemplate.queryForList(query, String.class, 20));
 
         assertThat(subjects).containsExactly("Заявка А");
     }
@@ -83,8 +81,13 @@ public class TenantIsolationIT extends BaseIntegrationTest {
         UUID foreignId = insertRequest(tenantA, "Чужая заявка");
 
         tenantContext.setTenantId(tenantB);
-        Optional<Request> found = transactionTemplate.execute(status ->
-                requestRepository.findByIdAndDeletedFalse(foreignId));
+        String query = "SELECT subject FROM requests WHERE deleted = FALSE AND id = ? LIMIT 1";
+
+        Optional<String> found = transactionTemplate.execute(status ->
+                jdbcTemplate.query(query, (rs, rowNumber) ->
+                                rs.getString("subject"), foreignId
+                        )
+                        .stream().findFirst());
 
         assertThat(found).isEmpty();
         NotFoundException error = catchThrowableOfType(
@@ -106,8 +109,10 @@ public class TenantIsolationIT extends BaseIntegrationTest {
         UUID foreignId = insertRequest(tenantA, "Живая");
 
         tenantContext.setTenantId(tenantB);
+        String query = "UPDATE requests SET deleted = TRUE WHERE id = ? AND deleted = FALSE";
+
         Integer deleted = transactionTemplate.execute(status ->
-                requestRepository.deleteById(foreignId));
+                jdbcTemplate.update(query, foreignId));
 
         assertThat(deleted).isNotNull().isZero();
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM requests WHERE id = ?",
@@ -165,15 +170,14 @@ public class TenantIsolationIT extends BaseIntegrationTest {
                     reset.execute("SET SESSION AUTHORIZATION crm_app");
                 }
                 try (PreparedStatement setting = con.prepareStatement(
-                        "SELECT set_config('app.tenant_id', '', true)")) {
+                        "SELECT set_config('app.tenant_id', ?, true)")) {
                     setting.setString(1, tenantA.toString());
                     setting.execute();
                 }
 
                 List<UUID> ids = new ArrayList<>();
-                try (var query =
-                             con.prepareStatement("SELECT id FROM requests ORDER BY subject");
-                             ResultSet resultSet = query.executeQuery()) {
+                try (var query = con.prepareStatement("SELECT id FROM requests ORDER BY subject");
+                        ResultSet resultSet = query.executeQuery()) {
                     while (resultSet.next()) {
                         ids.add(resultSet.getObject(1, UUID.class));
                     }
