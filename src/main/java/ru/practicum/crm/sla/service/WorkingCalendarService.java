@@ -17,9 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ValidationError;
+import ru.practicum.crm.sla.domain.Holiday;
 import ru.practicum.crm.sla.domain.WorkingCalendar;
 import ru.practicum.crm.sla.domain.WorkingDay;
 import ru.practicum.crm.sla.domain.WorkingHours;
+import ru.practicum.crm.sla.repository.HolidayRepository;
 import ru.practicum.crm.sla.repository.WorkingHoursRepository;
 import ru.practicum.crm.tenant.api.TenantTimezoneProvider;
 import ru.practicum.crm.tenant.api.seeding.TenantCalendarSeeder;
@@ -52,11 +54,17 @@ public class WorkingCalendarService implements TenantCalendarSeeder {
             justification = "Репозиторий — Spring-бин, внедряется как зависимость. SpotBugs "
                     + "считает его изменяемым из-за метода deleteByTenantId")
     private final WorkingHoursRepository repository;
+    @SuppressFBWarnings(
+            value = "EI_EXPOSE_REP2",
+            justification = "Репозиторий — Spring-бин, внедряется как зависимость. SpotBugs "
+                    + "считает его изменяемым из-за метода delete")
+    private final HolidayRepository holidays;
     private final TenantTimezoneProvider timezones;
 
-    public WorkingCalendarService(WorkingHoursRepository repository,
+    public WorkingCalendarService(WorkingHoursRepository repository, HolidayRepository holidays,
             TenantTimezoneProvider timezones) {
         this.repository = repository;
+        this.holidays = holidays;
         this.timezones = timezones;
     }
 
@@ -113,10 +121,14 @@ public class WorkingCalendarService implements TenantCalendarSeeder {
         return days.stream().sorted(FROM_MONDAY).toList();
     }
 
-    /** Календарь для расчётов: рабочие дни и часовой пояс из настроек арендатора. */
+    /**
+     * Календарь для расчётов: рабочие дни, справочник нерабочих дней (T-057) и часовой пояс из
+     * настроек арендатора.
+     */
     @Transactional(readOnly = true)
     public WorkingCalendar calendar(UUID tenantId) {
-        return new WorkingCalendar(timezones.timezoneOf(tenantId), workingDays(tenantId));
+        return new WorkingCalendar(timezones.timezoneOf(tenantId), workingDays(tenantId),
+                holidays.findByTenantId(tenantId).stream().map(Holiday::toDateOverride).toList());
     }
 
     /** Неделя по умолчанию: понедельник–пятница, 09:00–18:00. */
