@@ -23,7 +23,7 @@ import ru.practicum.crm.request.domain.Request;
 import ru.practicum.crm.request.domain.RequestStatus;
 import ru.practicum.crm.tenant.api.TenantContext;
 
-public class TenantIsolationIT extends BaseIntegrationTest {
+public class TenantIsolationIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private RequestRepository requestRepository;

@@ -20,11 +20,12 @@ BEGIN
         EXCEPTION
             WHEN insufficient_privilege THEN
                 NULL;
+        END;
     END IF;
 
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'crm_app') THEN
        BEGIN
-            EXECUTE format('GRANT crm_app TO %I', current_user)
+            EXECUTE format('GRANT crm_app TO %I', current_user);
        EXCEPTION
             WHEN insufficient_privilege THEN
                 NULL;
@@ -46,7 +47,7 @@ DECLARE
 BEGIN
     FOR tenant_table IN
         SELECT c.table_name
-        FROM information_shema.columns c
+        FROM information_schema.columns c
         WHERE c.table_schema = 'public'
             AND c.column_name = 'tenant_id'
             AND c.table_name <> 'tenants'
