@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import ru.practicum.crm.common.model.RequestPriority;
 
 /**
  * Значения значимых полей заявки в какой-то момент — чтобы после правки узнать, что изменилось.

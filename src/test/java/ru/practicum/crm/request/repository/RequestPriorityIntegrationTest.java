@@ -12,8 +12,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
+import ru.practicum.crm.common.model.RequestPriority;
 import ru.practicum.crm.request.domain.Request;
-import ru.practicum.crm.request.domain.RequestPriority;
 import ru.practicum.crm.request.domain.RequestStatus;
 import ru.practicum.crm.request.domain.RequestType;
 
