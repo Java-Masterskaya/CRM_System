@@ -14,19 +14,19 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.practicum.crm.base.BaseIntegrationTest;
-import ru.practicum.crm.security.principal.TenantPrincipal;
 import ru.practicum.crm.tenant.api.TenantActiveChecker;
 import ru.practicum.crm.tenant.api.TenantContext;
 
 @AutoConfigureMockMvc
+@TestPropertySource(properties = "app.security.authorization.enabled=false")
 @Import(TenantContextFilterIntegrationTest.TestController.class)
 class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
 
@@ -65,7 +65,7 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void request_whenAuthenticationIsMissing_passesWithoutTenant()
+    void request_whenAuthenticationIsMissing_passesWithoutTenantContext()
             throws Exception {
 
         mockMvc.perform(get("/admin/test/tenant"))
@@ -77,7 +77,8 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
     @Test
     void request_whenTenantIsInactive_returnsUnauthorized() throws Exception {
 
-        org.mockito.Mockito.when(tenantActiveChecker.isActive(TENANT_ID)).thenReturn(false);
+        org.mockito.Mockito.when(tenantActiveChecker.isActive(TENANT_ID))
+                .thenReturn(false);
 
         mockMvc.perform(get("/admin/test/tenant")
                         .with(authentication(jwtAuthentication())))
@@ -91,15 +92,9 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
                         tenantActiveChecker.isActive(TENANT_ID))
                 .thenReturn(true);
 
-        Authentication authentication =
-                new UsernamePasswordAuthenticationToken(
-                        new TenantPrincipal(TENANT_ID),
-                        null,
-                        List.of());
-
         mockMvc.perform(
                         get("/admin/test/tenant")
-                                .with(authentication(authentication)))
+                                .with(authentication(jwtAuthentication())))
                 .andExpect(status().isOk());
 
         assertThat(tenantContext.getCurrentTenantId()).isNull();

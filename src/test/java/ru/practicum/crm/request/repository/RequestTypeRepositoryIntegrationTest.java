@@ -10,8 +10,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
+import ru.practicum.crm.common.model.RequestPriority;
 import ru.practicum.crm.request.domain.Request;
-import ru.practicum.crm.request.domain.RequestPriority;
 import ru.practicum.crm.request.domain.RequestStatus;
 import ru.practicum.crm.request.domain.RequestType;
 

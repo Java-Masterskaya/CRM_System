@@ -1,6 +1,7 @@
 package ru.practicum.crm.outbox.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.http.HttpStatus.OK;
 
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
@@ -161,15 +162,17 @@ class OutboxMetricsIntegrationTest extends BaseIntegrationTest {
         saveEvent(DELIVERED);
         processor.processBatch();
 
-        String metrics = rest.getForObject(
+        var response = rest.getForEntity(
                 "http://localhost:" + managementPort + "/actuator/prometheus", String.class);
+        String metrics = response.getBody();
 
-        assertThat(metrics)
-                .contains("crm_outbox_delivery_attempts_total{")
-                .contains("outcome=\"success\"")
-                .contains("crm_outbox_events{")
-                .contains("status=\"FAILED\"")
-                .contains("crm_outbox_oldest_pending_age_seconds");
+        assertThat(response.getStatusCode()).isEqualTo(OK);
+        assertThat(metrics).isNotNull();
+        assertThat(metrics).contains("crm_outbox_delivery_attempts_total{");
+        assertThat(metrics).contains("outcome=\"success\"");
+        assertThat(metrics).contains("crm_outbox_events{");
+        assertThat(metrics).contains("status=\"FAILED\"");
+        assertThat(metrics).contains("crm_outbox_oldest_pending_age_seconds");
     }
 
     /**
@@ -179,17 +182,18 @@ class OutboxMetricsIntegrationTest extends BaseIntegrationTest {
      */
     @Test
     void prometheusEndpoint_withoutWaitingForAttempts_exposesSuccessSeriesForEverySender() {
-        String metrics = rest.getForObject(
-                "http://localhost:" + managementPort + "/actuator/prometheus", String.class);
-
         assertThat(senders).extracting(OutboxEventSender::eventType).contains(FAILING);
-        for (OutboxEventSender sender : senders) {
-            assertThat(metrics.lines())
-                    .as("ряд успешных попыток для %s", sender.eventType())
-                    .anyMatch(line -> line.startsWith("crm_outbox_delivery_attempts_total{")
-                            && line.contains("event_type=\"" + sender.eventType() + "\"")
-                            && line.contains("outcome=\"success\""));
-        }
+        var response = rest.getForEntity(
+                "http://localhost:" + managementPort + "/actuator/prometheus", String.class);
+        String metrics = response.getBody();
+
+        assertThat(response.getStatusCode()).isEqualTo(OK);
+        assertThat(metrics).isNotNull();
+        assertThat(metrics).contains("crm_outbox_delivery_attempts_total{");
+        List<String> metricLines = metrics.lines().toList();
+        assertThat(senders).allSatisfy(sender -> assertThat(metricLines)
+                .anyMatch(line -> line.contains("event_type=\"" + sender.eventType() + "\"")
+                        && line.contains("outcome=\"success\"")));
     }
 
     private UUID saveEvent(String type) {

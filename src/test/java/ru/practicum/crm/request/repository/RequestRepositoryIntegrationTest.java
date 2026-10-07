@@ -24,8 +24,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
+import ru.practicum.crm.common.model.RequestPriority;
 import ru.practicum.crm.request.domain.Request;
-import ru.practicum.crm.request.domain.RequestPriority;
 import ru.practicum.crm.request.domain.RequestStatus;
 
 class RequestRepositoryIntegrationTest extends BaseIntegrationTest {

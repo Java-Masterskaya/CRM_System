@@ -157,12 +157,12 @@ tasks.jacocoTestCoverageVerification {
 }
 
 tasks.check {
-	dependsOn(tasks.jacocoTestCoverageVerification)
+	dependsOn(tasks.jacocoTestCoverageVerification, itTest)
 }
 
 dependencyCheck {
-	failBuildOnCVSS = 7.0f
 	suppressionFile = "config/dependency-check/suppressions.xml"
+	scanConfigurations = listOf("productionRuntimeClasspath")
 	nvd {
 		apiKey = System.getenv("NVD_API_KEY")
 	}

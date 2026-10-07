@@ -64,5 +64,17 @@ class TenantServiceIntegrationTest extends BaseIntegrationTest {
                 Integer.class,
                 tenantId
         )).isEqualTo(25);
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT day_of_week FROM working_hours WHERE tenant_id = ?"
+                + " AND start_time = '09:00' AND end_time = '18:00'",
+                String.class,
+                tenantId
+        )).containsExactlyInAnyOrder(
+                "MONDAY",
+                "TUESDAY",
+                "WEDNESDAY",
+                "THURSDAY",
+                "FRIDAY"
+        );
     }
 }

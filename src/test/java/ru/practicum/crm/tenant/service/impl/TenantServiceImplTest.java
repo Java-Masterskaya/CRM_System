@@ -19,6 +19,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import ru.practicum.crm.tenant.api.dto.TenantDto;
 import ru.practicum.crm.tenant.api.mapper.TenantMapper;
 import ru.practicum.crm.tenant.api.seeding.TenantAccessSeeder;
+import ru.practicum.crm.tenant.api.seeding.TenantCalendarSeeder;
 import ru.practicum.crm.tenant.domain.Tenant;
 import ru.practicum.crm.tenant.domain.TenantSettings;
 import ru.practicum.crm.tenant.repository.TenantRepository;
@@ -38,6 +39,9 @@ class TenantServiceImplTest {
     @Mock
     private TenantAccessSeeder tenantAccessSeeder;
 
+    @Mock
+    private TenantCalendarSeeder tenantCalendarSeeder;
+
     private TenantServiceImpl service;
 
     @BeforeEach
@@ -46,6 +50,7 @@ class TenantServiceImplTest {
                 tenantRepository,
                 mapper,
                 tenantAccessSeeder,
+                tenantCalendarSeeder,
                 entityManager
         );
     }
@@ -94,10 +99,12 @@ class TenantServiceImplTest {
         assertThat(settings.getTimezone())
                 .isEqualTo(ZoneId.of("UTC"));
 
-        InOrder order = inOrder(tenantRepository, entityManager, tenantAccessSeeder, mapper);
+        InOrder order = inOrder(tenantRepository, entityManager, tenantAccessSeeder,
+                tenantCalendarSeeder, mapper);
         order.verify(tenantRepository).save(savedTenant);
         order.verify(entityManager).flush();
         order.verify(tenantAccessSeeder).seedDefaults(savedTenant.getId());
+        order.verify(tenantCalendarSeeder).seedDefaults(savedTenant.getId());
         order.verify(mapper).toDto(savedTenant);
     }
 }

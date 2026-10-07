@@ -7,7 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ValidationError;
-import ru.practicum.crm.request.domain.RequestPriority;
+import ru.practicum.crm.common.model.RequestPriority;
 import ru.practicum.crm.request.domain.RequestType;
 import ru.practicum.crm.request.repository.RequestTypeRepository;
 
