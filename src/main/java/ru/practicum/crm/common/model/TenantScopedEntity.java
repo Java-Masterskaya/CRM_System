@@ -7,6 +7,7 @@ import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.extern.log4j.Log4j2;
 import org.hibernate.annotations.Filter;
 import org.hibernate.annotations.FilterDef;
 import org.hibernate.annotations.ParamDef;
@@ -20,6 +21,7 @@ import org.hibernate.annotations.ParamDef;
 @Filter(name = TenantIds.FILTER_NAME,
         condition = "tenant_id = :" + TenantIds.PARAM
 )
+@Log4j2
 @MappedSuperclass
 public abstract class TenantScopedEntity extends BaseEntity {
 
@@ -32,6 +34,14 @@ public abstract class TenantScopedEntity extends BaseEntity {
 
     @PrePersist
     void assignTenantFromContext() {
+        UUID fromContext = TenantIds.get();
+
+        if (fromContext != null && tenantId != null && !fromContext.equals(tenantId)) {
+            log.warn(" tenantId сущности {} заменен с {} на {} из контекста",
+                    getClass().getSimpleName(), tenantId, fromContext
+            );
+        }
+
         tenantId = TenantIds.resolve(tenantId);
     }
 }

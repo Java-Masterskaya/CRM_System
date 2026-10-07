@@ -10,7 +10,12 @@ import ru.practicum.crm.tenant.api.TenantContext;
 
 public class TenantAwareJpaTransactionManager extends JpaTransactionManager {
 
-    @SuppressFBWarnings(value = "EI_EXPOSE_REP2")
+    @SuppressFBWarnings(
+            value = "EI_EXPOSE_REP2",
+            justification = "TenantContext acts as a stateless wrapper over ThreadLocal storage. "
+                    + "Storing its reference is safe and required to dynamically fetch the "
+                    + "thread-bound tenant ID during transaction lifecycle"
+    )
     private final TenantContext tenantContext;
 
     public TenantAwareJpaTransactionManager(

@@ -5,11 +5,6 @@ import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -67,10 +62,10 @@ public class TenantIsolationIT extends BaseIntegrationTest {
         insertRequest(tenantB, "Заявка Б");
 
         tenantContext.setTenantId(tenantA);
-        String query = "SELECT subject FROM requests WHERE deleted = FALSE LIMIT 20";
+        String query = "SELECT subject FROM requests WHERE deleted = FALSE ORDER BY subject";
 
         List<String> subjects = transactionTemplate.execute(status ->
-                jdbcTemplate.queryForList(query, String.class, 20));
+                jdbcTemplate.queryForList(query, String.class));
 
         assertThat(subjects).containsExactly("Заявка А");
     }
@@ -105,6 +100,19 @@ public class TenantIsolationIT extends BaseIntegrationTest {
     }
 
     @Test
+    void find_whenIdBelongsToAnotherTenant_returnsNull() {
+        UUID foreignId = insertRequest(tenantA, "Чужая заявка");
+
+        tenantContext.setTenantId(foreignId);
+        Request found = transactionTemplate.execute(status -> {
+            entityManager.clear();
+            return entityManager.find(Request.class, foreignId);
+        });
+
+        assertThat(found).isNull();
+    }
+
+    @Test
     void delete_whenBelongsToAnotherTenant_doesNotRemoveRow() {
         UUID foreignId = insertRequest(tenantA, "Живая");
 
@@ -115,8 +123,21 @@ public class TenantIsolationIT extends BaseIntegrationTest {
                 jdbcTemplate.update(query, foreignId));
 
         assertThat(deleted).isNotNull().isZero();
-        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM requests WHERE id = ?",
-                Integer.class, foreignId)).isEqualTo(1);
+        assertThat(countRequest(foreignId)).isEqualTo(1);
+    }
+
+    @Test
+    void nativeDelete_whenBelongsToAnotherTenant_doesNotRemoveRow() {
+        UUID foreignId = insertRequest(tenantA, "Живая");
+
+        tenantContext.setTenantId(tenantB);
+        Integer deleted = transactionTemplate.execute(status ->
+                entityManager.createNativeQuery("DELETE FROM requests WHERE id = :id")
+                        .setParameter("id", foreignId)
+                        .executeUpdate());
+
+        assertThat(deleted).isNotNull().isZero();
+        assertThat(countRequest(foreignId)).isEqualTo(1);
     }
 
     @Test
@@ -162,53 +183,36 @@ public class TenantIsolationIT extends BaseIntegrationTest {
         UUID idA = insertRequest(tenantA, "Только А");
         UUID idB = insertRequest(tenantB, "Только Б");
 
-        List<UUID> seen = jdbcTemplate.execute((Connection con) -> {
-            boolean previewsAutoCommit = con.getAutoCommit();
-            con.setAutoCommit(false);
-            try {
-                try (Statement reset = con.createStatement()) {
-                    reset.execute("SET SESSION AUTHORIZATION crm_app");
-                }
-                try (PreparedStatement setting = con.prepareStatement(
-                        "SELECT set_config('app.tenant_id', ?, true)")) {
-                    setting.setString(1, tenantA.toString());
-                    setting.execute();
-                }
+        tenantContext.setTenantId(tenantA);
+        List<UUID> seen = transactionTemplate.execute(status ->
+                jdbcTemplate.query("SELECT id FROM requests ORDER BY subject",
+                        (rs, rowNum) -> rs.getObject("id", UUID.class)));
 
-                List<UUID> ids = new ArrayList<>();
-                try (var query = con.prepareStatement("SELECT id FROM requests ORDER BY subject");
-                        ResultSet resultSet = query.executeQuery()) {
-                    while (resultSet.next()) {
-                        ids.add(resultSet.getObject(1, UUID.class));
-                    }
-                }
+        Integer updatedOwn = transactionTemplate.execute(status ->
+                jdbcTemplate.update("UPDATE requests SET subject = 'Подмена' WHERE id = ?", idA));
 
-                try (PreparedStatement update = con.prepareStatement(
-                        "UPDATE requests SET subject = 'Подмена' WHERE id = ?")) {
-                    update.setObject(1, idA);
-                    assertThat(update.executeUpdate()).isEqualTo(1);
-                }
-
-                try (PreparedStatement update = con.prepareStatement(
-                        "UPDATE requests SET subject = 'Подмена' WHERE id = ?")) {
-                    update.setObject(1, idB);
-                    assertThat(update.executeUpdate()).isZero();
-                }
-
-                return ids;
-            } finally {
-                try (Statement restore = con.createStatement()) {
-                    restore.execute("SET SESSION AUTHORIZATION DEFAULT");
-                    restore.execute("SELECT set_config('app.tenant_id', '', false)");
-                }
-                con.commit();
-                con.setAutoCommit(previewsAutoCommit);
-            }
-        });
+        Integer updatedForeign = transactionTemplate.execute(status ->
+                jdbcTemplate.update("UPDATE requests SET subject = 'Подмена' WHERE id = ?", idB));
 
         assertThat(seen).containsExactly(idA);
+        assertThat(updatedOwn).isEqualTo(1);
+        assertThat(updatedForeign).isZero();
         assertThat(subjectOf(idA)).isEqualTo("Подмена");
         assertThat(subjectOf(idB)).isEqualTo("Только Б");
+    }
+
+    @Test
+    void rls_whenTenantTablesExist_coversAttachments() {
+        Boolean attachmentsForced = jdbcTemplate.queryForObject(
+                """
+                    SELECT c.relforcerowsecurity
+                    FROM pg_class c
+                    JOIN pg_namespace n ON n.oid = c.relnamespace
+                    WHERE n.nspname = 'public'
+                        AND c.relname = 'request_attachments'
+                """, Boolean.class);
+
+        assertThat(attachmentsForced).isTrue();
     }
 
     private UUID insertTenant(String name) {
@@ -237,5 +241,10 @@ public class TenantIsolationIT extends BaseIntegrationTest {
         return jdbcTemplate.queryForObject(
                 "SELECT subject FROM requests WHERE id = ?", String.class, id
         );
+    }
+
+    private Integer countRequest(UUID id) {
+        return jdbcTemplate.queryForObject("SELECT count(*) FROM requests WHERE id = ?",
+                Integer.class, id);
     }
 }

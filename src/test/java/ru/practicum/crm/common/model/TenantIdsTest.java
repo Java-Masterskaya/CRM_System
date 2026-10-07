@@ -20,12 +20,12 @@ class TenantIdsTest {
         UUID fromToken = UUID.fromString("11111111-1111-1111-1111-111111111111");
         TenantIds.set(fromToken);
 
+        assertThat(fromRequest).isNotEqualTo(fromToken);
         assertThat(TenantIds.resolve(fromRequest)).isEqualTo(fromToken);
     }
 
     @Test
     void resolve_whenContextEmpty_keepRequestedTenant() {
-
         assertThat(TenantIds.resolve(fromRequest)).isEqualTo(fromRequest);
         assertThat(TenantIds.get()).isNull();
     }

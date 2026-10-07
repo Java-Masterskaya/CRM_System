@@ -133,8 +133,9 @@ class DefaultAccessSeedMigrationIntegrationTest extends BaseIntegrationTest {
         jdbcTemplate.execute("ALTER TABLE user_roles DROP CONSTRAINT IF EXISTS fk_user_roles_user");
         jdbcTemplate.execute("DROP INDEX IF EXISTS idx_role_permissions_tenant_permission");
         jdbcTemplate.execute("DROP INDEX IF EXISTS idx_user_roles_tenant_role");
-        jdbcTemplate.execute("ALTER TABLE role_permissions DROP COLUMN IF EXISTS tenant_id");
-        jdbcTemplate.execute("ALTER TABLE user_roles DROP COLUMN IF EXISTS tenant_id");
+        jdbcTemplate.execute(
+                "ALTER TABLE role_permissions DROP COLUMN IF EXISTS tenant_id CASCADE");
+        jdbcTemplate.execute("ALTER TABLE user_roles DROP COLUMN IF EXISTS tenant_id CASCADE");
         jdbcTemplate.execute("ALTER TABLE roles DROP CONSTRAINT IF EXISTS uk_roles_tenant_id");
         jdbcTemplate.execute("ALTER TABLE permissions DROP CONSTRAINT IF EXISTS "
                 + "uk_permissions_tenant_id");
