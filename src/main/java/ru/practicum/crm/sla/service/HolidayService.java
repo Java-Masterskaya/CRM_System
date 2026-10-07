@@ -6,13 +6,13 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.core.NestedExceptionUtils;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.crm.common.error.ApiException;
+import ru.practicum.crm.common.error.ConstraintViolations;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ValidationError;
 import ru.practicum.crm.common.pagination.PageRequests;
@@ -129,9 +129,7 @@ public class HolidayService {
         try {
             return repository.saveAndFlush(holiday);
         } catch (DataIntegrityViolationException ex) {
-            String cause = String.valueOf(NestedExceptionUtils.getMostSpecificCause(ex)
-                    .getMessage());
-            if (cause.contains(DATE_CONSTRAINT)) {
+            if (DATE_CONSTRAINT.equals(ConstraintViolations.nameOf(ex))) {
                 throw new ApiException(ErrorCode.ALREADY_EXISTS, DATE_EXISTS);
             }
             throw ex;

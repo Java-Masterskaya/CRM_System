@@ -10,10 +10,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Optional;
 import java.util.UUID;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
@@ -78,8 +80,7 @@ class HolidayServiceTest {
     /** Два одновременных добавления одной даты: проверку проходят оба, второе ловит база. */
     @Test
     void createDayOff_whenSameDateAddedConcurrently_isRejectedAsDuplicate() {
-        when(repository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException(
-                "duplicate key value violates unique constraint \"holidays_date_unique\""));
+        when(repository.saveAndFlush(any())).thenThrow(violationOf("holidays_date_unique"));
 
         ApiException thrown = catchThrowableOfType(
                 () -> service.createDayOff(TENANT_ID, NEW_YEAR, "Новый год"), ApiException.class);
@@ -89,8 +90,7 @@ class HolidayServiceTest {
 
     @Test
     void createDayOff_whenDatabaseRejectsForOtherReason_passesErrorOn() {
-        DataIntegrityViolationException unknownTenant = new DataIntegrityViolationException(
-                "violates foreign key constraint \"holidays_tenant_id_fkey\"");
+        DataIntegrityViolationException unknownTenant = violationOf("holidays_tenant_id_fkey");
         when(repository.saveAndFlush(any())).thenThrow(unknownTenant);
 
         assertThatThrownBy(() -> service.createDayOff(TENANT_ID, NEW_YEAR, "Новый год"))
@@ -170,5 +170,15 @@ class HolidayServiceTest {
 
         assertThat(thrown.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
         verifyNoInteractions(repository);
+    }
+
+    /**
+     * Отказ базы, как его видит сервис: Spring кладёт причиной исключение Hibernate с именем
+     * нарушенного ограничения.
+     */
+    private static DataIntegrityViolationException violationOf(String constraint) {
+        return new DataIntegrityViolationException("could not execute statement",
+                new ConstraintViolationException("could not execute statement",
+                        new SQLException("violates constraint"), constraint));
     }
 }

@@ -10,11 +10,11 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
-import org.springframework.core.NestedExceptionUtils;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.crm.common.error.ApiException;
+import ru.practicum.crm.common.error.ConstraintViolations;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ValidationError;
 import ru.practicum.crm.sla.domain.Holiday;
@@ -110,9 +110,7 @@ public class WorkingCalendarService implements TenantCalendarSeeder {
                     .map(day -> new WorkingHours(tenantId, day))
                     .toList());
         } catch (DataIntegrityViolationException ex) {
-            String cause = String.valueOf(NestedExceptionUtils.getMostSpecificCause(ex)
-                    .getMessage());
-            if (cause.contains(DAY_CONSTRAINT)) {
+            if (DAY_CONSTRAINT.equals(ConstraintViolations.nameOf(ex))) {
                 throw new ApiException(ErrorCode.STALE_VERSION,
                         "Календарь в это же время изменён другим запросом.");
             }

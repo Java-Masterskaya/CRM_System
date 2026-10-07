@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.sql.SQLException;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -20,6 +21,7 @@ import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -189,8 +191,8 @@ class WorkingCalendarServiceTest {
      */
     @Test
     void changeWorkingDays_whenCalendarChangedConcurrently_isRejectedAsStale() {
-        when(repository.saveAllAndFlush(any())).thenThrow(new DataIntegrityViolationException(
-                "duplicate key value violates unique constraint \"working_hours_day_unique\""));
+        when(repository.saveAllAndFlush(any()))
+                .thenThrow(violationOf("working_hours_day_unique"));
 
         ApiException thrown = catchThrowableOfType(
                 () -> service.changeWorkingDays(TENANT_ID, List.of(MONDAY)), ApiException.class);
@@ -200,11 +202,21 @@ class WorkingCalendarServiceTest {
 
     @Test
     void changeWorkingDays_whenDatabaseRejectsForOtherReason_passesErrorOn() {
-        DataIntegrityViolationException unknownTenant = new DataIntegrityViolationException(
-                "violates foreign key constraint \"working_hours_tenant_id_fkey\"");
+        DataIntegrityViolationException unknownTenant =
+                violationOf("working_hours_tenant_id_fkey");
         when(repository.saveAllAndFlush(any())).thenThrow(unknownTenant);
 
         assertThatThrownBy(() -> service.changeWorkingDays(TENANT_ID, List.of(MONDAY)))
                 .isSameAs(unknownTenant);
+    }
+
+    /**
+     * Отказ базы, как его видит сервис: Spring кладёт причиной исключение Hibernate с именем
+     * нарушенного ограничения.
+     */
+    private static DataIntegrityViolationException violationOf(String constraint) {
+        return new DataIntegrityViolationException("could not execute statement",
+                new ConstraintViolationException("could not execute statement",
+                        new SQLException("violates constraint"), constraint));
     }
 }
