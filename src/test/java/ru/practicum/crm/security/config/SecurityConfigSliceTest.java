@@ -2,16 +2,11 @@ package ru.practicum.crm.security.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,8 +16,6 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.MediaType;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -102,26 +95,16 @@ class SecurityConfigSliceTest {
                 .andExpect(status().isOk());
     }
 
+    // Системные маршруты /system/** не блокируются на уровне SecurityConfig:
+// проверка доступа выполняется отдельным SystemSecretFilter по X-System-Secret.
+// В этом slice-тесте фильтр секрета не подключен, поэтому проверяем,
+// что SecurityConfig пропускает запрос дальше в MVC, где отсутствующий endpoint даёт 404.
+// Проверка system-secret и ответы 401 покрываются SystemSecretFilterIntegrationTest.
     @Test
-    void givenNoCredentials_whenCallingSystemRoute_thenReturnsProblemDetails403()
+    void givenNoCredentials_whenCallingSystemRoute_thenReachesMvcLookup()
             throws Exception {
-        mockMvc.perform(get("/system/tenant").with(user("operator").authorities(
-                        new SimpleGrantedAuthority("REQUEST_READ_ALL"))))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
-                .andExpect(jsonPath("$.detail").value("У вас нет прав на эту операцию."))
-                .andExpect(content().contentTypeCompatibleWith(
-                        MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(header().string(SecurityTestRequestIdFilter.HEADER_NAME,
-                        "security-test-request-id"))
-                .andExpect(jsonPath("$.requestId").isNotEmpty())
-                .andExpect(result -> {
-                    JsonNode problem = objectMapper.readTree(
-                            result.getResponse().getContentAsString());
-                    assertThat(problem.path("requestId").asText()).isEqualTo(
-                            result.getResponse().getHeader(
-                                    SecurityTestRequestIdFilter.HEADER_NAME));
-                });
+        mockMvc.perform(get("/system/tenant").with(anonymous()))
+                .andExpect(status().isNotFound());
     }
 
     @Test

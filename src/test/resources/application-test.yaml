@@ -8,6 +8,9 @@ spring:
     username: ${app.database.username}
     password: ${app.database.password}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
 
   mail:
     host: ${app.mail.host}
