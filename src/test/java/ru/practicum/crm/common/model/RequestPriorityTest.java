@@ -1,4 +1,4 @@
-package ru.practicum.crm.request.domain;
+package ru.practicum.crm.common.model;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
