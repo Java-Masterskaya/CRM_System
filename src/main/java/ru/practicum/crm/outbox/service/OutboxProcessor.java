@@ -1,0 +1,250 @@
+package ru.practicum.crm.outbox.service;
+
+import static net.logstash.logback.argument.StructuredArguments.value;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.BooleanSupplier;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.event.ContextClosedEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import ru.practicum.crm.outbox.api.OutboxDeliveryException;
+import ru.practicum.crm.outbox.api.OutboxEventSender;
+import ru.practicum.crm.outbox.api.OutboxMessage;
+import ru.practicum.crm.outbox.config.OutboxProperties;
+import ru.practicum.crm.outbox.domain.DeliveryFailure;
+import ru.practicum.crm.outbox.domain.OutboxEvent;
+import ru.practicum.crm.outbox.domain.OutboxStatus;
+import ru.practicum.crm.outbox.repository.OutboxEventRepository;
+
+/**
+ * Фоновый обработчик исходящих событий (T-066, #88).
+ *
+ * <p>Один проход — три шага, и каждый в своей короткой транзакции или вне её:
+ * <ol>
+ *   <li><b>Захват.</b> Порция готовых событий блокируется с {@code SKIP LOCKED} и переводится
+ *       в {@link OutboxStatus#IN_PROGRESS} со сроком аренды. Транзакция сразу фиксируется:
+ *       блокировки снимаются, но другой экземпляр приложения эти события уже не возьмёт — они
+ *       не новые, а срок аренды ещё не вышел.</li>
+ *   <li><b>Отправка</b> — вне транзакции: медленный внешний сервис не держит соединение с
+ *       базой.</li>
+ *   <li><b>Результат</b> — отдельная транзакция на каждое событие: {@link OutboxStatus#SENT},
+ *       возврат в очередь с нарастающей задержкой ({@link OutboxRetryPolicy}) или, когда
+ *       попытки исчерпаны либо неудача постоянная, {@link OutboxStatus#FAILED} с причиной.</li>
+ * </ol>
+ *
+ * <p>Если приложение упадёт между захватом и записью результата, событие останется
+ * {@code IN_PROGRESS}; когда срок аренды истечёт, захват вернёт его снова. Гарантия — «хотя бы
+ * один раз»: письмо, ушедшее прямо перед падением, может уйти повторно.
+ *
+ * <p>Результат записывается, только если событие всё ещё за этим обработчиком: в
+ * {@code IN_PROGRESS} и с тем же сроком аренды, что был выставлен при захвате. Если отправка
+ * длилась дольше аренды и событие успел взять другой обработчик, его запись не затирается.
+ */
+@Component
+public class OutboxProcessor {
+
+    static final String NO_SENDER = "NO_SENDER";
+    static final String UNEXPECTED_ERROR = "UNEXPECTED_ERROR";
+
+    private static final Logger LOG = LoggerFactory.getLogger(OutboxProcessor.class);
+
+    private final OutboxEventRepository repository;
+    private final TransactionTemplate transactionTemplate;
+    private final OutboxProperties properties;
+    private final OutboxRetryPolicy retryPolicy;
+    private final Map<String, OutboxEventSender> senders;
+    private final OutboxMetrics metrics;
+
+    private volatile boolean stopping;
+
+    public OutboxProcessor(OutboxEventRepository repository,
+            PlatformTransactionManager transactionManager, OutboxProperties properties,
+            ObjectProvider<OutboxEventSender> senders, OutboxMetrics metrics) {
+        this.metrics = metrics;
+        this.repository = repository;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.properties = properties;
+        this.retryPolicy = new OutboxRetryPolicy(properties.retryDelay(),
+                properties.maxRetryDelay(), properties.maxAttempts(), properties.retryJitter(),
+                () -> ThreadLocalRandom.current().nextDouble());
+        this.senders = senders.orderedStream()
+                .collect(Collectors.toUnmodifiableMap(OutboxEventSender::eventType,
+                        Function.identity(), (first, second) -> {
+                            throw new IllegalStateException("Два отправителя для одного типа "
+                                    + "событий: " + first.eventType());
+                        }));
+        for (String eventType : this.senders.keySet()) {
+            metrics.registerEventType(eventType);
+        }
+    }
+
+    /**
+     * Приложение останавливается: текущее событие дописывается, остальные из порции
+     * возвращаются в очередь. Событие о закрытии контекста публикуется раньше, чем
+     * останавливается планировщик, поэтому флаг успевает сработать.
+     */
+    @EventListener(ContextClosedEvent.class)
+    public void onApplicationShutdown() {
+        stopping = true;
+    }
+
+    /**
+     * Один проход: захватить порцию, отправить, записать результаты.
+     *
+     * @return сколько событий было отправлено или попытались отправить
+     */
+    public int processBatch() {
+        return processBatch(() -> stopping);
+    }
+
+    int processBatch(BooleanSupplier stopRequested) {
+        if (stopRequested.getAsBoolean()) {
+            return 0;
+        }
+        Instant leaseUntil = Instant.now().plus(properties.lease()).truncatedTo(ChronoUnit.MICROS);
+        List<OutboxEvent> claimed = claim(leaseUntil);
+        int processed = 0;
+        for (OutboxEvent event : claimed) {
+            if (stopRequested.getAsBoolean()) {
+                release(claimed.subList(processed, claimed.size()), leaseUntil);
+                break;
+            }
+            Optional<DeliveryFailure> failure = send(event);
+            recordResult(event, leaseUntil, failure);
+            processed++;
+        }
+        return processed;
+    }
+
+    private List<OutboxEvent> claim(Instant leaseUntil) {
+        List<OutboxEvent> batch = transactionTemplate.execute(status -> {
+            List<OutboxEvent> ready = repository.lockReadyBatch(Instant.now(),
+                    properties.batchSize());
+            ready.forEach(event -> event.claim(leaseUntil));
+            return ready;
+        });
+        return batch == null ? List.of() : batch;
+    }
+
+    /**
+     * Отправляет событие и возвращает причину неудачи, если она была.
+     *
+     * <p>Текст исключения стороннего кода не сохраняется и не пишется в лог: в нём бывает адрес
+     * получателя или ответ почтового сервера. Для {@link OutboxDeliveryException} берутся код и
+     * сообщение, которые отправитель сформировал сам; для любого другого исключения — только
+     * имя класса.
+     */
+    private Optional<DeliveryFailure> send(OutboxEvent event) {
+        OutboxEventSender sender = senders.get(event.getEventType());
+        if (sender == null) {
+            return Optional.of(new DeliveryFailure(NO_SENDER,
+                    "Нет отправителя для событий типа " + event.getEventType()));
+        }
+        try {
+            sender.send(toMessage(event));
+            return Optional.empty();
+        } catch (OutboxDeliveryException ex) {
+            return Optional.of(new DeliveryFailure(ex.getCode(), ex.getMessage(),
+                    ex.isPermanent()));
+        } catch (RuntimeException ex) {
+            return Optional.of(new DeliveryFailure(UNEXPECTED_ERROR,
+                    ex.getClass().getSimpleName()));
+        }
+    }
+
+    /** Сущность за пределы пакета не выходит: отправитель получает копию данных события. */
+    private static OutboxMessage toMessage(OutboxEvent event) {
+        return new OutboxMessage(event.getId(), event.getTenantId(), event.getEventType(),
+                event.getPayload(), event.getAttempts());
+    }
+
+    /**
+     * Записывает результат попытки, а сообщает о нём — счётчиком и логом — только после фиксации
+     * транзакции (#154). {@link TransactionTemplate#execute} возвращает управление, когда
+     * транзакция уже зафиксирована; если фиксация не удалась, исключение выходит раньше, и
+     * попытка не считается. Событие тогда останется взятым, по истечении аренды вернётся в
+     * очередь и будет посчитано один раз — когда его результат действительно запишется.
+     */
+    private void recordResult(OutboxEvent event, Instant leaseUntil,
+            Optional<DeliveryFailure> failure) {
+        Runnable reportAfterCommit = transactionTemplate.execute(status -> {
+            Optional<OutboxEvent> owned = findOwned(event.getId(), leaseUntil);
+            if (owned.isEmpty()) {
+                LOG.warn("Событие {} за время отправки перешло к другому обработчику: "
+                        + "результат не записан", event.getId());
+                return null;
+            }
+            if (failure.isEmpty()) {
+                owned.get().markSent();
+                return () -> metrics.delivered(event.getEventType());
+            }
+            return registerFailure(owned.get(), failure.get());
+        });
+        if (reportAfterCommit != null) {
+            reportAfterCommit.run();
+        }
+    }
+
+    /**
+     * Переводит событие в очередь на повтор или в окончательный неуспех и возвращает, как
+     * сообщить об этом после фиксации.
+     *
+     * <p>В лог попадают только идентификатор, тип, номер попытки и код причины — без полезной
+     * нагрузки и сообщения: так в нём не окажутся адреса, текст письма и токены.
+     *
+     * <p>Эти значения передаются как структурные поля ({@code eventId}, {@code eventType},
+     * {@code attempts}, {@code errorCode}): в JSON-логе они лежат отдельными полями, и записи
+     * можно отбирать по ним, а текст сообщения остаётся прежним.
+     */
+    private Runnable registerFailure(OutboxEvent event, DeliveryFailure failure) {
+        int attempts = event.getAttempts();
+        if (failure.permanent() || retryPolicy.isExhausted(attempts)) {
+            event.markFailed(failure);
+            return () -> {
+                metrics.failed(event.getEventType(), failure.code());
+                LOG.warn("Событие {} типа {} окончательно не доставлено после {} попыток: {}",
+                        value("eventId", event.getId()), value("eventType", event.getEventType()),
+                        value("attempts", attempts), value("errorCode", failure.code()));
+            };
+        }
+        Duration delay = retryPolicy.delayAfter(attempts);
+        event.retryAt(Instant.now().plus(delay), failure);
+        return () -> {
+            metrics.willRetry(event.getEventType(), failure.code());
+            LOG.warn("Событие {} типа {} не доставлено ({}), попытка {} из {}; следующая через {}",
+                    value("eventId", event.getId()), value("eventType", event.getEventType()),
+                    value("errorCode", failure.code()), value("attempts", attempts),
+                    properties.maxAttempts(), delay);
+        };
+    }
+
+    private void release(List<OutboxEvent> unstarted, Instant leaseUntil) {
+        transactionTemplate.executeWithoutResult(status -> {
+            Instant now = Instant.now();
+            for (OutboxEvent event : unstarted) {
+                findOwned(event.getId(), leaseUntil)
+                        .ifPresent(owned -> owned.releaseUnstarted(now));
+            }
+        });
+        LOG.info("Остановка приложения: {} событий возвращено в очередь", unstarted.size());
+    }
+
+    private Optional<OutboxEvent> findOwned(UUID eventId, Instant leaseUntil) {
+        return repository.findByIdAndStatus(eventId, OutboxStatus.IN_PROGRESS)
+                .filter(event -> leaseUntil.equals(event.getNextAttemptAt()));
+    }
+}

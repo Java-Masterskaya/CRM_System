@@ -1,11 +1,122 @@
 spring:
   application:
     name: crm
-    docker:
-      compose:
-        enabled: true
+
+  main:
+    banner-mode: "off"
+
+  profiles:
+    default: local
+
+  flyway:
+    out-of-order: true
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+  datasource:
+    hikari:
+      connection-timeout: 2000
+      validation-timeout: 1000
+      initialization-fail-timeout: -1
+
+  # У Jakarta Mail тайм-ауты по умолчанию не ограничены: неотвечающий почтовый сервер держал бы
+  # отправку бесконечно. Значения — в миллисекундах.
+  mail:
+    properties:
+      mail:
+        smtp:
+          connectiontimeout: 5000
+          timeout: 10000
+          writetimeout: 10000
+
+  # При остановке планировщик ждёт, пока обработчик исходящих событий допишет текущую порцию.
+  task:
+    scheduling:
+      shutdown:
+        await-termination: true
+        await-termination-period: 30s
+
+app:
+  security:
+    authorization:
+      # Включить после появления входа и пользователей с назначенными правами.
+      enabled: ${APP_SECURITY_AUTHORIZATION_ENABLED:false}
+  outbox:
+    scheduler-enabled: ${OUTBOX_SCHEDULER_ENABLED:true}
+    batch-size: ${OUTBOX_BATCH_SIZE:50}
+    poll-interval: ${OUTBOX_POLL_INTERVAL:5s}
+    lease: ${OUTBOX_LEASE:5m}
+    retry-delay: ${OUTBOX_RETRY_DELAY:1m}
+    max-retry-delay: ${OUTBOX_MAX_RETRY_DELAY:2h}
+    retry-jitter: ${OUTBOX_RETRY_JITTER:0.5}
+    max-attempts: ${OUTBOX_MAX_ATTEMPTS:8}
+
+crm:
+  security:
+    password:
+      min-length: 12
+      max-length-bytes: 72
+      bcrypt-strength: 12
+      require-uppercase: true
+      require-lowercase: true
+      require-digit: true
+      require-special: true
 
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
+
   servlet:
     context-path: /api/v1
+
+management:
+  server:
+    port: ${MANAGEMENT_PORT:8081}
+
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
+
+      cache:
+        time-to-live: 1s
+
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+    mail:
+      enabled: true
+
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      env: ${spring.profiles.active:default}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

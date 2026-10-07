@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!DOCTYPE suppressions PUBLIC
+  "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
+  "https://checkstyle.org/dtds/suppressions_1_2.dtd">
+
+<suppressions>
+  <!--
+      Интеграционные тесты оканчиваются на IT по соглашению Gradle-плагина
+      (include("**/*IT.class") в build.gradle). Аббревиатура IT из двух заглавных
+      букв противоречит правилу AbbreviationAsWordInName, но переименовать нельзя —
+      Gradle не подхватит тесты. Подавляем правило только для *IT.java в src/test.
+  -->
+  <suppress
+    files="[\\/]src[\\/]test[\\/].*IT\.java$"
+    checks="AbbreviationAsWordInName"/>
+</suppressions>

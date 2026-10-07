@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title th:text="${requestSubject}">Тема заявки</title>
+</head>
+<body>
+<p>Здравствуйте, <span th:text="${recipientName}">имя</span>!</p>
+<p>Статус заявки «<span th:text="${requestSubject}">тема</span>» изменён:
+    было «<span th:text="${oldStatus}">прежний статус</span>»,
+    стало «<span th:text="${newStatus}">новый статус</span>».</p>
+<p>Номер заявки: <span th:text="${requestId}">номер</span></p>
+<p>Это письмо отправлено автоматически, отвечать на него не нужно.</p>
+</body>
+</html>

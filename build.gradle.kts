@@ -31,24 +31,61 @@ dependencies {
 	testAnnotationProcessor(platform(SpringBootPlugin.BOM_COORDINATES))
 
 	implementation("org.springframework.boot:spring-boot-starter-web")
+	implementation("org.springframework.boot:spring-boot-starter-security")
+	implementation("org.springframework.boot:spring-boot-starter-validation")
+	implementation("org.springframework.boot:spring-boot-starter-actuator")
+	implementation("net.logstash.logback:logstash-logback-encoder:8.0")
+	runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+
+	compileOnly("com.github.spotbugs:spotbugs-annotations:4.10.4")
 
 	compileOnly("org.projectlombok:lombok")
 	annotationProcessor("org.projectlombok:lombok")
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
+	testImplementation("org.springframework.security:spring-security-test")
 	testCompileOnly("org.projectlombok:lombok")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 	testAnnotationProcessor("org.projectlombok:lombok")
+	implementation("org.springframework.boot:spring-boot-starter-mail")
+	implementation("org.thymeleaf:thymeleaf")
+	// Почтовый сервер внутри теста. Версия 2.1.3 собрана на тех же Jakarta Mail и Angus Mail,
+	// что и Spring Boot 3.3; более новые подняли бы их версии в тестах.
+	testImplementation("com.icegreen:greenmail:2.1.3") {
+		exclude(group = "junit", module = "junit")
+	}
+
+	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+	implementation("org.flywaydb:flyway-core")
+	implementation("org.flywaydb:flyway-database-postgresql")
+	runtimeOnly("org.postgresql:postgresql")
+
+	testImplementation("com.tngtech.archunit:archunit-junit5:1.5.0")
+	testImplementation(platform("org.testcontainers:testcontainers-bom:2.0.5"))
+	testImplementation("org.testcontainers:postgresql")
+	testImplementation("org.testcontainers:junit-jupiter")
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
+
+	implementation("org.mapstruct:mapstruct:1.6.3")
+	annotationProcessor("org.mapstruct:mapstruct-processor:1.6.3")
+
+	implementation("org.springframework.security:spring-security-crypto")
 }
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+	environment("SPRING_PROFILES_ACTIVE", "test")
 }
 
 checkstyle {
 	toolVersion = "14.1.0"
 	configFile = file("config/checkstyle/checkstyle.xml")
 	configProperties = mapOf("org.checkstyle.google.severity" to "error")
+	configProperties = mapOf(
+		"org.checkstyle.google.severity" to "error",
+		"org.checkstyle.google.suppressionfilter.config" to
+			file("config/checkstyle/checkstyle-suppressions.xml").absolutePath
+	)
 }
 
 spotbugs {
@@ -78,8 +115,23 @@ tasks.withType<JacocoReportBase> {
 }
 
 tasks.test {
+	useJUnitPlatform()
+	exclude("**/*IT.class")
 	finalizedBy(tasks.jacocoTestReport)
 }
+
+val itTest = tasks.register<Test>("itTest") {
+	description = "Runs integration tests with Testcontainers."
+	group = "verification"
+
+	useJUnitPlatform()
+	include("**/*IT.class")
+
+	shouldRunAfter(tasks.test)
+
+	finalizedBy(tasks.jacocoTestReport)
+}
+
 
 tasks.jacocoTestReport {
 	dependsOn(tasks.test)
@@ -102,7 +154,7 @@ tasks.jacocoTestCoverageVerification {
 }
 
 tasks.check {
-	dependsOn(tasks.jacocoTestCoverageVerification)
+	dependsOn(tasks.jacocoTestCoverageVerification, itTest)
 }
 
 dependencyCheck {
