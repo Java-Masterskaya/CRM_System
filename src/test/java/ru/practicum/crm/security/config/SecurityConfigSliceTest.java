@@ -96,10 +96,10 @@ class SecurityConfigSliceTest {
     }
 
     // Системные маршруты /system/** не блокируются на уровне SecurityConfig:
-// проверка доступа выполняется отдельным SystemSecretFilter по X-System-Secret.
-// В этом slice-тесте фильтр секрета не подключен, поэтому проверяем,
-// что SecurityConfig пропускает запрос дальше в MVC, где отсутствующий endpoint даёт 404.
-// Проверка system-secret и ответы 401 покрываются SystemSecretFilterIntegrationTest.
+    // проверка доступа выполняется отдельным SystemSecretFilter по X-System-Secret.
+    // В этом slice-тесте фильтр секрета не подключен, поэтому проверяем,
+    // что SecurityConfig пропускает запрос дальше в MVC, где отсутствующий endpoint даёт 404.
+    // Проверка system-secret и ответы 401 покрываются SystemSecretFilterIntegrationTest.
     @Test
     void givenNoCredentials_whenCallingSystemRoute_thenReachesMvcLookup()
             throws Exception {
