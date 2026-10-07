@@ -4,13 +4,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.core.NestedExceptionUtils;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.crm.common.error.ApiException;
+import ru.practicum.crm.common.error.ConstraintViolations;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ValidationError;
 import ru.practicum.crm.common.model.RequestPriority;
@@ -155,16 +155,15 @@ public class SlaPolicyService {
         try {
             return repository.saveAndFlush(policy);
         } catch (DataIntegrityViolationException ex) {
-            String cause = String.valueOf(NestedExceptionUtils.getMostSpecificCause(ex)
-                    .getMessage());
-            if (cause.contains(TYPE_CONSTRAINT)) {
+            String constraint = ConstraintViolations.nameOf(ex);
+            if (TYPE_CONSTRAINT.equals(constraint)) {
                 throw new ApiException(ErrorCode.VALIDATION_FAILED, null,
                         List.of(ValidationError.ofField(TYPE_FIELD, "тип заявки не найден")));
             }
-            if (cause.contains(PAIR_CONSTRAINT)) {
+            if (PAIR_CONSTRAINT.equals(constraint)) {
                 throw new ApiException(ErrorCode.ALREADY_EXISTS, PAIR_EXISTS);
             }
-            if (cause.contains(DEFAULT_CONSTRAINT)) {
+            if (DEFAULT_CONSTRAINT.equals(constraint)) {
                 throw new ApiException(ErrorCode.ALREADY_EXISTS, DEFAULT_EXISTS);
             }
             throw ex;

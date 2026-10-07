@@ -10,8 +10,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.sql.SQLException;
 import java.util.Optional;
 import java.util.UUID;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
@@ -246,9 +248,13 @@ class SlaPolicyServiceTest {
         return SlaPolicy.byDefault(TENANT_ID, FOUR_HOURS_AND_FIVE_DAYS);
     }
 
-    /** Отказ базы, как его видит сервис: имя нарушенного ограничения — в тексте причины. */
+    /**
+     * Отказ базы, как его видит сервис: Spring кладёт причиной исключение Hibernate с именем
+     * нарушенного ограничения.
+     */
     private static DataIntegrityViolationException violationOf(String constraint) {
         return new DataIntegrityViolationException("could not execute statement",
-                new IllegalStateException("violates constraint \"" + constraint + "\""));
+                new ConstraintViolationException("could not execute statement",
+                        new SQLException("violates constraint"), constraint));
     }
 }
