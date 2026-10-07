@@ -41,7 +41,9 @@ class WorkingCalendarIntegrationTest extends BaseIntegrationTest {
             UUID.fromString("00000000-0000-0000-0000-000000000000");
     private static final LocalTime NINE = LocalTime.of(9, 0);
     private static final LocalTime SIX_PM = LocalTime.of(18, 0);
-    /** Понедельник, 5 октября 2026 года: 07:30 UTC — 10:30 в Москве, 03:30 в Нью-Йорке. */
+    /**
+     * Понедельник, 5 октября 2026 года: 07:30 UTC — 10:30 в Москве, 03:30 в Нью-Йорке.
+     */
     private static final Instant MONDAY_MORNING_UTC =
             ZonedDateTime.of(2026, 10, 5, 7, 30, 0, 0, ZoneOffset.UTC).toInstant();
 
@@ -79,20 +81,26 @@ class WorkingCalendarIntegrationTest extends BaseIntegrationTest {
         try {
             migrate(schema, PREVIOUS_MIGRATION);
             jdbcTemplate.update("INSERT INTO " + schema + ".tenants (id, name, active,"
-                    + " created_at, updated_at) VALUES (?, 'Был до T-056', true, now(), now())",
+                                + " created_at, updated_at) "
+                                + "VALUES (?, 'Был до T-056', true, now(), now())",
                     existing);
 
             migrate(schema, null);
 
             assertThat(jdbcTemplate.queryForList("SELECT day_of_week FROM " + schema
-                    + ".working_hours WHERE tenant_id = ? AND start_time = '09:00'"
-                    + " AND end_time = '18:00'", String.class, existing))
+                                                 + ".working_hours WHERE tenant_id = ? "
+                                                 + "AND start_time = '09:00'"
+                                                 + " AND end_time = '18:00'",
+                    String.class, existing))
                     .containsExactlyInAnyOrder(
                             "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY");
             assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM " + schema
-                    + ".tenants WHERE id = ?", Integer.class, SYSTEM_TENANT)).isEqualTo(1);
+                                                   + ".tenants WHERE id = ?",
+                    Integer.class, SYSTEM_TENANT))
+                    .isEqualTo(1);
             assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM " + schema
-                    + ".working_hours WHERE tenant_id = ?", Integer.class, SYSTEM_TENANT))
+                                                   + ".working_hours WHERE tenant_id = ?",
+                    Integer.class, SYSTEM_TENANT))
                     .isZero();
         } finally {
             jdbcTemplate.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
@@ -146,7 +154,9 @@ class WorkingCalendarIntegrationTest extends BaseIntegrationTest {
         assertThat(storedDays(tenantB)).isEqualTo(5);
     }
 
-    /** Повторное наполнение не затирает календарь, который администратор уже поменял. */
+    /**
+     * Повторное наполнение не затирает календарь, который администратор уже поменял.
+     */
     @Test
     void seedDefaults_whenCalendarAlreadyChanged_keepsIt() {
         WorkingDay sunday = new WorkingDay(DayOfWeek.SUNDAY, NINE, SIX_PM);
@@ -167,7 +177,7 @@ class WorkingCalendarIntegrationTest extends BaseIntegrationTest {
         assertThat(calendars.calendar(tenantA).isWorkingTime(MONDAY_MORNING_UTC)).isTrue();
 
         jdbcTemplate.update("UPDATE tenant_settings SET timezone = 'America/New_York'"
-                + " WHERE tenant_id = ?", tenantA);
+                            + " WHERE tenant_id = ?", tenantA);
 
         assertThat(calendars.calendar(tenantA).isWorkingTime(MONDAY_MORNING_UTC)).isFalse();
     }
@@ -175,8 +185,10 @@ class WorkingCalendarIntegrationTest extends BaseIntegrationTest {
     @Test
     void calendar_whenTenantHasNoSettings_isNotFound() {
         UUID withoutSettings = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO tenants (id, name, active, created_at, updated_at)"
-                + " VALUES (?, 'Без настроек', true, now(), now())", withoutSettings);
+        jdbcTemplate.update(
+                "INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
+                + " VALUES (?, 'Без настроек', ?, true, now(), now())",
+                withoutSettings, "tenant-" + withoutSettings);
 
         NotFoundException thrown = catchThrowableOfType(
                 () -> calendars.calendar(withoutSettings), NotFoundException.class);
@@ -191,7 +203,9 @@ class WorkingCalendarIntegrationTest extends BaseIntegrationTest {
                 .hasMessageContaining("working_hours_interval_check");
     }
 
-    /** Имя ограничения — то самое, по которому сервис узнаёт одновременную замену календаря. */
+    /**
+     * Имя ограничения — то самое, по которому сервис узнаёт одновременную замену календаря.
+     */
     @Test
     void secondIntervalForSameDay_insertedPastService_isRejectedByDatabase() {
         insertDay(tenantA, "MONDAY", "09:00", "13:00");
@@ -214,18 +228,21 @@ class WorkingCalendarIntegrationTest extends BaseIntegrationTest {
      */
     @Test
     void calendarOfTenant_whenTableIsLarge_isReadByIndex() {
-        jdbcTemplate.update("INSERT INTO tenants (id, name, active, created_at, updated_at)"
-                + " SELECT gen_random_uuid(), 'Арендатор ' || i, true, now(), now()"
-                + " FROM generate_series(1, 3000) AS s(i)");
+        jdbcTemplate.update("INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
+                            + " SELECT gen_random_uuid(), 'Арендатор ' || i,"
+                            + " 'tenant-' || gen_random_uuid(), true, now(), now()"
+                            + " FROM generate_series(1, 3000) AS s(i)");
         jdbcTemplate.update("INSERT INTO working_hours (id, tenant_id, day_of_week, start_time,"
-                + " end_time, created_at, updated_at)"
-                + " SELECT gen_random_uuid(), t.id, (ARRAY['MONDAY', 'TUESDAY', 'WEDNESDAY',"
-                + " 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'])[d], '09:00', '18:00', now(), now()"
-                + " FROM tenants t CROSS JOIN generate_series(1, 7) AS s(d)");
+                            + " end_time, created_at, updated_at)"
+                            + " SELECT gen_random_uuid(), t.id, (ARRAY['MONDAY', 'TUESDAY', "
+                            + "'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'])[d], "
+                            + "'09:00', '18:00', now(), now()"
+                            + " FROM tenants t CROSS JOIN generate_series(1, 7) AS s(d)");
         jdbcTemplate.execute("ANALYZE working_hours");
 
         List<String> plan = jdbcTemplate.queryForList("EXPLAIN SELECT * FROM working_hours"
-                + " WHERE tenant_id = '" + tenantA + "'", String.class);
+                                                      + " WHERE tenant_id = '" + tenantA + "'",
+                String.class);
 
         assertThat(String.join("\n", plan))
                 .as("план чтения календаря арендатора на таблице из 21 014 строк")
@@ -235,26 +252,30 @@ class WorkingCalendarIntegrationTest extends BaseIntegrationTest {
 
     private Integer storedDays(UUID tenantId) {
         return jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM working_hours WHERE tenant_id = ?", Integer.class, tenantId);
+                "SELECT count(*) FROM working_hours WHERE tenant_id = ?", Integer.class,
+                tenantId);
     }
 
     private void insertDay(UUID tenantId, String day, String start, String end) {
         jdbcTemplate.update("INSERT INTO working_hours (id, tenant_id, day_of_week, start_time,"
-                + " end_time, created_at, updated_at)"
-                + " VALUES (?, ?, ?, ?::time, ?::time, now(), now())",
+                            + " end_time, created_at, updated_at)"
+                            + " VALUES (?, ?, ?, ?::time, ?::time, now(), now())",
                 UUID.randomUUID(), tenantId, day, start, end);
     }
 
     private UUID insertTenant(String timezone) {
         UUID id = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO tenants (id, name, active, created_at, updated_at)"
-                + " VALUES (?, 'Арендатор', true, now(), now())", id);
+        jdbcTemplate.update("INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
+                            + " VALUES (?, 'Арендатор', ?, true, now(), now())",
+                id, "tenant-" + id);
         jdbcTemplate.update("INSERT INTO tenant_settings (tenant_id, timezone, created_at,"
-                + " updated_at) VALUES (?, ?, now(), now())", id, timezone);
+                            + " updated_at) VALUES (?, ?, now(), now())", id, timezone);
         return id;
     }
 
-    /** Миграции в отдельной схеме: до версии {@code target} или до конца, если она не задана. */
+    /**
+     * Миграции в отдельной схеме: до версии {@code target} или до конца, если она не задана.
+     */
     private static void migrate(String schema, String target) {
         FluentConfiguration configuration = Flyway.configure()
                 .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
