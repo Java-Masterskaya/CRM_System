@@ -20,6 +20,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ProblemDetailFactory;
+import ru.practicum.crm.security.api.PermissionCode;
 import ru.practicum.crm.tenant.api.TenantContextFilter;
 
 @Configuration
@@ -62,12 +63,12 @@ public class SecurityConfig {
                                         HttpMethod.GET,
                                         "/admin/tenant/settings"
                                 )
-                                .hasAuthority("TENANT_SETTINGS_READ")
+                                .hasAuthority(PermissionCode.TENANT_SETTINGS_READ.name())
                                 .requestMatchers(
                                         HttpMethod.PUT,
                                         "/admin/tenant/settings"
                                 )
-                                .hasAuthority("TENANT_SETTINGS_MANAGE")
+                                .hasAuthority(PermissionCode.TENANT_SETTINGS_MANAGE.name())
                                 .requestMatchers(
                                         "/admin/**",
                                         "/client/**"
