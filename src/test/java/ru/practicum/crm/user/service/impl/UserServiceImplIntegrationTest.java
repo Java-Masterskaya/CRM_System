@@ -2,19 +2,25 @@ package ru.practicum.crm.user.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
+import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.tenant.api.TenantContext;
 import ru.practicum.crm.user.api.UserService;
+import ru.practicum.crm.user.api.dto.AuthenticatedUserDto;
 import ru.practicum.crm.user.api.dto.ChangePasswordRequest;
 import ru.practicum.crm.user.api.dto.CreateUserRequest;
 import ru.practicum.crm.user.api.dto.UserDto;
@@ -22,13 +28,13 @@ import ru.practicum.crm.user.context.UserContext;
 import ru.practicum.crm.user.domain.UserEntity;
 import ru.practicum.crm.user.domain.UserStatus;
 import ru.practicum.crm.user.repository.UserRepository;
-import ru.practicum.testsupport.TenantTestFixture;
 
-@Import(TenantTestFixture.class)
 class UserServiceImplIntegrationTest extends BaseIntegrationTest {
 
     private static final String VALID_PASSWORD = "StrongPassword1!";
     private static final String NEW_VALID_PASSWORD = "AnotherPassword2@";
+    @MockBean
+    private TenantContext tenantContext;
 
     @Autowired
     private UserService userService;
@@ -37,20 +43,17 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
     private UserRepository userRepository;
 
     @Autowired
-    private TenantTestFixture tenantTestFixture;
+    private JdbcTemplate jdbcTemplate;
 
-    @Autowired
+    @SpyBean
     private PasswordEncoder passwordEncoder;
-
-    @MockBean
-    private TenantContext tenantContext;
 
     @MockBean
     private UserContext userContext;
 
     @Test
     void create_withValidPassword_persistsEncodedPasswordAndReturnsUser() {
-        UUID tenantId = createTenant();
+        UUID tenantId = createTenant("Test Tenant");
 
         UserDto result = userService.create(new CreateUserRequest(
                 "user@example.com",
@@ -66,7 +69,7 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void create_withSamePasswordForDifferentUsers_persistsDifferentHashes() {
-        UUID tenantId = createTenant();
+        UUID tenantId = createTenant("Test Tenant");
         userService.create(new CreateUserRequest(
                 "first@example.com",
                 VALID_PASSWORD
@@ -87,7 +90,7 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void create_withInvalidPassword_throwsValidationErrorAndDoesNotPersistUser() {
-        UUID tenantId = createTenant();
+        UUID tenantId = createTenant("Test Tenant");
 
         assertThatThrownBy(() -> userService.create(new CreateUserRequest(
                 "user@example.com",
@@ -161,7 +164,7 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void create_withPasswordLongerThan72Bytes_throwsValidationErrorAndDoesNotPersistUser() {
-        UUID tenantId = createTenant();
+        UUID tenantId = createTenant("Test Tenant");
         String tooLongPassword = "A" + "a".repeat(70) + "1!";
 
         assertThat(tooLongPassword).hasSize(73);
@@ -174,14 +177,90 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
         assertThat(userRepository.findAllActiveByTenantId(tenantId)).isEmpty();
     }
 
-    private UUID createTenant() {
-        UUID tenantId = tenantTestFixture.createTenant();
-        when(tenantContext.getCurrentTenantId()).thenReturn(tenantId);
-        return tenantId;
+    @Test
+    void authenticate_withValidCredentials_returnsAuthenticatedUser() {
+        UserEntity user = createUserWithPassword(VALID_PASSWORD);
+
+        AuthenticatedUserDto result = userService.authenticate(
+                user.getTenantId(),
+                user.getEmail(),
+                VALID_PASSWORD
+        );
+
+        assertThat(result).isNotNull();
+        assertThat(result.tenantId()).isEqualTo(user.getTenantId());
+    }
+
+    @Test
+    void authenticate_withIncorrectPassword_throwsInvalidCredentials() {
+        UserEntity user = createUserWithPassword(VALID_PASSWORD);
+
+        assertThatThrownBy(() -> userService.authenticate(
+                user.getTenantId(),
+                user.getEmail(),
+                "WrongPassword1!"
+        ))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.INVALID_CREDENTIALS));
+    }
+
+    @Test
+    void authenticate_withUnknownEmail_throwsInvalidCredentialsAndChecksPassword() {
+        UUID tenantId = createTenant("Test Tenant");
+
+        assertThatThrownBy(() -> userService.authenticate(
+                tenantId,
+                "unknown@example.com",
+                VALID_PASSWORD
+        ))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.INVALID_CREDENTIALS));
+
+        verify(passwordEncoder, times(1))
+                .matches(eq(VALID_PASSWORD), anyString());
+    }
+
+    @Test
+    void authenticate_withUserFromAnotherTenant_throwsInvalidCredentials() {
+        UUID firstTenantId = createTenant("Test Tenant1");
+
+        UserEntity user = userRepository.save(new UserEntity(
+                firstTenantId,
+                "user@example.com",
+                passwordEncoder.encode(VALID_PASSWORD),
+                UserStatus.ACTIVE
+        ));
+
+        UUID secondTenantId = createTenant("Test Tenant2");
+
+        assertThatThrownBy(() -> userService.authenticate(
+                secondTenantId,
+                user.getEmail(),
+                VALID_PASSWORD
+        ))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.INVALID_CREDENTIALS));
+    }
+
+    private UUID createTenant(String name) {
+        UUID id = UUID.randomUUID();
+        String slug = "tenant-" + id.toString().replace("-", "");
+
+        jdbcTemplate.update(
+                "INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
+                + " VALUES (?, ?, ?, true, now(), now())",
+                id, name, slug
+        );
+
+        when(tenantContext.getCurrentTenantId()).thenReturn(id);
+        return id;
     }
 
     private UserEntity createUserWithPassword(String password) {
-        UUID tenantId = createTenant();
+        UUID tenantId = createTenant("Test Tenant");
         return userRepository.save(new UserEntity(
                 tenantId,
                 "user@example.com",

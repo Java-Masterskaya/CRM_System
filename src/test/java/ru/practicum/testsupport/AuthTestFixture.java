@@ -5,71 +5,70 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import ru.practicum.crm.tenant.domain.Tenant;
-import ru.practicum.crm.tenant.repository.TenantRepository;
-import ru.practicum.crm.user.domain.UserEntity;
-import ru.practicum.crm.user.domain.UserStatus;
-import ru.practicum.crm.user.repository.UserRepository;
 
 @TestConfiguration
 @RequiredArgsConstructor
 public class AuthTestFixture {
 
-    private final TenantRepository tenantRepository;
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
     private final JdbcTemplate jdbcTemplate;
+    private final PasswordEncoder passwordEncoder;
 
     public TestTenant createTenant(String slug) {
         return createTenant(slug, true);
     }
 
     public TestTenant createTenant(String slug, boolean active) {
-        Tenant tenant = tenantRepository.save(
-                new Tenant(
-                        "Integration test tenant",
-                        slug,
-                        active
-                )
+        UUID tenantId = UUID.randomUUID();
+
+        jdbcTemplate.update(
+                """
+                        INSERT INTO tenants (
+                            id, name, slug, active, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, NOW(), NOW())
+                """,
+                tenantId, "Integration test tenant", slug, active
         );
 
-        return new TestTenant(
-                tenant.getId(),
-                tenant.getSlug()
-        );
+        return new TestTenant(tenantId, slug);
     }
 
-    public TestUser createUser(
-            TestTenant tenant,
-            String email,
-            String password
-    ) {
-        UserEntity user = userRepository.save(
-                new UserEntity(
-                        tenant.id(),
-                        email,
-                        passwordEncoder.encode(password),
-                        UserStatus.ACTIVE
-                )
+    public TestUser createUser(TestTenant tenant, String email, String password) {
+        UUID userId = UUID.randomUUID();
+        String passwordHash = passwordEncoder.encode(password);
+
+        jdbcTemplate.update(
+                """
+                        INSERT INTO users (
+                            id, tenant_id, email, password_hash, status,
+                            deleted_at, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, 'ACTIVE', NULL, NOW(), NOW())
+                """,
+                userId, tenant.id(), email, passwordHash
         );
 
-        return new TestUser(user.getId());
+        return new TestUser(userId);
     }
 
     public void blockUser(UUID tenantId, UUID userId) {
-        UserEntity user = userRepository.findById(userId, tenantId)
-                .orElseThrow();
-
-        user.block();
-        userRepository.save(user);
+        jdbcTemplate.update(
+                """
+                        UPDATE users
+                        SET status = 'BLOCKED', updated_at = NOW()
+                        WHERE id = ? AND tenant_id = ?
+                """,
+                userId, tenantId
+        );
     }
 
     public void deleteUser(UUID tenantId, UUID userId) {
-        UserEntity user = userRepository.findById(userId, tenantId)
-                .orElseThrow();
-
-        user.delete();
-        userRepository.save(user);
+        jdbcTemplate.update(
+                """
+                        UPDATE users
+                        SET deleted_at = NOW(), updated_at = NOW()
+                        WHERE id = ? AND tenant_id = ?
+                """,
+                userId, tenantId
+        );
     }
 
     public void grantPermission(
@@ -82,64 +81,36 @@ public class AuthTestFixture {
 
         jdbcTemplate.update(
                 """
-                INSERT INTO roles (
-                    id,
-                    tenant_id,
-                    code,
-                    name,
-                    created_at,
-                    updated_at
-                )
-                VALUES (?, ?, ?, ?, NOW(), NOW())
+                        INSERT INTO roles (
+                            id, tenant_id, code, name, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, NOW(), NOW())
                 """,
-                roleId,
-                tenant.id(),
-                "AUTH_TEST_ROLE",
-                "Authentication test role"
+                roleId, tenant.id(), "AUTH_TEST_ROLE", "Authentication test role"
         );
 
         jdbcTemplate.update(
                 """
-                INSERT INTO permissions (
-                    id,
-                    tenant_id,
-                    code,
-                    created_at,
-                    updated_at
-                )
-                VALUES (?, ?, ?, NOW(), NOW())
+                        INSERT INTO permissions (
+                            id, tenant_id, code, created_at, updated_at
+                        ) VALUES (?, ?, ?, NOW(), NOW())
                 """,
-                permissionId,
-                tenant.id(),
-                permissionCode
+                permissionId, tenant.id(), permissionCode
         );
 
         jdbcTemplate.update(
                 """
-                INSERT INTO user_roles (
-                    tenant_id,
-                    user_id,
-                    role_id
-                )
-                VALUES (?, ?, ?)
+                        INSERT INTO user_roles (tenant_id, user_id, role_id)
+                        VALUES (?, ?, ?)
                 """,
-                tenant.id(),
-                user.id(),
-                roleId
+                tenant.id(), user.id(), roleId
         );
 
         jdbcTemplate.update(
                 """
-                INSERT INTO role_permissions (
-                    tenant_id,
-                    role_id,
-                    permission_id
-                )
-                VALUES (?, ?, ?)
+                        INSERT INTO role_permissions (tenant_id, role_id, permission_id)
+                        VALUES (?, ?, ?)
                 """,
-                tenant.id(),
-                roleId,
-                permissionId
+                tenant.id(), roleId, permissionId
         );
     }
 

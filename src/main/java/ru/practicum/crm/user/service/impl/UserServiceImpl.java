@@ -1,5 +1,6 @@
 package ru.practicum.crm.user.service.impl;
 
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -9,6 +10,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.tenant.api.TenantContext;
+import ru.practicum.crm.user.api.PasswordHashProvider;
 import ru.practicum.crm.user.api.PasswordPolicy;
 import ru.practicum.crm.user.api.UserService;
 import ru.practicum.crm.user.api.dto.AuthenticatedUserDto;
@@ -29,6 +31,7 @@ public class UserServiceImpl implements UserService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final PasswordPolicy passwordPolicy;
+    private final PasswordHashProvider passwordHashProvider;
 
     private final TransactionTemplate transactionTemplate;
 
@@ -84,15 +87,18 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(readOnly = true)
     public AuthenticatedUserDto authenticate(UUID tenantId, String email, String password) {
-        UserEntity user = userRepository.findByTenantIdAndEmail(tenantId, email)
-                .orElseThrow(() -> new ApiException(
-                        ErrorCode.INVALID_CREDENTIALS,
-                        ErrorCode.INVALID_CREDENTIALS.getDefaultDetail()
-                ));
+        Optional<UserEntity> userOptional =
+                userRepository.findByTenantIdAndEmail(tenantId, email);
 
-        if (!user.canLogIn() || !passwordEncoder.matches(password, user.getPasswordHash())) {
-            throw new ApiException(ErrorCode.INVALID_CREDENTIALS,
-                    ErrorCode.INVALID_CREDENTIALS.getDefaultDetail());
+        String passwordHash = userOptional.map(UserEntity::getPasswordHash)
+                .orElse(passwordHashProvider.dummyHash());
+
+        boolean passwordMatches = passwordEncoder.matches(password, passwordHash);
+
+        UserEntity user = userOptional.orElseThrow(this::invalidCredentials);
+
+        if (!passwordMatches || !user.canLogIn()) {
+            throw invalidCredentials();
         }
 
         return userMapper.toAuthenticatedUserDto(user);
@@ -104,5 +110,12 @@ public class UserServiceImpl implements UserService {
                         ErrorCode.NOT_FOUND,
                         "Пользователь с id " + userId + " не найден. У tenantId: " + tenantId
                 ));
+    }
+
+    private ApiException invalidCredentials() {
+        return new ApiException(
+                ErrorCode.INVALID_CREDENTIALS,
+                ErrorCode.INVALID_CREDENTIALS.getDefaultDetail()
+        );
     }
 }
