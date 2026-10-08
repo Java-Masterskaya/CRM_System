@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -12,7 +13,7 @@ import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
-/** Календарь без базы: только день недели, время суток и часовой пояс. */
+/** Календарь без базы: день недели, даты справочника, время суток и часовой пояс. */
 class WorkingCalendarTest {
 
     private static final ZoneId MOSCOW = ZoneId.of("Europe/Moscow");
@@ -70,6 +71,45 @@ class WorkingCalendarTest {
         assertThat(berlin.isWorkingTime(utc(2026, 7, 6, 7, 30))).isTrue();
         assertThat(berlin.isWorkingTime(utc(2026, 1, 5, 16, 30))).isTrue();
         assertThat(berlin.isWorkingTime(utc(2026, 7, 6, 16, 30))).isFalse();
+    }
+
+    /** Понедельник 5 октября 2026 года — праздник: нерабочий, хотя по календарю будний. */
+    @Test
+    void isWorkingTime_onHolidayFallingOnWorkingDay_isFalse() {
+        WorkingCalendar withHoliday = new WorkingCalendar(MOSCOW, WEEKDAYS,
+                List.of(new DateOverride(LocalDate.of(2026, 10, 5), null, null)));
+
+        assertThat(withHoliday.isWorkingTime(moscowTime(2026, 10, 5, 10, 30))).isFalse();
+        assertThat(withHoliday.isWorkingTime(moscowTime(2026, 10, 6, 10, 30))).isTrue();
+    }
+
+    /** Суббота 10 октября 2026 года — перенос: рабочая с 10:00 до 14:00 из справочника. */
+    @Test
+    void isWorkingTime_onDayOffMarkedWorking_followsHoursOfThatDate() {
+        WorkingCalendar withTransfer = new WorkingCalendar(MOSCOW, WEEKDAYS, List.of(
+                new DateOverride(LocalDate.of(2026, 10, 10), LocalTime.of(10, 0),
+                        LocalTime.of(14, 0))));
+
+        assertThat(withTransfer.isWorkingTime(moscowTime(2026, 10, 10, 9, 59))).isFalse();
+        assertThat(withTransfer.isWorkingTime(moscowTime(2026, 10, 10, 10, 0))).isTrue();
+        assertThat(withTransfer.isWorkingTime(moscowTime(2026, 10, 10, 13, 59))).isTrue();
+        assertThat(withTransfer.isWorkingTime(moscowTime(2026, 10, 10, 14, 0))).isFalse();
+        assertThat(withTransfer.isWorkingTime(moscowTime(2026, 10, 17, 11, 0))).isFalse();
+    }
+
+    /** 22:30 воскресенья по UTC — в Москве уже понедельник, и праздник понедельника действует. */
+    @Test
+    void isWorkingTime_takesHolidayDateInTenantTimezone() {
+        List<WorkingDay> mondayNight = List.of(
+                new WorkingDay(DayOfWeek.MONDAY, LocalTime.MIDNIGHT, LocalTime.of(2, 0)));
+        Instant sundayEveningUtc = utc(2026, 10, 4, 22, 30);
+
+        assertThat(new WorkingCalendar(MOSCOW, mondayNight, List.of(
+                new DateOverride(LocalDate.of(2026, 10, 5), null, null)))
+                .isWorkingTime(sundayEveningUtc)).isFalse();
+        assertThat(new WorkingCalendar(MOSCOW, mondayNight, List.of(
+                new DateOverride(LocalDate.of(2026, 10, 4), null, null)))
+                .isWorkingTime(sundayEveningUtc)).isTrue();
     }
 
     @Test
