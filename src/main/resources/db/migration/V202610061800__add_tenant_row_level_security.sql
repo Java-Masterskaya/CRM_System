@@ -57,9 +57,9 @@ BEGIN
         GROUP BY c.table_name
         ORDER BY c.table_name
     LOOP
-        EXECUTE format('ALTER TABLE %I.%I ENABLE ROW LEVEL SECURITY', tenant_table);
-        EXECUTE format('ALTER TABLE %I.%I FORCE ROW LEVEL SECURITY', tenant_table);
-        EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I.%I', tenant_table);
+        EXECUTE format('ALTER TABLE %I.%I ENABLE ROW LEVEL SECURITY', current_sch, tenant_table);
+        EXECUTE format('ALTER TABLE %I.%I FORCE ROW LEVEL SECURITY', current_sch, tenant_table);
+        EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I.%I', current_sch, tenant_table);
         EXECUTE format('CREATE POLICY tenant_isolation ON %I.%I FOR ALL TO PUBLIC ' ||
                        'USING (%I.crm_tenant_visible(tenant_id))', current_sch, tenant_table, current_sch);
     END LOOP;
