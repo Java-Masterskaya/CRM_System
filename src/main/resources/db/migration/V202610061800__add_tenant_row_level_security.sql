@@ -44,22 +44,24 @@ CREATE OR REPLACE FUNCTION crm_apply_tenant_rls()
 AS $$
 DECLARE
    tenant_table text;
+   current_sch text;
 BEGIN
+    current_sch := current_schema();
+
     FOR tenant_table IN
         SELECT c.table_name
         FROM information_schema.columns c
-        WHERE c.table_schema = 'public'
+        WHERE c.table_schema = current_sch
             AND c.column_name = 'tenant_id'
             AND c.table_name <> 'tenants'
         GROUP BY c.table_name
         ORDER BY c.table_name
     LOOP
-        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tenant_table);
-        EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', tenant_table);
-        EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', tenant_table);
-        EXECUTE format('CREATE POLICY tenant_isolation ON %I FOR ALL TO PUBLIC ' ||
-                       'USING (crm_tenant_visible(tenant_id)) ' ||
-                       'WITH CHECK (crm_tenant_visible(tenant_id))', tenant_table);
+        EXECUTE format('ALTER TABLE %I.%I ENABLE ROW LEVEL SECURITY', tenant_table);
+        EXECUTE format('ALTER TABLE %I.%I FORCE ROW LEVEL SECURITY', tenant_table);
+        EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I.%I', tenant_table);
+        EXECUTE format('CREATE POLICY tenant_isolation ON %I.%I FOR ALL TO PUBLIC ' ||
+                       'USING (%I.crm_tenant_visible(tenant_id))', current_sch, tenant_table, current_sch);
     END LOOP;
 END
 $$;

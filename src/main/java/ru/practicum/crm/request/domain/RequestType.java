@@ -14,8 +14,8 @@ import java.time.Instant;
 import java.util.UUID;
 import lombok.Getter;
 import org.hibernate.annotations.Filter;
-import ru.practicum.crm.common.model.TenantIds;
 import ru.practicum.crm.common.model.RequestPriority;
+import ru.practicum.crm.common.model.TenantIds;
 
 /**
  * Тип заявки — категория обращения, принадлежащая арендатору (ТЗ §4.1).

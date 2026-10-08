@@ -103,7 +103,7 @@ public class TenantIsolationIntegrationTest extends BaseIntegrationTest {
     void find_whenIdBelongsToAnotherTenant_returnsNull() {
         UUID foreignId = insertRequest(tenantA, "Чужая заявка");
 
-        tenantContext.setTenantId(foreignId);
+        tenantContext.setTenantId(tenantB);
         Request found = transactionTemplate.execute(status -> {
             entityManager.clear();
             return entityManager.find(Request.class, foreignId);
