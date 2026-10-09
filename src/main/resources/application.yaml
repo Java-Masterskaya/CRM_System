@@ -65,6 +65,8 @@ crm:
       require-lowercase: true
       require-digit: true
       require-special: true
+  system:
+    secret: ${CRM_SYSTEM_SECRET:}
 
 server:
   port: ${SERVER_PORT:8080}
