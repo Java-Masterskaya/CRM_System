@@ -9,6 +9,7 @@ import javax.sql.DataSource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Component;
+import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.TenantIsolationInitializationException;
 
 @Component
@@ -42,15 +43,19 @@ public class TenantDatabaseValidator {
                 if (!hasMembership) {
                     throw new TenantIsolationInitializationException(
                             "Критическая ошибка! "
-                                    + "Текущий пользователь не яляется членом роли 'crm_app'"
+                                    + "Текущий пользователь не является членом роли 'crm_app'"
                     );
                 }
 
                 log.info("Проверка прав RLS успешно пройдено.");
             }
+
         } catch (SQLException exception) {
-            throw new TenantIsolationInitializationException(
+            ApiException apiException = new TenantIsolationInitializationException(
                     "Не удалось выполнить проверку ролей RLS в базе данных.");
+
+            apiException.initCause(exception);
+            throw apiException;
         }
     }
 }
