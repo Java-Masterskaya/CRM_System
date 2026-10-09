@@ -11,12 +11,17 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.sql.SQLException;
 import java.time.DayOfWeek;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
@@ -24,9 +29,11 @@ import org.springframework.dao.DataIntegrityViolationException;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ValidationError;
+import ru.practicum.crm.sla.domain.Holiday;
 import ru.practicum.crm.sla.domain.WorkingCalendar;
 import ru.practicum.crm.sla.domain.WorkingDay;
 import ru.practicum.crm.sla.domain.WorkingHours;
+import ru.practicum.crm.sla.repository.HolidayRepository;
 import ru.practicum.crm.sla.repository.WorkingHoursRepository;
 import ru.practicum.crm.tenant.api.TenantTimezoneProvider;
 
@@ -44,9 +51,10 @@ class WorkingCalendarServiceTest {
             new WorkingDay(DayOfWeek.FRIDAY, LocalTime.of(10, 0), LocalTime.of(16, 0));
 
     private final WorkingHoursRepository repository = mock(WorkingHoursRepository.class);
+    private final HolidayRepository holidays = mock(HolidayRepository.class);
     private final TenantTimezoneProvider timezones = mock(TenantTimezoneProvider.class);
     private final WorkingCalendarService service =
-            new WorkingCalendarService(repository, timezones);
+            new WorkingCalendarService(repository, holidays, timezones);
 
     @Test
     void seedDefaults_forTenantWithoutCalendar_storesMondayToFridayNineToSix() {
@@ -99,6 +107,21 @@ class WorkingCalendarServiceTest {
 
         assertThat(calendar.getZone()).isEqualTo(ZoneId.of("Asia/Yekaterinburg"));
         assertThat(calendar.getDays()).containsExactly(MONDAY);
+    }
+
+    /** Понедельник 5 октября 2026 года в справочнике — календарь считает его нерабочим. */
+    @Test
+    void calendar_includesTenantHolidays() {
+        when(repository.findByTenantId(TENANT_ID)).thenReturn(
+                List.of(new WorkingHours(TENANT_ID, MONDAY)));
+        when(holidays.findByTenantId(TENANT_ID)).thenReturn(List.of(
+                Holiday.dayOff(TENANT_ID, LocalDate.of(2026, 10, 5), "Корпоративный выходной")));
+        when(timezones.timezoneOf(TENANT_ID)).thenReturn(ZoneOffset.UTC);
+
+        WorkingCalendar calendar = service.calendar(TENANT_ID);
+
+        assertThat(calendar.isWorkingTime(Instant.parse("2026-10-05T10:00:00Z"))).isFalse();
+        assertThat(calendar.isWorkingTime(Instant.parse("2026-10-12T10:00:00Z"))).isTrue();
     }
 
     @Test
@@ -168,8 +191,8 @@ class WorkingCalendarServiceTest {
      */
     @Test
     void changeWorkingDays_whenCalendarChangedConcurrently_isRejectedAsStale() {
-        when(repository.saveAllAndFlush(any())).thenThrow(new DataIntegrityViolationException(
-                "duplicate key value violates unique constraint \"working_hours_day_unique\""));
+        when(repository.saveAllAndFlush(any()))
+                .thenThrow(violationOf("working_hours_day_unique"));
 
         ApiException thrown = catchThrowableOfType(
                 () -> service.changeWorkingDays(TENANT_ID, List.of(MONDAY)), ApiException.class);
@@ -179,11 +202,21 @@ class WorkingCalendarServiceTest {
 
     @Test
     void changeWorkingDays_whenDatabaseRejectsForOtherReason_passesErrorOn() {
-        DataIntegrityViolationException unknownTenant = new DataIntegrityViolationException(
-                "violates foreign key constraint \"working_hours_tenant_id_fkey\"");
+        DataIntegrityViolationException unknownTenant =
+                violationOf("working_hours_tenant_id_fkey");
         when(repository.saveAllAndFlush(any())).thenThrow(unknownTenant);
 
         assertThatThrownBy(() -> service.changeWorkingDays(TENANT_ID, List.of(MONDAY)))
                 .isSameAs(unknownTenant);
+    }
+
+    /**
+     * Отказ базы, как его видит сервис: Spring кладёт причиной исключение Hibernate с именем
+     * нарушенного ограничения.
+     */
+    private static DataIntegrityViolationException violationOf(String constraint) {
+        return new DataIntegrityViolationException("could not execute statement",
+                new ConstraintViolationException("could not execute statement",
+                        new SQLException("violates constraint"), constraint));
     }
 }

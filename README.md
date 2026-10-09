@@ -59,7 +59,7 @@ SpotBugs — статический анализ
 
 ### CI
 `.github/workflows/ci.yaml` — запускается на PR и push в `main`: Checkstyle, SpotBugs, тесты, покрытие.
-`.github/workflows/dependency-check.yaml` — OWASP Dependency-Check, по понедельникам в 06:00 UTC и вручную через workflow_dispatch. PR не блокирует.
+`.github/workflows/dependency-check.yaml` — OWASP Dependency-Check, по понедельникам в 06:00 UTC и вручную через workflow_dispatch. Только информирует: сборку не валит, PR не блокирует.
 
 ### Запуск приложения
 ```bash
@@ -624,3 +624,26 @@ http://localhost:8081/actuator/prometheus
 потому что тестовое окружение не поднимает SMTP-сервер. Это не меняет
 production-контракт: в `local` и `prod` mail входит в агрегат `/actuator/health`,
 но не в группы `liveness`/`readiness`.
+
+### Настройка прав и ролей базы данных (RLS)
+
+При первом запуске на свежем томе Docker Compose роли и права инициализируются автоматически. Однако при деплое на существующую/обновляемую базу данных (когда том PostgreSQL уже создан), необходимо **вручную** связать роль приложения с пользователем бэкенда.
+
+Без выполнения этого шага приложение выбросит ошибку `ApiException (INTERNAL_SERVER_ERROR)` на этапе проверки `TenantDatabaseValidator`.
+
+Выполните под учетной записью суперпользователя (`postgres`):
+
+```sql
+GRANT crm_app TO your_app_db_user;
+
+SELECT crm_apply_tenant_rls();
+```
+
+> **Важно**: Шаг `GRANT` обязателен. Приложение выполняет инструкцию `SET LOCAL ROLE crm_app` при каждом запросе. Если пользователь БД не является членом роли `crm_app`, транзакции будут блокироваться.
+
+## Применение RLS для новых таблиц
+Если в проект добавились **новые таблицы с колонкой `tenant_id`**, чтобы включить на них изоляцию арендаторов, достаточно выполнить одну команду:
+
+```sql
+SELECT crm_apply_tenant_rls();
+```
