@@ -13,6 +13,8 @@ import java.security.MessageDigest;
 import java.util.List;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ProblemDetailFactory;
@@ -20,6 +22,8 @@ import ru.practicum.crm.common.error.ProblemDetailFactory;
 public class SystemSecretFilter extends OncePerRequestFilter {
 
     private static final String SECRET_HEADER = "X-System-Secret";
+    private static final RequestMatcher SYSTEM_PATH_MATCHER =
+            new AntPathRequestMatcher("/system/**");
 
     private final SystemSecretProperties properties;
     private final ObjectWriter problemWriter;
@@ -31,10 +35,7 @@ public class SystemSecretFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getRequestURI()
-                .substring(request.getContextPath().length());
-
-        return !path.startsWith("/system");
+        return !SYSTEM_PATH_MATCHER.matches(request);
     }
 
     @Override

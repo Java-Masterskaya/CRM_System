@@ -17,10 +17,12 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ProblemDetailFactory;
 import ru.practicum.crm.security.api.PermissionCode;
+import ru.practicum.crm.security.system.SystemSecretFilter;
 import ru.practicum.crm.tenant.api.TenantContextFilter;
 
 @Configuration
@@ -31,6 +33,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             TenantContextFilter tenantContextFilter,
+            SystemSecretFilter systemSecretFilter,
             ObjectMapper objectMapper,
             @Value("${app.security.authorization.enabled:false}") boolean authorizationEnabled
     ) throws Exception {
@@ -67,7 +70,8 @@ public class SecurityConfig {
                         .accessDeniedHandler((request, response, exception) -> writeProblem(
                                 request.getRequestURI(), response, objectMapper,
                                 ErrorCode.ACCESS_DENIED)))
-                .addFilterAfter(tenantContextFilter, SecurityContextHolderFilter.class);
+                .addFilterAfter(tenantContextFilter, SecurityContextHolderFilter.class)
+                .addFilterBefore(systemSecretFilter, AuthorizationFilter.class);
 
         return http.build();
     }

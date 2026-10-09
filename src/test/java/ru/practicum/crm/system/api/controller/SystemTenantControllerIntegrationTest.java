@@ -6,10 +6,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -31,6 +37,9 @@ class SystemTenantControllerIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     JdbcTemplate jdbcTemplate;
+
+    @LocalServerPort
+    private int port;
 
     @Test
     void onboard_whenSystemSecretIsValid_createsTenant()
@@ -104,6 +113,65 @@ class SystemTenantControllerIntegrationTest extends BaseIntegrationTest {
 
         assertThat(countTenantsBySlug("invalid-secret-tenant"))
                 .isEqualTo(0);
+    }
+
+    @Test
+    void onboard_whenSystemPathIsUrlEncodedAndSecretIsMissing_returnsUnauthorized()
+            throws Exception {
+        SystemTenantOnboardingRequest request =
+                new SystemTenantOnboardingRequest(
+                        "Encoded Path Tenant",
+                        "encoded-path-tenant",
+                        "admin@encoded-path.test",
+                        ADMIN_PASSWORD
+                );
+
+        HttpRequest httpRequest = HttpRequest.newBuilder(
+                        URI.create(
+                                "http://localhost:" + port
+                                        + "/api/v1/%73ystem/tenants"
+                        ))
+                .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        objectMapper.writeValueAsString(request)))
+                .build();
+
+        HttpClient httpClient = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .build();
+
+        HttpResponse<String> response = httpClient.send(
+                httpRequest,
+                HttpResponse.BodyHandlers.ofString()
+        );
+
+        assertThat(response.statusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED.value());
+
+        assertThat(countTenantsBySlug("encoded-path-tenant"))
+                .isZero();
+    }
+
+    @Test
+    void onboard_whenSlugDoesNotMatchAllowedPattern_returnsBadRequest()
+            throws Exception {
+        SystemTenantOnboardingRequest request =
+                new SystemTenantOnboardingRequest(
+                        "Invalid Slug Tenant",
+                        "Bad Slug/../ü",
+                        "admin@invalid-slug.test",
+                        ADMIN_PASSWORD
+                );
+
+        mockMvc.perform(
+                        post("/system/tenants")
+                                .header("X-System-Secret", TEST_SYSTEM_SECRET)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request))
+                )
+                .andExpect(status().isBadRequest());
+
+        assertThat(countTenantsBySlug("Bad Slug/../ü")).isZero();
     }
 
     @Test

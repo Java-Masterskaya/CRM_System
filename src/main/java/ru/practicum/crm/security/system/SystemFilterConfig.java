@@ -18,6 +18,10 @@ public class SystemFilterConfig {
     public FilterRegistrationBean<SystemSecretFilter> systemSecretFilterRegistration(
             SystemSecretFilter filter
     ) {
-        return new FilterRegistrationBean<>(filter);
+        FilterRegistrationBean<SystemSecretFilter> registration =
+                new FilterRegistrationBean<>(filter);
+        // Фильтр должен выполняться внутри Spring Security, а не как отдельный servlet-фильтр.
+        registration.setEnabled(false);
+        return registration;
     }
 }

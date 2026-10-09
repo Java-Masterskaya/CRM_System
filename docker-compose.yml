@@ -41,6 +41,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-crm_db}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-crm_user}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      CRM_SYSTEM_SECRET: ${CRM_SYSTEM_SECRET:?CRM_SYSTEM_SECRET must be set in .env}
       SPRING_MAIL_HOST: ${SMTP_HOST:-mailhog}
       SPRING_MAIL_PORT: ${SMTP_PORT:-1025}
     healthcheck:

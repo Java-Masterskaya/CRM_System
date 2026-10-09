@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -23,6 +24,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.WebApplicationContext;
 import ru.practicum.crm.common.health.HealthController;
+import ru.practicum.crm.security.system.SystemFilterConfig;
+import ru.practicum.crm.security.system.SystemSecretProperties;
 import ru.practicum.crm.tenant.api.TenantActiveChecker;
 import ru.practicum.crm.tenant.api.TenantContext;
 import ru.practicum.crm.tenant.api.TenantContextFilter;
@@ -31,18 +34,19 @@ import ru.practicum.crm.tenant.api.TenantContextFilter;
     SecurityConfigSliceTest.TestController.class,
     HealthController.class
 })
-@TestPropertySource(properties = "app.security.authorization.enabled=false")
+@TestPropertySource(properties = {
+        "app.security.authorization.enabled=false",
+        "crm.system.secret=test-system-secret"
+})
 @Import({
     SecurityConfig.class,
+    SystemFilterConfig.class,
     SecurityConfigSliceTest.TestTenantFilterConfiguration.class
 })
 class SecurityConfigSliceTest {
 
     @Autowired
     private WebApplicationContext context;
-
-    @Autowired
-    private ObjectMapper objectMapper;
 
     private MockMvc mockMvc;
 
@@ -70,6 +74,7 @@ class SecurityConfigSliceTest {
     }
 
     @TestConfiguration
+    @EnableConfigurationProperties(SystemSecretProperties.class)
     static class TestTenantFilterConfiguration {
 
         @Bean
@@ -95,15 +100,19 @@ class SecurityConfigSliceTest {
                 .andExpect(status().isOk());
     }
 
-    // Системные маршруты /system/** не блокируются на уровне SecurityConfig:
-    // проверка доступа выполняется отдельным SystemSecretFilter по X-System-Secret.
-    // В этом slice-тесте фильтр секрета не подключен, поэтому проверяем,
-    // что SecurityConfig пропускает запрос дальше в MVC, где отсутствующий endpoint даёт 404.
-    // Проверка system-secret и ответы 401 покрываются SystemSecretFilterIntegrationTest.
     @Test
-    void givenNoCredentials_whenCallingSystemRoute_thenReachesMvcLookup()
+    void givenNoSystemSecret_whenCallingSystemRoute_thenReturnsUnauthorized()
             throws Exception {
         mockMvc.perform(get("/system/tenant").with(anonymous()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void givenValidSystemSecret_whenCallingSystemRoute_thenReachesMvcLookup()
+            throws Exception {
+        mockMvc.perform(get("/system/tenant")
+                        .header("X-System-Secret", "test-system-secret")
+                        .with(anonymous()))
                 .andExpect(status().isNotFound());
     }
 

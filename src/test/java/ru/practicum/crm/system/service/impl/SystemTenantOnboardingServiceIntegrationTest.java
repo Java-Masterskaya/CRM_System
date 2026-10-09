@@ -138,6 +138,14 @@ class SystemTenantOnboardingServiceIntegrationTest
         );
 
         assertThat(userRoleCount).isEqualTo(1);
+
+        Integer workingDayCount = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM working_hours WHERE tenant_id = ?",
+                Integer.class,
+                response.tenantId()
+        );
+
+        assertThat(workingDayCount).isEqualTo(5);
     }
 
     @Test
