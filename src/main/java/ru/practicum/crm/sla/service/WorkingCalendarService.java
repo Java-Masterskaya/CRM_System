@@ -3,10 +3,12 @@ package ru.practicum.crm.sla.service;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -125,7 +127,24 @@ public class WorkingCalendarService implements TenantCalendarSeeder {
      */
     @Transactional(readOnly = true)
     public WorkingCalendar calendar(UUID tenantId) {
-        return new WorkingCalendar(timezones.timezoneOf(tenantId), workingDays(tenantId),
+        return build(tenantId, timezones.timezoneOf(tenantId));
+    }
+
+    /**
+     * Календарь для расчёта сроков (T-058): то же, что {@link #calendar}, но без исключения,
+     * если у арендатора нет настроек. Исключение, вылетевшее из транзакционного метода, Spring
+     * считает сбоем всей транзакции вызывающего и помечает её на откат — тогда не создалась бы
+     * и заявка, которой сроки считаются.
+     *
+     * @return пусто, если у арендатора нет настроек
+     */
+    @Transactional(readOnly = true)
+    public Optional<WorkingCalendar> findCalendar(UUID tenantId) {
+        return timezones.findTimezoneOf(tenantId).map(zone -> build(tenantId, zone));
+    }
+
+    private WorkingCalendar build(UUID tenantId, ZoneId zone) {
+        return new WorkingCalendar(zone, workingDays(tenantId),
                 holidays.findByTenantId(tenantId).stream().map(Holiday::toDateOverride).toList());
     }
 

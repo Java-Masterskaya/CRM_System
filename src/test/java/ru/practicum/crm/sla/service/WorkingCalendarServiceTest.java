@@ -20,6 +20,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
@@ -122,6 +123,28 @@ class WorkingCalendarServiceTest {
 
         assertThat(calendar.isWorkingTime(Instant.parse("2026-10-05T10:00:00Z"))).isFalse();
         assertThat(calendar.isWorkingTime(Instant.parse("2026-10-12T10:00:00Z"))).isTrue();
+    }
+
+    @Test
+    void findCalendar_whenTenantHasSettings_isCalendarInItsTimezone() {
+        when(repository.findByTenantId(TENANT_ID)).thenReturn(
+                List.of(new WorkingHours(TENANT_ID, MONDAY)));
+        when(timezones.findTimezoneOf(TENANT_ID))
+                .thenReturn(Optional.of(ZoneId.of("Asia/Yekaterinburg")));
+
+        assertThat(service.findCalendar(TENANT_ID)).hasValueSatisfying(calendar -> {
+            assertThat(calendar.getZone()).isEqualTo(ZoneId.of("Asia/Yekaterinburg"));
+            assertThat(calendar.getDays()).containsExactly(MONDAY);
+        });
+    }
+
+    /** Без исключения: оно пометило бы на откат транзакцию создания заявки (T-058). */
+    @Test
+    void findCalendar_whenTenantHasNoSettings_isEmptyWithoutReadingCalendar() {
+        when(timezones.findTimezoneOf(TENANT_ID)).thenReturn(Optional.empty());
+
+        assertThat(service.findCalendar(TENANT_ID)).isEmpty();
+        verifyNoInteractions(repository, holidays);
     }
 
     @Test
