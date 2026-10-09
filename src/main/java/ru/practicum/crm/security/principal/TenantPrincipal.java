@@ -5,8 +5,14 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
+import ru.practicum.crm.common.security.AuthenticatedUser;
 
-public record TenantPrincipal(UUID tenantId) implements UserDetails {
+public record TenantPrincipal(UUID tenantId, UUID userId)
+        implements UserDetails, AuthenticatedUser {
+
+    public TenantPrincipal(UUID tenantId) {
+        this(tenantId, null);
+    }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

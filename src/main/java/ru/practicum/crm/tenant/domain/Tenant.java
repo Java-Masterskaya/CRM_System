@@ -20,6 +20,9 @@ public class Tenant extends BaseEntity {
     @Column(nullable = false)
     private String name;
 
+    @Column(name = "slug", length = 100)
+    private String slug;
+
     @Column(nullable = false)
     private boolean active;
 
@@ -33,12 +36,27 @@ public class Tenant extends BaseEntity {
 
     public Tenant(String name) {
         this.name = name;
+        this.slug = toSlug(name);
         this.active = true;
     }
 
     public Tenant(String name, boolean active) {
         this.name = name;
+        this.slug = toSlug(name);
         this.active = active;
+    }
+
+    public Tenant(String name, String slug, boolean active) {
+        this.name = name;
+        this.slug = slug == null || slug.isBlank() ? toSlug(name) : slug;
+        this.active = active;
+    }
+
+    private static String toSlug(String value) {
+        String slugValue = value == null ? "" : value.toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("^-|-$", "");
+        return slugValue.isBlank() ? "tenant" : slugValue;
     }
 
     @SuppressFBWarnings(
