@@ -38,7 +38,7 @@ import ru.practicum.crm.request.repository.RequestRepository;
 class OverdueRequestDetectorIntegrationTest extends BaseIntegrationTest {
 
     private static final String MIGRATION_VERSION = "202610090910";
-    private static final String PREVIOUS_MIGRATION = "202610061050";
+    private static final String PREVIOUS_MIGRATION = "202610061800";
 
     @Autowired
     private OverdueRequestDetector detector;
@@ -278,9 +278,9 @@ class OverdueRequestDetectorIntegrationTest extends BaseIntegrationTest {
         UUID onTime = UUID.randomUUID();
         try {
             migrate(schema, PREVIOUS_MIGRATION);
-            jdbcTemplate.update("INSERT INTO " + schema + ".tenants (id, name, active,"
-                    + " created_at, updated_at) VALUES (?, 'Был до T-060', true, now(), now())",
-                    tenant);
+            jdbcTemplate.update("INSERT INTO " + schema + ".tenants (id, name, slug, active,"
+                    + " created_at, updated_at) VALUES (?, 'Был до T-060', ?, true, now(), now())",
+                    tenant, slugOf(tenant));
             for (UUID id : List.of(overdue, onTime)) {
                 jdbcTemplate.update("INSERT INTO " + schema + ".requests (id, tenant_id, subject,"
                         + " description, status, author_id, overdue, created_at, updated_at)"
@@ -324,9 +324,14 @@ class OverdueRequestDetectorIntegrationTest extends BaseIntegrationTest {
 
     private UUID insertTenant() {
         UUID id = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO tenants (id, name, active, created_at, updated_at)"
-                + " VALUES (?, 'Арендатор', true, now(), now())", id);
+        jdbcTemplate.update("INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
+                + " VALUES (?, 'Арендатор', ?, true, now(), now())", id, slugOf(id));
         return id;
+    }
+
+    /** Уникальный slug арендатора в формате из T-025: строчные латинские буквы, цифры и дефис. */
+    private static String slugOf(UUID tenantId) {
+        return "tenant-" + tenantId.toString().replace("-", "");
     }
 
     private static void migrate(String schema, String target) {

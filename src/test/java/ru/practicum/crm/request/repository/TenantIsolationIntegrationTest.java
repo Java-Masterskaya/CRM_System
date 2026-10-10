@@ -230,8 +230,8 @@ public class TenantIsolationIntegrationTest extends BaseIntegrationTest {
         jdbcTemplate.update(
                 """
                 INSERT INTO requests
-                    (id, tenant_id, subject, description, status, author_id, overdue, deleted,
-                     version, created_at, updated_at)
+                    (id, tenant_id, subject, description, status, author_id,
+                     resolution_overdue, deleted, version, created_at, updated_at)
                 VALUES (?, ?, ?, 'Описание', 'NEW', ?, false, false, 0, now(), now())
                 """, id, tenantId, subject, authorId);
         return id;
