@@ -16,23 +16,26 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.filter.OncePerRequestFilter;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ProblemDetailFactory;
 
 public class TenantContextFilter extends OncePerRequestFilter {
 
-    @SuppressFBWarnings(
-            value = "EI_EXPOSE_REP2",
-            justification = "TenantContext is a Spring-managed dependency injected into the filter."
-    )
-    private final TenantContext tenantContext;
-
     private static final List<String> PROTECTED_PREFIXES = List.of(
             "/client",
             "/admin"
     );
+
+    private static final String CLAIM_TENANT_ID = "tenant_id";
+
+    @SuppressFBWarnings(
+            value = "EI_EXPOSE_REP2",
+            justification =
+                    "TenantContext is a Spring-managed dependency injected into the filter."
+    )
+    private final TenantContext tenantContext;
 
     private final TenantActiveChecker tenantActiveChecker;
     private final ObjectWriter problemWriter;
@@ -49,8 +52,11 @@ public class TenantContextFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getRequestURI().substring(request.getContextPath().length());
-        return PROTECTED_PREFIXES.stream().noneMatch(path::startsWith);
+        String path = request.getRequestURI()
+                .substring(request.getContextPath().length());
+
+        return PROTECTED_PREFIXES.stream()
+                .noneMatch(path::startsWith);
     }
 
     @Override
@@ -72,7 +78,11 @@ public class TenantContextFilter extends OncePerRequestFilter {
             }
 
             if (!tenantActiveChecker.isActive(tenantId)) {
-                writeUnauthorized(request, response, "Арендатор не активен");
+                writeUnauthorized(
+                        request,
+                        response,
+                        "Арендатор не активен"
+                );
                 return;
             }
 
@@ -88,29 +98,44 @@ public class TenantContextFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             String detail
     ) throws IOException {
-        response.setStatus(ErrorCode.UNAUTHENTICATED.getStatus().value());
-        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setStatus(
+                ErrorCode.UNAUTHENTICATED.getStatus().value()
+        );
+        response.setContentType(
+                MediaType.APPLICATION_PROBLEM_JSON_VALUE
+        );
+        response.setCharacterEncoding(
+                StandardCharsets.UTF_8.name()
+        );
+
         ProblemDetail problem = ProblemDetailFactory.create(
-                ErrorCode.UNAUTHENTICATED, detail,
-                URI.create(request.getRequestURI()), List.of());
-        problemWriter.writeValue(response.getOutputStream(), problem);
+                ErrorCode.UNAUTHENTICATED,
+                detail,
+                URI.create(request.getRequestURI()),
+                List.of()
+        );
+
+        problemWriter.writeValue(
+                response.getOutputStream(),
+                problem
+        );
     }
 
     private UUID extractTenantId(Authentication authentication) {
-        if (authentication == null || !authentication.isAuthenticated()) {
+        if (!(authentication instanceof JwtAuthenticationToken jwtAuthentication)) {
             return null;
         }
 
-        Object principal = authentication.getPrincipal();
+        String tenantId = jwtAuthentication.getToken()
+                .getClaimAsString(CLAIM_TENANT_ID);
 
-        if (!(principal instanceof UserDetails userDetails)) {
+        if (tenantId == null || tenantId.isBlank()) {
             return null;
         }
 
         try {
-            return UUID.fromString(userDetails.getUsername());
-        } catch (IllegalArgumentException e) {
+            return UUID.fromString(tenantId);
+        } catch (IllegalArgumentException exception) {
             return null;
         }
     }

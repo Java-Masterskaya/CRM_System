@@ -43,6 +43,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_MAIL_HOST: ${SMTP_HOST:-mailhog}
       SPRING_MAIL_PORT: ${SMTP_PORT:-1025}
+      CRM_JWT_SECRET: ${CRM_JWT_SECRET}
     healthcheck:
       test: [ "CMD", "wget", "-qO-", "http://localhost:8081/actuator/health/readiness" ]
       interval: 10s

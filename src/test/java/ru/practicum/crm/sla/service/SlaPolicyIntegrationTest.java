@@ -210,8 +210,9 @@ class SlaPolicyIntegrationTest extends BaseIntegrationTest {
 
     private UUID insertTenant() {
         UUID id = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO tenants (id, name, active, created_at, updated_at)"
-                + " VALUES (?, 'Арендатор', true, now(), now())", id);
+        jdbcTemplate.update("INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
+                            + " VALUES (?, 'Арендатор', ?, true, now(), now())",
+                id, "tenant-" + id);
         return id;
     }
 

@@ -25,21 +25,25 @@ class DefaultAccessSeedMigrationIntegrationTest extends BaseIntegrationTest {
         UUID otherTenantId = UUID.randomUUID();
         UUID systemTenantId = UUID.fromString("00000000-0000-0000-0000-000000000000");
         jdbcTemplate.update(
-                "INSERT INTO tenants (id, name, active, created_at, updated_at) "
-                        + "VALUES (?, ?, true, NOW(), NOW())",
+                "INSERT INTO tenants (id, name, slug, active, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, true, NOW(), NOW())",
                 existingTenantId,
-                "Existing tenant before T-021"
+                "Existing tenant before T-021",
+                "existing-tenant-before-t-021"
         );
         jdbcTemplate.update(
-                "INSERT INTO tenants (id, name, active, created_at, updated_at) "
-                        + "VALUES (?, ?, true, NOW(), NOW())",
+                "INSERT INTO tenants (id, name, slug, active, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, true, NOW(), NOW())",
                 otherTenantId,
-                "Other existing tenant before T-021"
+                "Other existing tenant before T-021",
+                "other-existing-tenant-before-t-021"
         );
         jdbcTemplate.update(
-                "INSERT INTO tenants (id, name, active, created_at, updated_at) "
-                        + "VALUES (?, 'System', true, NOW(), NOW())",
-                systemTenantId
+                "INSERT INTO tenants (id, name, slug, active, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, true, NOW(), NOW())",
+                systemTenantId,
+                "System",
+                "system"
         );
 
         UUID localRoleId = UUID.randomUUID();

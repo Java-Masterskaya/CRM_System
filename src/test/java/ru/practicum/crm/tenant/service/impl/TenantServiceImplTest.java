@@ -57,8 +57,8 @@ class TenantServiceImplTest {
 
     @Test
     void createTenant_savesTenantWithDefaultSettingsAndReturnsMappedDto() {
-        TenantDto request = new TenantDto("Tenant name", false);
-        TenantDto expected = new TenantDto("Tenant name", true);
+        TenantDto request = new TenantDto("Tenant name", "tenant-slug", false);
+        TenantDto expected = new TenantDto("Tenant name", "tenant-slug", true);
 
         when(tenantRepository.save(any(Tenant.class)))
                 .thenAnswer(invocation -> {
