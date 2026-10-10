@@ -80,8 +80,8 @@ class EmailNotificationSenderIntegrationTest extends BaseIntegrationTest {
         MAIL_SERVER.purgeEmailFromAllMailboxes();
         tenantId = UUID.randomUUID();
         eventId = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO tenants (id, name, active, created_at, updated_at)"
-                + " VALUES (?, 'Арендатор', true, now(), now())", tenantId);
+        jdbcTemplate.update("INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
+                + " VALUES (?, 'Арендатор', 'arendator', true, now(), now())", tenantId);
         jdbcTemplate.update("INSERT INTO outbox_events (id, tenant_id, event_type, payload,"
                 + " status, attempts, next_attempt_at, created_at, updated_at)"
                 + " VALUES (?, ?, ?, '{}', 'IN_PROGRESS', 1, now(), now(), now())",

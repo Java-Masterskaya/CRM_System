@@ -25,21 +25,25 @@ class DefaultAccessSeedMigrationIntegrationTest extends BaseIntegrationTest {
         UUID otherTenantId = UUID.randomUUID();
         UUID systemTenantId = UUID.fromString("00000000-0000-0000-0000-000000000000");
         jdbcTemplate.update(
-                "INSERT INTO tenants (id, name, active, created_at, updated_at) "
-                        + "VALUES (?, ?, true, NOW(), NOW())",
+                "INSERT INTO tenants (id, name, slug, active, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, true, NOW(), NOW())",
                 existingTenantId,
-                "Existing tenant before T-021"
+                "Existing tenant before T-021",
+                "existing-tenant-before-t-021"
         );
         jdbcTemplate.update(
-                "INSERT INTO tenants (id, name, active, created_at, updated_at) "
-                        + "VALUES (?, ?, true, NOW(), NOW())",
+                "INSERT INTO tenants (id, name, slug, active, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, true, NOW(), NOW())",
                 otherTenantId,
-                "Other existing tenant before T-021"
+                "Other existing tenant before T-021",
+                "other-existing-tenant-before-t-021"
         );
         jdbcTemplate.update(
-                "INSERT INTO tenants (id, name, active, created_at, updated_at) "
-                        + "VALUES (?, 'System', true, NOW(), NOW())",
-                systemTenantId
+                "INSERT INTO tenants (id, name, slug, active, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, true, NOW(), NOW())",
+                systemTenantId,
+                "System",
+                "system"
         );
 
         UUID localRoleId = UUID.randomUUID();
@@ -133,8 +137,9 @@ class DefaultAccessSeedMigrationIntegrationTest extends BaseIntegrationTest {
         jdbcTemplate.execute("ALTER TABLE user_roles DROP CONSTRAINT IF EXISTS fk_user_roles_user");
         jdbcTemplate.execute("DROP INDEX IF EXISTS idx_role_permissions_tenant_permission");
         jdbcTemplate.execute("DROP INDEX IF EXISTS idx_user_roles_tenant_role");
-        jdbcTemplate.execute("ALTER TABLE role_permissions DROP COLUMN IF EXISTS tenant_id");
-        jdbcTemplate.execute("ALTER TABLE user_roles DROP COLUMN IF EXISTS tenant_id");
+        jdbcTemplate.execute(
+                "ALTER TABLE role_permissions DROP COLUMN IF EXISTS tenant_id CASCADE");
+        jdbcTemplate.execute("ALTER TABLE user_roles DROP COLUMN IF EXISTS tenant_id CASCADE");
         jdbcTemplate.execute("ALTER TABLE roles DROP CONSTRAINT IF EXISTS uk_roles_tenant_id");
         jdbcTemplate.execute("ALTER TABLE permissions DROP CONSTRAINT IF EXISTS "
                 + "uk_permissions_tenant_id");
