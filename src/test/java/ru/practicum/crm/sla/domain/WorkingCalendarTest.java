@@ -225,6 +225,22 @@ class WorkingCalendarTest {
                 .plusWorkingMinutes(fridayEvening, 60)).contains(moscowTime(2026, 10, 10, 11, 0));
     }
 
+    /**
+     * Минута рабочего времени по понедельникам, отсчёт с понедельника 5 января 2026 года. До
+     * 5 января 2036 года включительно — 522 понедельника: последний, 31 декабря 2035 года, ещё
+     * в пределе, а 523-я минута пришлась бы на 7 января 2036 года — за пределом.
+     */
+    @Test
+    void plusWorkingMinutes_whenTermDoesNotFitIntoTenYears_isEmpty() {
+        WorkingCalendar minuteOnMondays = new WorkingCalendar(MOSCOW, List.of(
+                new WorkingDay(DayOfWeek.MONDAY, NINE, NINE.plusMinutes(1))));
+        Instant mondayMorning = moscowTime(2026, 1, 5, 8, 0);
+
+        assertThat(minuteOnMondays.plusWorkingMinutes(mondayMorning, 522))
+                .contains(moscowTime(2035, 12, 31, 9, 1));
+        assertThat(minuteOnMondays.plusWorkingMinutes(mondayMorning, 523)).isEmpty();
+    }
+
     @Test
     void plusWorkingMinutes_withNonPositiveTerm_isRejected() {
         assertThatThrownBy(() -> moscow.plusWorkingMinutes(moscowTime(2026, 10, 5, 10, 0), 0))

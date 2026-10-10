@@ -71,7 +71,7 @@ class RequestDeadlineServiceTest {
         when(policies.resolve(TENANT_ID, TYPE_ID, RequestPriority.HIGH)).thenReturn(Optional.of(
                 SlaPolicy.forPair(TENANT_ID, TYPE_ID, RequestPriority.HIGH,
                         new SlaTerms(60, 480))));
-        when(calendars.findCalendar(TENANT_ID)).thenReturn(Optional.of(WEEKDAYS));
+        when(calendars.findCalendar(TENANT_ID, MONDAY_FIVE_PM)).thenReturn(Optional.of(WEEKDAYS));
 
         assertThat(service.calculate(TENANT_ID, TYPE_ID, RequestPriority.HIGH, MONDAY_FIVE_PM))
                 .contains(new RequestDeadlines(moscowTime(5, 18), moscowTime(6, 16)));
@@ -98,7 +98,7 @@ class RequestDeadlineServiceTest {
     void calculate_whenTenantHasNoSettings_isEmptyAndWarned() {
         when(policies.resolve(TENANT_ID, null, RequestPriority.NORMAL)).thenReturn(Optional.of(
                 SlaPolicy.byDefault(TENANT_ID, new SlaTerms(60, 480))));
-        when(calendars.findCalendar(TENANT_ID)).thenReturn(Optional.empty());
+        when(calendars.findCalendar(TENANT_ID, MONDAY_FIVE_PM)).thenReturn(Optional.empty());
 
         assertThat(service.calculate(TENANT_ID, null, RequestPriority.NORMAL, MONDAY_FIVE_PM))
                 .isEmpty();
@@ -114,7 +114,7 @@ class RequestDeadlineServiceTest {
     void calculate_whenCalendarHasNoWorkingTime_isEmptyAndWarned() {
         when(policies.resolve(TENANT_ID, null, RequestPriority.NORMAL)).thenReturn(Optional.of(
                 SlaPolicy.byDefault(TENANT_ID, new SlaTerms(60, 480))));
-        when(calendars.findCalendar(TENANT_ID))
+        when(calendars.findCalendar(TENANT_ID, MONDAY_FIVE_PM))
                 .thenReturn(Optional.of(new WorkingCalendar(MOSCOW, List.of())));
 
         assertThat(service.calculate(TENANT_ID, null, RequestPriority.NORMAL, MONDAY_FIVE_PM))
@@ -122,7 +122,31 @@ class RequestDeadlineServiceTest {
 
         assertThat(logs.list).singleElement().satisfies(event -> {
             assertThat(event.getLevel()).isEqualTo(Level.WARN);
-            assertThat(event.getFormattedMessage()).contains("нет рабочего времени",
+            assertThat(event.getFormattedMessage()).contains("не хватает рабочего времени",
+                    "в пределах 10 лет", TENANT_ID.toString());
+        });
+    }
+
+    /**
+     * Минута рабочего времени в неделю: срок в год минут набрался бы только через десять тысяч
+     * лет — расчёт останавливается на пределе календаря, а не перебирает дни до конца.
+     */
+    @Test
+    void calculate_whenTermDoesNotFitIntoTenYears_isEmptyAndWarned() {
+        SlaPolicy policy = SlaPolicy.byDefault(TENANT_ID,
+                new SlaTerms(SlaTerms.MAX_MINUTES, SlaTerms.MAX_MINUTES));
+        when(policies.resolve(TENANT_ID, null, RequestPriority.NORMAL))
+                .thenReturn(Optional.of(policy));
+        when(calendars.findCalendar(TENANT_ID, MONDAY_FIVE_PM)).thenReturn(Optional.of(
+                new WorkingCalendar(MOSCOW, List.of(new WorkingDay(DayOfWeek.MONDAY,
+                        LocalTime.of(9, 0), LocalTime.of(9, 1))))));
+
+        assertThat(service.calculate(TENANT_ID, null, RequestPriority.NORMAL, MONDAY_FIVE_PM))
+                .isEmpty();
+
+        assertThat(logs.list).singleElement().satisfies(event -> {
+            assertThat(event.getLevel()).isEqualTo(Level.WARN);
+            assertThat(event.getFormattedMessage()).contains("не хватает рабочего времени",
                     TENANT_ID.toString());
         });
     }

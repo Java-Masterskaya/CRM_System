@@ -8,4 +8,11 @@ package ru.practicum.crm.sla.domain;
  * @param resolutionMinutes срок решения
  */
 public record SlaTerms(int firstResponseMinutes, int resolutionMinutes) {
+
+    /**
+     * Наибольший срок — год в минутах (365 × 24 × 60). Рабочих минут столько при восьмичасовом
+     * дне набирается за несколько лет, так что реальным срокам потолок не мешает, а срок, который
+     * не посчитать за разумное время, задать нельзя. То же ограничение стоит в базе.
+     */
+    public static final int MAX_MINUTES = 525_600;
 }
