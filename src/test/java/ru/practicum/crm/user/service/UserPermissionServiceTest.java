@@ -12,7 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import ru.practicum.crm.security.api.PermissionCode;
+import ru.practicum.crm.user.domain.PermissionCode;
 import ru.practicum.crm.user.repository.PermissionRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -22,7 +22,7 @@ class UserPermissionServiceTest {
     private PermissionRepository permissionRepository;
 
     @InjectMocks
-    private UserPermissionService userPermissionService;
+    private UserPermissionServiceImpl userPermissionService;
 
     @Test
     @DisplayName("Должен возвращать права пользователя")

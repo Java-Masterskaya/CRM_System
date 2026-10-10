@@ -17,6 +17,9 @@ import ru.practicum.crm.common.model.BaseEntity;
 @NoArgsConstructor
 public class Tenant extends BaseEntity {
 
+    @Column(name = "slug", nullable = false, unique = true, length = 100)
+    private String slug;
+
     @Column(nullable = false)
     private String name;
 
@@ -26,18 +29,19 @@ public class Tenant extends BaseEntity {
     @OneToOne(
             mappedBy = "tenant",
             cascade = CascadeType.ALL,
-            orphanRemoval = true,
-            fetch = FetchType.LAZY
+            orphanRemoval = true
     )
     private TenantSettings settings;
 
-    public Tenant(String name) {
+    public Tenant(String name, String slug) {
         this.name = name;
+        this.slug = slug;
         this.active = true;
     }
 
-    public Tenant(String name, boolean active) {
+    public Tenant(String name, String slug, boolean active) {
         this.name = name;
+        this.slug = slug;
         this.active = active;
     }
 

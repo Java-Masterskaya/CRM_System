@@ -80,8 +80,8 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
         recordingSender.reset();
         flakySender.failNextCalls(0);
         tenantId = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO tenants (id, name, active, created_at, updated_at)"
-                + " VALUES (?, 'Арендатор', true, now(), now())", tenantId);
+        jdbcTemplate.update("INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
+                + " VALUES (?, 'Арендатор', 'arendator', true, now(), now())", tenantId);
     }
 
     @Test

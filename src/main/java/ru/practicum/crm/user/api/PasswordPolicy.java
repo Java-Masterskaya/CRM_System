@@ -1,4 +1,4 @@
-package ru.practicum.crm.security.api;
+package ru.practicum.crm.user.api;
 
 import java.util.List;
 
