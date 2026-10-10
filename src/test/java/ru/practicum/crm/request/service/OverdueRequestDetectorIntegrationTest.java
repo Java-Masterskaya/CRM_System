@@ -76,7 +76,11 @@ class OverdueRequestDetectorIntegrationTest extends BaseIntegrationTest {
                 Boolean.class, MIGRATION_VERSION)).isTrue();
     }
 
-    /** DoD: заявка с истёкшим сроком получает признак просрочки, её статус остаётся прежним. */
+    /**
+     * DoD: заявка с истёкшим сроком получает признак просрочки, её статус остаётся прежним.
+     * Истекли оба срока — это две пометки, каждая своим запросом и в своей транзакции, поэтому
+     * версия растёт дважды: по разу на признак.
+     */
     @Test
     void detect_whenBothDeadlinesMissedInNew_marksBothAndKeepsStatus() {
         UUID id = insertRequest(tenantA, "NEW", hourAgo, hourAgo);
@@ -86,7 +90,7 @@ class OverdueRequestDetectorIntegrationTest extends BaseIntegrationTest {
         assertThat(row(id)).containsEntry("first_response_overdue", true)
                 .containsEntry("resolution_overdue", true)
                 .containsEntry("status", "NEW")
-                .containsEntry("version", 1L);
+                .containsEntry("version", 2L);
     }
 
     /** Первый ответ — переход из NEW в CONTACTED: после него этот срок уже не просрочивается. */
