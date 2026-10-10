@@ -99,6 +99,33 @@ class SlaPolicyServiceTest {
                 new SlaTerms(60, 60)).getTerms()).isEqualTo(new SlaTerms(60, 60));
     }
 
+    /**
+     * Оба срока длиннее года, и первый ещё и длиннее второго: ошибка у каждого поля одна —
+     * порядок сроков проверяется, только когда каждый из них допустим.
+     */
+    @Test
+    void create_whenTermsLongerThanYear_isRejectedWithOneErrorPerField() {
+        ApiException thrown = catchThrowableOfType(() -> service.create(TENANT_ID, TYPE_ID,
+                RequestPriority.LOW, new SlaTerms(SlaTerms.MAX_MINUTES + 2,
+                        SlaTerms.MAX_MINUTES + 1)), ApiException.class);
+
+        assertThat(thrown.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+        assertThat(thrown.getErrors()).containsExactly(
+                ValidationError.ofField("firstResponseMinutes",
+                        "должно быть не больше 525600 (год в минутах)"),
+                ValidationError.ofField("resolutionMinutes",
+                        "должно быть не больше 525600 (год в минутах)"));
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void createDefault_whenTermsEqualYear_isAccepted() {
+        when(repository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        SlaTerms year = new SlaTerms(SlaTerms.MAX_MINUTES, SlaTerms.MAX_MINUTES);
+
+        assertThat(service.createDefault(TENANT_ID, year).getTerms()).isEqualTo(year);
+    }
+
     @Test
     void create_whenDatabaseRejectsTypeOfAnotherTenant_reportsTypeFieldAsNotFound() {
         when(repository.saveAndFlush(any())).thenThrow(violationOf("sla_policies_type_fkey"));

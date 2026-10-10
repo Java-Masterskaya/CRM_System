@@ -26,9 +26,18 @@ import java.util.Optional;
  * субботу — рабочий с часами из справочника.
  *
  * <p>Календарь загружается один раз и дальше к базе не обращается: и проверка рабочего времени,
- * и сложение рабочих минут для сроков (T-058) — чистая арифметика.
+ * и сложение рабочих минут для сроков (T-058) — чистая арифметика. Справочник может быть
+ * загружен не целиком, а с какой-то даты (так делает расчёт сроков) — тогда и ответы календаря
+ * верны только с этой даты.
  */
 public final class WorkingCalendar {
+
+    /**
+     * Насколько вперёд {@link #plusWorkingMinutes} ищет рабочее время. Предел нужен на случай
+     * вырожденного календаря: при минуте рабочего времени в неделю даже срок в пределах
+     * {@link SlaTerms#MAX_MINUTES} пришлось бы перебирать дни на десять тысяч лет вперёд.
+     */
+    public static final int MAX_YEARS_AHEAD = 10;
 
     private final ZoneId zone;
     private final Map<DayOfWeek, WorkingDay> days = new EnumMap<>(DayOfWeek.class);
@@ -100,8 +109,9 @@ public final class WorkingCalendar {
      * следующего рабочего дня.
      *
      * @param minutes сколько рабочих минут отсчитать; больше нуля
-     * @return пусто, если впереди нет рабочего времени: у календаря нет рабочих дней недели,
-     *     а рабочие даты справочника, если есть, уже позади
+     * @return пусто, если впереди нет рабочего времени (у календаря нет рабочих дней недели,
+     *     а рабочие даты справочника, если есть, уже позади) или его не хватает на срок в
+     *     пределах {@value #MAX_YEARS_AHEAD} лет от {@code from}
      * @throws IllegalArgumentException если {@code minutes} не больше нуля
      */
     public Optional<Instant> plusWorkingMinutes(Instant from, long minutes) {
@@ -112,7 +122,8 @@ public final class WorkingCalendar {
         ZonedDateTime start = from.atZone(zone);
         LocalDate date = start.toLocalDate();
         LocalTime time = start.toLocalTime();
-        while (hasWorkingTimeFrom(date)) {
+        LocalDate lastDate = date.plusYears(MAX_YEARS_AHEAD);
+        while (!date.isAfter(lastDate) && hasWorkingTimeFrom(date)) {
             Optional<WorkingDay> hours = hoursOn(date);
             if (hours.isPresent() && time.isBefore(hours.get().end())) {
                 LocalTime begin = time.isAfter(hours.get().start()) ? time : hours.get().start();

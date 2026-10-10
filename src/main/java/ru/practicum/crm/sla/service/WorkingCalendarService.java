@@ -2,6 +2,8 @@ package ru.practicum.crm.sla.service;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.time.DayOfWeek;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -19,6 +21,7 @@ import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ConstraintViolations;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ValidationError;
+import ru.practicum.crm.sla.domain.DateOverride;
 import ru.practicum.crm.sla.domain.Holiday;
 import ru.practicum.crm.sla.domain.WorkingCalendar;
 import ru.practicum.crm.sla.domain.WorkingDay;
@@ -131,21 +134,34 @@ public class WorkingCalendarService implements TenantCalendarSeeder {
     }
 
     /**
-     * Календарь для расчёта сроков (T-058): то же, что {@link #calendar}, но без исключения,
-     * если у арендатора нет настроек. Исключение, вылетевшее из транзакционного метода, Spring
-     * считает сбоем всей транзакции вызывающего и помечает её на откат — тогда не создалась бы
-     * и заявка, которой сроки считаются.
+     * Календарь для расчёта сроков (T-058) от момента {@code from}. Отличия от
+     * {@link #calendar}: нет исключения, если у арендатора нет настроек, и справочник нерабочих
+     * дней загружается не целиком, а с даты {@code from} по местному времени арендатора.
      *
-     * @return пусто, если у арендатора нет настроек
+     * <p>Исключение, вылетевшее из транзакционного метода, Spring считает сбоем всей транзакции
+     * вызывающего и помечает её на откат — тогда не создалась бы и заявка, которой сроки
+     * считаются. Прошлые даты справочника не нужны: сроки отсчитываются только вперёд, а
+     * загружать их на каждую заявку — лишняя работа, которая растёт с каждым годом.
+     *
+     * @return пусто, если у арендатора нет настроек; календарь верен только для моментов не
+     *     раньше {@code from}
      */
     @Transactional(readOnly = true)
-    public Optional<WorkingCalendar> findCalendar(UUID tenantId) {
-        return timezones.findTimezoneOf(tenantId).map(zone -> build(tenantId, zone));
+    public Optional<WorkingCalendar> findCalendar(UUID tenantId, Instant from) {
+        return timezones.findTimezoneOf(tenantId).map(zone -> {
+            LocalDate fromDate = from.atZone(zone).toLocalDate();
+            return new WorkingCalendar(zone, workingDays(tenantId),
+                    overrides(holidays.findByTenantIdAndDateGreaterThanEqual(tenantId, fromDate)));
+        });
     }
 
     private WorkingCalendar build(UUID tenantId, ZoneId zone) {
         return new WorkingCalendar(zone, workingDays(tenantId),
-                holidays.findByTenantId(tenantId).stream().map(Holiday::toDateOverride).toList());
+                overrides(holidays.findByTenantId(tenantId)));
+    }
+
+    private static List<DateOverride> overrides(List<Holiday> dates) {
+        return dates.stream().map(Holiday::toDateOverride).toList();
     }
 
     /** Неделя по умолчанию: понедельник–пятница, 09:00–18:00. */

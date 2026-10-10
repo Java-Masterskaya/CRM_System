@@ -23,7 +23,8 @@ import ru.practicum.crm.sla.domain.WorkingCalendar;
  * <p>Ничего не бросает из-за настроек арендатора: по задаче заявка без сроков лучше, чем
  * несозданная заявка. Если сроки посчитать нельзя, причина пишется в лог: нет политики —
  * на уровне INFO (арендатор может сроки не настраивать), нет настроек или рабочего времени —
- * на уровне WARN (так быть не должно: их записывает создание арендатора).
+ * на уровне WARN (так быть не должно: настройки и календарь записывает создание арендатора, а
+ * рабочего времени не хватает только при вырожденном календаре).
  */
 @Service
 public class RequestDeadlineService implements RequestDeadlineCalculator {
@@ -49,7 +50,7 @@ public class RequestDeadlineService implements RequestDeadlineCalculator {
                     value("typeId", typeId), value("priority", priority));
             return Optional.empty();
         }
-        Optional<WorkingCalendar> calendar = calendars.findCalendar(tenantId);
+        Optional<WorkingCalendar> calendar = calendars.findCalendar(tenantId, createdAt);
         if (calendar.isEmpty()) {
             LOG.warn("Сроки заявки не проставлены: у арендатора {} нет настроек, часовой пояс"
                     + " неизвестен", value("tenantId", tenantId));
@@ -61,8 +62,10 @@ public class RequestDeadlineService implements RequestDeadlineCalculator {
         Optional<Instant> resolution = calendar.get()
                 .plusWorkingMinutes(createdAt, terms.resolutionMinutes());
         if (firstResponse.isEmpty() || resolution.isEmpty()) {
-            LOG.warn("Сроки заявки не проставлены: в календаре арендатора {} нет рабочего времени",
-                    value("tenantId", tenantId));
+            LOG.warn("Сроки заявки не проставлены: в календаре арендатора {} не хватает рабочего"
+                    + " времени на сроки политики {} в пределах {} лет",
+                    value("tenantId", tenantId), value("policyId", policy.get().getId()),
+                    WorkingCalendar.MAX_YEARS_AHEAD);
             return Optional.empty();
         }
         return Optional.of(new RequestDeadlines(firstResponse.get(), resolution.get()));
