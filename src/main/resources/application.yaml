@@ -54,6 +54,10 @@ app:
     max-retry-delay: ${OUTBOX_MAX_RETRY_DELAY:2h}
     retry-jitter: ${OUTBOX_RETRY_JITTER:0.5}
     max-attempts: ${OUTBOX_MAX_ATTEMPTS:8}
+  overdue-detection:
+    scheduler-enabled: ${OVERDUE_DETECTION_SCHEDULER_ENABLED:true}
+    batch-size: ${OVERDUE_DETECTION_BATCH_SIZE:500}
+    poll-interval: ${OVERDUE_DETECTION_POLL_INTERVAL:1m}
 
 crm:
   security:

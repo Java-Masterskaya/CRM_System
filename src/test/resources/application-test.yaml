@@ -30,6 +30,9 @@ app:
   # Тесты вызывают обработчик исходящих событий сами; по расписанию он мешал бы им.
   outbox:
     scheduler-enabled: false
+  # Так же и проверку просроченных заявок: по расписанию она помечала бы тестовые заявки.
+  overdue-detection:
+    scheduler-enabled: false
 
   database:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/crm_test_db}

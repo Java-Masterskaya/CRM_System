@@ -73,7 +73,7 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
         request.setDesiredDueAt(Instant.parse("2026-10-01T09:00:00Z"));
         request.setFirstResponseDueAt(Instant.parse("2026-09-19T12:00:00Z"));
         request.setResolutionDueAt(Instant.parse("2026-09-25T12:00:00Z"));
-        request.setOverdue(true);
+        request.setResolutionOverdue(true);
 
         UUID id = repository.save(request).getId();
         Request saved = repository.findByIdAndTenantIdAndDeletedFalse(id, tenantA).orElseThrow();
@@ -93,7 +93,7 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
         assertThat(saved.getFirstResponseDueAt())
                 .isEqualTo(Instant.parse("2026-09-19T12:00:00Z"));
         assertThat(saved.getResolutionDueAt()).isEqualTo(Instant.parse("2026-09-25T12:00:00Z"));
-        assertThat(saved.isOverdue()).isTrue();
+        assertThat(saved.isResolutionOverdue()).isTrue();
         assertThat(saved.isDeleted()).isFalse();
         assertThat(saved.getCreatedAt()).isNotNull();
         assertThat(saved.getUpdatedAt()).isNotNull();
@@ -338,7 +338,7 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
         String insertManyRequests =
                 """
                 INSERT INTO requests (id, tenant_id, subject, description, status, author_id,
-                                      overdue, deleted, version, created_at, updated_at)
+                                      resolution_overdue, deleted, version, created_at, updated_at)
                 SELECT gen_random_uuid(), ?, 'тема ' || i, 'описание ' || i,
                        CASE WHEN i = 1 THEN 'ON_HOLD' ELSE 'DONE' END, ?,
                        false, false, 0, now(), now()
