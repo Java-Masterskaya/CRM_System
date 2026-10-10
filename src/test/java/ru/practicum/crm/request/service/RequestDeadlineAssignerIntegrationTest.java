@@ -40,8 +40,9 @@ class RequestDeadlineAssignerIntegrationTest extends BaseIntegrationTest {
     @BeforeEach
     void setUp() {
         tenantId = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO tenants (id, name, active, created_at, updated_at)"
-                + " VALUES (?, 'Арендатор', true, now(), now())", tenantId);
+        String slug = "tenant-" + tenantId.toString().replace("-", "");
+        jdbcTemplate.update("INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
+                + " VALUES (?, 'Арендатор', ?, true, now(), now())", tenantId, slug);
         jdbcTemplate.update("INSERT INTO tenant_settings (tenant_id, timezone, created_at,"
                 + " updated_at) VALUES (?, 'Europe/Moscow', now(), now())", tenantId);
         jdbcTemplate.update("INSERT INTO working_hours (id, tenant_id, day_of_week, start_time,"

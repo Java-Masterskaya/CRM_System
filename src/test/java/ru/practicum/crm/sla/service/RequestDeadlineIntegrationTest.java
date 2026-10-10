@@ -56,9 +56,7 @@ class RequestDeadlineIntegrationTest extends BaseIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        tenantId = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO tenants (id, name, active, created_at, updated_at)"
-                + " VALUES (?, 'Арендатор', true, now(), now())", tenantId);
+        tenantId = insertTenant("Арендатор");
         jdbcTemplate.update("INSERT INTO tenant_settings (tenant_id, timezone, created_at,"
                 + " updated_at) VALUES (?, 'Europe/Moscow', now(), now())", tenantId);
         calendars.seedDefaults(tenantId);
@@ -100,9 +98,7 @@ class RequestDeadlineIntegrationTest extends BaseIntegrationTest {
      */
     @Test
     void calculate_forTenantWithoutSettings_isEmptyAndCallersTransactionCommits() {
-        UUID withoutSettings = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO tenants (id, name, active, created_at, updated_at)"
-                + " VALUES (?, 'Без настроек', true, now(), now())", withoutSettings);
+        UUID withoutSettings = insertTenant("Без настроек");
         policies.createDefault(withoutSettings, HOUR_AND_EIGHT_HOURS);
 
         Optional<RequestDeadlines> calculated = transactionTemplate.execute(status ->
@@ -110,6 +106,15 @@ class RequestDeadlineIntegrationTest extends BaseIntegrationTest {
                         MONDAY_FIVE_PM));
 
         assertThat(calculated).isEmpty();
+    }
+
+    /** Арендатор без настроек; slug уникален и подходит под формат из T-025. */
+    private UUID insertTenant(String name) {
+        UUID id = UUID.randomUUID();
+        String slug = "tenant-" + id.toString().replace("-", "");
+        jdbcTemplate.update("INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
+                + " VALUES (?, ?, ?, true, now(), now())", id, name, slug);
+        return id;
     }
 
     private static Instant moscowTime(int dayOfOctober, int hour) {
