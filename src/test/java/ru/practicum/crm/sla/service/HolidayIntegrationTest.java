@@ -169,8 +169,31 @@ class HolidayIntegrationTest extends BaseIntegrationTest {
     }
 
     /**
+     * Календарь для сроков от первых минут понедельника: дата отсчёта и следующие загружены,
+     * а прошлая пятница из справочника — нет, поэтому такой календарь считает её рабочей.
+     * Отвечать о моментах раньше начала отсчёта он и не должен.
+     */
+    @Test
+    void findCalendar_fromMoment_loadsDirectoryFromItsLocalDateOnly() {
+        LocalDate previousFriday = MONDAY.minusDays(3);
+        holidays.createDayOff(tenantA, previousFriday, "Прошлый выходной");
+        holidays.createDayOff(tenantA, MONDAY, "Корпоративный выходной");
+        holidays.createDayOff(tenantA, MONDAY.plusDays(1), "Ещё один выходной");
+
+        WorkingCalendar calendar =
+                calendars.findCalendar(tenantA, moscowTime(MONDAY, 0, 30)).orElseThrow();
+
+        assertThat(calendar.isWorkingTime(moscowTime(previousFriday, 10, 30)))
+                .as("дата раньше начала отсчёта не загружена").isTrue();
+        assertThat(calendar.isWorkingTime(moscowTime(MONDAY, 10, 30))).isFalse();
+        assertThat(calendar.isWorkingTime(moscowTime(MONDAY.plusDays(1), 10, 30))).isFalse();
+    }
+
+    /**
      * Двадцать тысяч дат у одного арендатора и три у другого: справочник арендатора читается по
      * индексу уникальности, который начинается с арендатора и даты, а не перебором таблицы.
+     * Загрузка для сроков берёт из двадцати тысяч дат последний месяц по тому же индексу —
+     * прошлые годы не читаются.
      */
     @Test
     void holidaysOfTenant_whenTableIsLarge_areReadByIndex() {
@@ -189,6 +212,15 @@ class HolidayIntegrationTest extends BaseIntegrationTest {
 
         assertThat(String.join("\n", plan))
                 .as("план страницы справочника на таблице из 20 003 дат")
+                .contains("holidays_date_unique")
+                .doesNotContain("Seq Scan");
+
+        List<String> fromDatePlan = jdbcTemplate.queryForList("EXPLAIN SELECT * FROM holidays"
+                + " WHERE tenant_id = '" + tenantB + "' AND holiday_date >= DATE '2024-09-01'",
+                String.class);
+
+        assertThat(String.join("\n", fromDatePlan))
+                .as("план загрузки дат для сроков: последний месяц из 20 000 дат арендатора")
                 .contains("holidays_date_unique")
                 .doesNotContain("Seq Scan");
     }

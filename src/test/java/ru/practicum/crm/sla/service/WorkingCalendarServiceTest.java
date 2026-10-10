@@ -20,6 +20,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
@@ -122,6 +123,43 @@ class WorkingCalendarServiceTest {
 
         assertThat(calendar.isWorkingTime(Instant.parse("2026-10-05T10:00:00Z"))).isFalse();
         assertThat(calendar.isWorkingTime(Instant.parse("2026-10-12T10:00:00Z"))).isTrue();
+    }
+
+    /**
+     * 20:00 UTC 4 октября — уже 01:00 понедельника 5 октября в Екатеринбурге. Справочник
+     * читается с местной даты, а не с даты по UTC, и только с неё: прошлые даты расчёту сроков
+     * не нужны.
+     */
+    @Test
+    void findCalendar_whenTenantHasSettings_isCalendarInItsTimezoneWithHolidaysFromLocalDate() {
+        ZoneId yekaterinburg = ZoneId.of("Asia/Yekaterinburg");
+        LocalDate monday = LocalDate.of(2026, 10, 5);
+        when(repository.findByTenantId(TENANT_ID)).thenReturn(
+                List.of(new WorkingHours(TENANT_ID, MONDAY)));
+        when(timezones.findTimezoneOf(TENANT_ID)).thenReturn(Optional.of(yekaterinburg));
+        when(holidays.findByTenantIdAndDateGreaterThanEqual(TENANT_ID, monday)).thenReturn(
+                List.of(Holiday.dayOff(TENANT_ID, monday, "Корпоративный выходной")));
+
+        Optional<WorkingCalendar> found =
+                service.findCalendar(TENANT_ID, Instant.parse("2026-10-04T20:00:00Z"));
+
+        assertThat(found).hasValueSatisfying(calendar -> {
+            assertThat(calendar.getZone()).isEqualTo(yekaterinburg);
+            assertThat(calendar.getDays()).containsExactly(MONDAY);
+            assertThat(calendar.isWorkingTime(Instant.parse("2026-10-05T05:00:00Z")))
+                    .as("10:00 понедельника из справочника").isFalse();
+        });
+        verify(holidays, never()).findByTenantId(any());
+    }
+
+    /** Без исключения: оно пометило бы на откат транзакцию создания заявки (T-058). */
+    @Test
+    void findCalendar_whenTenantHasNoSettings_isEmptyWithoutReadingCalendar() {
+        when(timezones.findTimezoneOf(TENANT_ID)).thenReturn(Optional.empty());
+
+        assertThat(service.findCalendar(TENANT_ID, Instant.parse("2026-10-05T07:00:00Z")))
+                .isEmpty();
+        verifyNoInteractions(repository, holidays);
     }
 
     @Test

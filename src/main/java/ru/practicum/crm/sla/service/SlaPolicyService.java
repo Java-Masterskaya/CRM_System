@@ -170,18 +170,32 @@ public class SlaPolicyService {
         }
     }
 
+    /**
+     * Порядок сроков проверяется, только когда каждый срок сам по себе допустим: иначе на одну
+     * ошибку пришлось бы две.
+     */
     private static void collectTermErrors(SlaTerms terms, List<ValidationError> errors) {
-        if (terms.firstResponseMinutes() <= 0) {
-            errors.add(ValidationError.ofField(FIRST_RESPONSE_FIELD, "должно быть больше нуля"));
-        }
-        if (terms.resolutionMinutes() <= 0) {
-            errors.add(ValidationError.ofField(RESOLUTION_FIELD, "должно быть больше нуля"));
-        }
-        if (terms.firstResponseMinutes() > 0 && terms.resolutionMinutes() > 0
+        collectTermError(FIRST_RESPONSE_FIELD, terms.firstResponseMinutes(), errors);
+        collectTermError(RESOLUTION_FIELD, terms.resolutionMinutes(), errors);
+        if (isInRange(terms.firstResponseMinutes()) && isInRange(terms.resolutionMinutes())
                 && terms.firstResponseMinutes() > terms.resolutionMinutes()) {
             errors.add(ValidationError.ofField(FIRST_RESPONSE_FIELD,
                     "не может быть больше срока решения"));
         }
+    }
+
+    private static void collectTermError(String field, int minutes,
+            List<ValidationError> errors) {
+        if (minutes <= 0) {
+            errors.add(ValidationError.ofField(field, "должно быть больше нуля"));
+        } else if (minutes > SlaTerms.MAX_MINUTES) {
+            errors.add(ValidationError.ofField(field,
+                    "должно быть не больше " + SlaTerms.MAX_MINUTES + " (год в минутах)"));
+        }
+    }
+
+    private static boolean isInRange(int minutes) {
+        return minutes > 0 && minutes <= SlaTerms.MAX_MINUTES;
     }
 
     private static void rejectIfAny(List<ValidationError> errors) {
