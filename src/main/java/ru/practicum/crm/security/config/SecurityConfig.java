@@ -17,10 +17,12 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ProblemDetailFactory;
 import ru.practicum.crm.security.api.PermissionCode;
+import ru.practicum.crm.security.system.SystemSecretFilter;
 import ru.practicum.crm.tenant.api.TenantContextFilter;
 
 @Configuration
@@ -31,6 +33,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             TenantContextFilter tenantContextFilter,
+            SystemSecretFilter systemSecretFilter,
             ObjectMapper objectMapper,
             @Value("${app.security.authorization.enabled:false}")
             boolean authorizationEnabled
@@ -56,7 +59,7 @@ public class SecurityConfig {
                                     "/swagger-ui/**",
                                     "/swagger-ui.html"
                             ).permitAll()
-                            .requestMatchers("/system/**").denyAll();
+                            .requestMatchers("/system/**").permitAll();
 
                     if (authorizationEnabled) {
                         authorize.requestMatchers(
@@ -103,6 +106,10 @@ public class SecurityConfig {
                 .addFilterAfter(
                         tenantContextFilter,
                         SecurityContextHolderFilter.class
+                )
+                .addFilterBefore(
+                        systemSecretFilter,
+                        AuthorizationFilter.class
                 );
 
         return http.build();
@@ -115,12 +122,8 @@ public class SecurityConfig {
             ErrorCode errorCode
     ) throws IOException {
         response.setStatus(errorCode.getStatus().value());
-        response.setContentType(
-                MediaType.APPLICATION_PROBLEM_JSON_VALUE
-        );
-        response.setCharacterEncoding(
-                StandardCharsets.UTF_8.name()
-        );
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
 
         objectMapper.writeValue(
                 response.getOutputStream(),

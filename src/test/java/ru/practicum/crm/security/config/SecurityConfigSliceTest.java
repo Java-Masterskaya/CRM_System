@@ -2,27 +2,21 @@ package ru.practicum.crm.security.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.MediaType;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -30,6 +24,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.WebApplicationContext;
 import ru.practicum.crm.common.health.HealthController;
+import ru.practicum.crm.security.system.SystemFilterConfig;
+import ru.practicum.crm.security.system.SystemSecretProperties;
 import ru.practicum.crm.tenant.api.TenantActiveChecker;
 import ru.practicum.crm.tenant.api.TenantContext;
 import ru.practicum.crm.tenant.api.TenantContextFilter;
@@ -38,18 +34,19 @@ import ru.practicum.crm.tenant.api.TenantContextFilter;
     SecurityConfigSliceTest.TestController.class,
     HealthController.class
 })
-@TestPropertySource(properties = "app.security.authorization.enabled=false")
+@TestPropertySource(properties = {
+        "app.security.authorization.enabled=false",
+        "crm.system.secret=test-system-secret"
+})
 @Import({
     SecurityConfig.class,
+    SystemFilterConfig.class,
     SecurityConfigSliceTest.TestTenantFilterConfiguration.class
 })
 class SecurityConfigSliceTest {
 
     @Autowired
     private WebApplicationContext context;
-
-    @Autowired
-    private ObjectMapper objectMapper;
 
     private MockMvc mockMvc;
 
@@ -77,6 +74,7 @@ class SecurityConfigSliceTest {
     }
 
     @TestConfiguration
+    @EnableConfigurationProperties(SystemSecretProperties.class)
     static class TestTenantFilterConfiguration {
 
         @Bean
@@ -103,25 +101,19 @@ class SecurityConfigSliceTest {
     }
 
     @Test
-    void givenNoCredentials_whenCallingSystemRoute_thenReturnsProblemDetails403()
+    void givenNoSystemSecret_whenCallingSystemRoute_thenReturnsUnauthorized()
             throws Exception {
-        mockMvc.perform(get("/system/tenant").with(user("operator").authorities(
-                        new SimpleGrantedAuthority("REQUEST_READ_ALL"))))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
-                .andExpect(jsonPath("$.detail").value("У вас нет прав на эту операцию."))
-                .andExpect(content().contentTypeCompatibleWith(
-                        MediaType.APPLICATION_PROBLEM_JSON))
-                .andExpect(header().string(SecurityTestRequestIdFilter.HEADER_NAME,
-                        "security-test-request-id"))
-                .andExpect(jsonPath("$.requestId").isNotEmpty())
-                .andExpect(result -> {
-                    JsonNode problem = objectMapper.readTree(
-                            result.getResponse().getContentAsString());
-                    assertThat(problem.path("requestId").asText()).isEqualTo(
-                            result.getResponse().getHeader(
-                                    SecurityTestRequestIdFilter.HEADER_NAME));
-                });
+        mockMvc.perform(get("/system/tenant").with(anonymous()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void givenValidSystemSecret_whenCallingSystemRoute_thenReachesMvcLookup()
+            throws Exception {
+        mockMvc.perform(get("/system/tenant")
+                        .header("X-System-Secret", "test-system-secret")
+                        .with(anonymous()))
+                .andExpect(status().isNotFound());
     }
 
     @Test

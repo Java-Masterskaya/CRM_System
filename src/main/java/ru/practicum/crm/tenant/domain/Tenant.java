@@ -17,26 +17,25 @@ import ru.practicum.crm.common.model.BaseEntity;
 @NoArgsConstructor
 public class Tenant extends BaseEntity {
 
-    @Column(name = "slug", nullable = false, unique = true, length = 100)
-    private String slug;
-
     @Column(nullable = false)
     private String name;
 
     @Column(nullable = false)
     private boolean active;
 
+    @Column(name = "slug", nullable = false, unique = true, length = 63)
+    private String slug;
+
     @OneToOne(
             mappedBy = "tenant",
             cascade = CascadeType.ALL,
-            orphanRemoval = true
+            orphanRemoval = true,
+            fetch = FetchType.LAZY
     )
     private TenantSettings settings;
 
     public Tenant(String name, String slug) {
-        this.name = name;
-        this.slug = slug;
-        this.active = true;
+        this(name, slug, true);
     }
 
     public Tenant(String name, String slug, boolean active) {
@@ -49,10 +48,10 @@ public class Tenant extends BaseEntity {
             value = "EI_EXPOSE_REP2",
             justification =
                     """
-                    TenantSettings  - JPA entity управляемая через Tenant OneToOne связь
+                    TenantSettings — JPA entity, управляемая через Tenant OneToOne связь.
                     Поэтому безопасно передавать ссылку на объект TenantSettings
-                    в метод initializeSettings, копия нарушает целостность данных
-                    и может привести к ошибкам при работе с JPA
+                    в метод initializeSettings. Копирование нарушило бы целостность
+                    данных и могло бы привести к ошибкам при работе с JPA.
                     """
     )
     public void initializeSettings(TenantSettings settings) {

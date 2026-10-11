@@ -26,13 +26,18 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import ru.practicum.crm.common.health.HealthController;
+import ru.practicum.crm.security.system.SystemFilterConfig;
 import ru.practicum.crm.tenant.api.TenantActiveChecker;
 import ru.practicum.crm.tenant.api.TenantContext;
 
 @WebMvcTest(controllers = HealthController.class)
-@TestPropertySource(properties = "app.security.authorization.enabled=true")
+@TestPropertySource(properties = {
+        "app.security.authorization.enabled=true",
+        "crm.system.secret=test-system-secret"
+})
 @Import({
     SecurityConfig.class,
+    SystemFilterConfig.class,
     SecurityConfigSliceTest.TestTenantFilterConfiguration.class
 })
 class SecurityAuthorizationRulesTest {

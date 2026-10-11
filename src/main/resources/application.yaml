@@ -72,6 +72,9 @@ crm:
       refresh-ttl: ${CRM_JWT_REFRESH_TTL:7d}
       algorithm: HMAC_SHA256
       min-secret-length-bytes: 32
+  system:
+    secret: ${CRM_SYSTEM_SECRET:}
+
 server:
   port: ${SERVER_PORT:8080}
 

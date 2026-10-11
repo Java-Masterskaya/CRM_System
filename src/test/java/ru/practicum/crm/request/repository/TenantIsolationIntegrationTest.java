@@ -217,12 +217,25 @@ public class TenantIsolationIntegrationTest extends BaseIntegrationTest {
 
     private UUID insertTenant(String name) {
         UUID id = UUID.randomUUID();
-        String slug = "tenant-" + id.toString().replace("-", "");
+        String slug = "tenant-" + id;
+
         jdbcTemplate.update(
                 """
-                INSERT INTO tenants (id, name, slug, active, created_at, updated_at)
-                VALUES (?, ?, ?, true, now(), now())
-                """, id, name, slug);
+                INSERT INTO tenants (
+                    id,
+                    name,
+                    active,
+                    slug,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, true, ?, now(), now())
+                """,
+                id,
+                name,
+                slug
+        );
+
         return id;
     }
 
