@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
+import java.util.List;
 import java.util.UUID;
+import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.configuration.FluentConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +33,8 @@ import ru.practicum.crm.sla.domain.SlaTerms;
 class SlaPolicyIntegrationTest extends BaseIntegrationTest {
 
     private static final String MIGRATION_VERSION = "202610022000";
+    /** Последняя миграция перед потолком сроков. */
+    private static final String PREVIOUS_LIMIT_MIGRATION = "202610061800";
     private static final PageRequest FIRST_PAGE = PageRequest.of(0, PageRequests.MAX_SIZE);
     private static final SlaTerms URGENT_TERMS = new SlaTerms(30, 240);
     private static final SlaTerms USUAL_TERMS = new SlaTerms(240, 2400);
@@ -198,6 +203,50 @@ class SlaPolicyIntegrationTest extends BaseIntegrationTest {
         assertThatThrownBy(() -> insertPolicy(tenantA, typeA, "ASAP", 60, 480))
                 .as("приоритет не из набора")
                 .hasMessageContaining("sla_policies_priority_check");
+        assertThatThrownBy(() -> insertPolicy(tenantA, typeA, "HIGH", 60,
+                SlaTerms.MAX_MINUTES + 1))
+                .as("срок длиннее года")
+                .hasMessageContaining("sla_policies_limit_check");
+    }
+
+    @Test
+    void termsOfYear_insertedPastService_areAccepted() {
+        insertPolicy(tenantA, null, null, SlaTerms.MAX_MINUTES, SlaTerms.MAX_MINUTES);
+
+        assertThat(policies.resolve(tenantA, null, RequestPriority.LOW))
+                .map(SlaPolicy::getTerms)
+                .contains(new SlaTerms(SlaTerms.MAX_MINUTES, SlaTerms.MAX_MINUTES));
+    }
+
+    /**
+     * Миграция потолка на базе, где сроки длиннее года уже записаны: они урезаются до года, а
+     * порядок сроков сохраняется. Миграции прогоняются в отдельной схеме, чтобы не трогать общую
+     * базу тестов.
+     */
+    @Test
+    void limitMigration_onDatabaseWithLongTerms_cutsThemToYear() {
+        String schema = "migration_check_" + UUID.randomUUID().toString().replace("-", "");
+        UUID tenant = UUID.randomUUID();
+        UUID otherTenant = UUID.randomUUID();
+        try {
+            migrate(schema, PREVIOUS_LIMIT_MIGRATION);
+            for (UUID id : List.of(tenant, otherTenant)) {
+                jdbcTemplate.update("INSERT INTO " + schema + ".tenants (id, name, slug, active,"
+                        + " created_at, updated_at) VALUES (?, 'Был до потолка', ?, true, now(),"
+                        + " now())", id, "tenant-" + id);
+            }
+            insertDefaultPolicy(schema, tenant, 600_000, 700_000);
+            insertDefaultPolicy(schema, otherTenant, 100, 600_000);
+
+            migrate(schema, null);
+
+            assertThat(termsOf(schema, tenant))
+                    .isEqualTo(List.of(SlaTerms.MAX_MINUTES, SlaTerms.MAX_MINUTES));
+            assertThat(termsOf(schema, otherTenant))
+                    .isEqualTo(List.of(100, SlaTerms.MAX_MINUTES));
+        } finally {
+            jdbcTemplate.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
+        }
     }
 
     private void insertPolicy(UUID tenantId, UUID typeId, String priority, int firstResponse,
@@ -206,6 +255,34 @@ class SlaPolicyIntegrationTest extends BaseIntegrationTest {
                 + " first_response_minutes, resolution_minutes, created_at, updated_at)"
                 + " VALUES (?, ?, ?, ?, ?, ?, now(), now())",
                 UUID.randomUUID(), tenantId, typeId, priority, firstResponse, resolution);
+    }
+
+    private void insertDefaultPolicy(String schema, UUID tenantId, int firstResponse,
+            int resolution) {
+        jdbcTemplate.update("INSERT INTO " + schema + ".sla_policies (id, tenant_id,"
+                + " first_response_minutes, resolution_minutes, created_at, updated_at)"
+                + " VALUES (?, ?, ?, ?, now(), now())",
+                UUID.randomUUID(), tenantId, firstResponse, resolution);
+    }
+
+    private List<Integer> termsOf(String schema, UUID tenantId) {
+        return jdbcTemplate.queryForObject("SELECT first_response_minutes, resolution_minutes"
+                + " FROM " + schema + ".sla_policies WHERE tenant_id = ?",
+                (rs, rowNumber) -> List.of(rs.getInt(1), rs.getInt(2)), tenantId);
+    }
+
+    /**
+     * Миграции в отдельной схеме: до версии {@code target} или до конца, если она не задана.
+     */
+    private static void migrate(String schema, String target) {
+        FluentConfiguration configuration = Flyway.configure()
+                .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+                .schemas(schema)
+                .locations("classpath:db/migration");
+        if (target != null) {
+            configuration.target(target);
+        }
+        configuration.load().migrate();
     }
 
     private UUID insertTenant() {

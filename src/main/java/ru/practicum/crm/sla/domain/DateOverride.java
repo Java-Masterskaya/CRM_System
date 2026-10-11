@@ -13,9 +13,4 @@ import java.time.LocalTime;
  * @param end конец рабочего дня; пусто, если день нерабочий
  */
 public record DateOverride(LocalDate date, LocalTime start, LocalTime end) {
-
-    /** Входит ли время суток в рабочие часы этой даты; у нерабочей даты — никогда. */
-    public boolean contains(LocalTime time) {
-        return start != null && !time.isBefore(start) && time.isBefore(end);
-    }
 }
