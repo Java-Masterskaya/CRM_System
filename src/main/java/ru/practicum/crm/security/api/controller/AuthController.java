@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.practicum.crm.security.api.dto.AuthResponse;
 import ru.practicum.crm.security.api.dto.LoginRequest;
+import ru.practicum.crm.security.api.dto.RefreshRequest;
 import ru.practicum.crm.security.service.AuthService;
 
 @RestController
@@ -20,5 +21,10 @@ public class AuthController {
     @PostMapping("/login")
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.authenticate(request);
+    }
+
+    @PostMapping("/refresh")
+    public AuthResponse refresh(@Valid @RequestBody RefreshRequest request) {
+        return authService.refresh(request.refreshToken());
     }
 }

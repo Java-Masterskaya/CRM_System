@@ -4,5 +4,8 @@ import ru.practicum.crm.security.api.dto.AuthResponse;
 import ru.practicum.crm.security.api.dto.LoginRequest;
 
 public interface AuthService {
+
     AuthResponse authenticate(LoginRequest request);
+
+    AuthResponse refresh(String refreshToken);
 }
