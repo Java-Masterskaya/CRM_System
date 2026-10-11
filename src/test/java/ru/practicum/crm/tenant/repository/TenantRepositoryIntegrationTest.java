@@ -14,12 +14,13 @@ public class TenantRepositoryIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void save_whenTenantCreated_generatesIdAndStoresTimestamps() {
-        Tenant tenant = new Tenant("Integration Tenant");
+        Tenant tenant = new Tenant("Integration Tenant", "integration-tenant");
 
         Tenant saved = repository.save(tenant);
 
         assertThat(saved.getId()).isNotNull();
         assertThat(saved.getName()).isEqualTo("Integration Tenant");
+        assertThat(saved.getSlug()).isEqualTo("integration-tenant");
         assertThat(saved.isActive()).isTrue();
         assertThat(saved.getCreatedAt()).isNotNull();
         assertThat(saved.getUpdatedAt()).isNotNull();
@@ -27,19 +28,20 @@ public class TenantRepositoryIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void findById_whenTenantExists_returnsTenant() {
-        Tenant saved = repository.save(new Tenant("Find Me"));
+        Tenant saved = repository.save(new Tenant("Find Me", "find-me"));
 
         Tenant found = repository.findById(saved.getId()).orElseThrow();
 
         assertThat(found.getId()).isEqualTo(saved.getId());
         assertThat(found.getName()).isEqualTo("Find Me");
+        assertThat(found.getSlug()).isEqualTo("find-me");
         assertThat(found.isActive()).isTrue();
     }
 
     @Test
     void save_whenTwoTenantsCreated_storesBothTenants() {
-        Tenant first = repository.save(new Tenant("Tenant A"));
-        Tenant second = repository.save(new Tenant("Tenant B"));
+        Tenant first = repository.save(new Tenant("Tenant A", "tenant-a"));
+        Tenant second = repository.save(new Tenant("Tenant B", "tenant-b"));
 
         assertThat(first.getId()).isNotEqualTo(second.getId());
         assertThat(repository.findById(first.getId()).orElseThrow().getName())

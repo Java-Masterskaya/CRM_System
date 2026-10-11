@@ -8,12 +8,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
+import ru.practicum.crm.tenant.api.TenantService;
 import ru.practicum.crm.tenant.api.dto.TenantDto;
 import ru.practicum.crm.tenant.domain.Tenant;
 import ru.practicum.crm.tenant.domain.TenantSettings;
 import ru.practicum.crm.tenant.repository.TenantRepository;
 import ru.practicum.crm.tenant.repository.TenantSettingsRepository;
-import ru.practicum.crm.tenant.service.TenantService;
 
 class TenantServiceIntegrationTest extends BaseIntegrationTest {
 
@@ -32,11 +32,12 @@ class TenantServiceIntegrationTest extends BaseIntegrationTest {
     @Test
     void createTenant_savesTenantAndDefaultSettings() {
         TenantDto actual = service.createTenant(
-                new TenantDto("Integration Tenant", false)
+                new TenantDto("Integration Tenant", "tenant-slug", false)
         );
 
         assertThat(actual)
-                .isEqualTo(new TenantDto("Integration Tenant", true));
+                .isEqualTo(new TenantDto("Integration Tenant",
+                        "tenant-slug", true));
 
         UUID tenantId = jdbcTemplate.queryForObject(
                 "SELECT id FROM tenants WHERE name = ?",
@@ -65,9 +66,15 @@ class TenantServiceIntegrationTest extends BaseIntegrationTest {
         )).isEqualTo(25);
         assertThat(jdbcTemplate.queryForList(
                 "SELECT day_of_week FROM working_hours WHERE tenant_id = ?"
-                        + " AND start_time = '09:00' AND end_time = '18:00'",
+                + " AND start_time = '09:00' AND end_time = '18:00'",
                 String.class,
                 tenantId
-        )).containsExactlyInAnyOrder("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY");
+        )).containsExactlyInAnyOrder(
+                "MONDAY",
+                "TUESDAY",
+                "WEDNESDAY",
+                "THURSDAY",
+                "FRIDAY"
+        );
     }
 }

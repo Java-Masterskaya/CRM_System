@@ -23,7 +23,7 @@ public class Tenant extends BaseEntity {
     @Column(nullable = false)
     private boolean active;
 
-    @Column
+    @Column(name = "slug", nullable = false, unique = true, length = 63)
     private String slug;
 
     @OneToOne(
@@ -34,30 +34,24 @@ public class Tenant extends BaseEntity {
     )
     private TenantSettings settings;
 
-    public Tenant(String name) {
-        this.name = name;
-        this.active = true;
-    }
-
-    public Tenant(String name, boolean active) {
-        this.name = name;
-        this.active = active;
-    }
-
     public Tenant(String name, String slug) {
+        this(name, slug, true);
+    }
+
+    public Tenant(String name, String slug, boolean active) {
         this.name = name;
         this.slug = slug;
-        this.active = true;
+        this.active = active;
     }
 
     @SuppressFBWarnings(
             value = "EI_EXPOSE_REP2",
             justification =
                     """
-                    TenantSettings  - JPA entity управляемая через Tenant OneToOne связь
+                    TenantSettings — JPA entity, управляемая через Tenant OneToOne связь.
                     Поэтому безопасно передавать ссылку на объект TenantSettings
-                    в метод initializeSettings, копия нарушает целостность данных
-                    и может привести к ошибкам при работе с JPA
+                    в метод initializeSettings. Копирование нарушило бы целостность
+                    данных и могло бы привести к ошибкам при работе с JPA.
                     """
     )
     public void initializeSettings(TenantSettings settings) {

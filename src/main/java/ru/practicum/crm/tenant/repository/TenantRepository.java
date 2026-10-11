@@ -6,11 +6,14 @@ import org.springframework.data.repository.Repository;
 import ru.practicum.crm.tenant.domain.Tenant;
 
 public interface TenantRepository extends Repository<Tenant, UUID> {
+
     Tenant save(Tenant tenant);
 
     Optional<Tenant> findById(UUID id);
 
     Optional<Tenant> findBySlug(String slug);
+
+    Optional<Tenant> findBySlugAndActiveTrue(String slug);
 
     boolean existsByIdAndActiveTrue(UUID id);
 

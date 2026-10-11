@@ -8,7 +8,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
-import ru.practicum.crm.security.api.PasswordPolicy;
+import ru.practicum.crm.user.api.PasswordPolicy;
 import ru.practicum.crm.user.api.provisioning.AdminProvisioning;
 import ru.practicum.crm.user.domain.RoleEntity;
 import ru.practicum.crm.user.domain.UserEntity;

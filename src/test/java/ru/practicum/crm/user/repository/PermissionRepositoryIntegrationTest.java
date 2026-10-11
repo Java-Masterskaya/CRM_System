@@ -145,11 +145,12 @@ class PermissionRepositoryIntegrationTest extends BaseIntegrationTest {
 
         jdbcTemplate.update(
                 """
-                INSERT INTO tenants (id, name, active, created_at, updated_at)
-                VALUES (?, ?, true, NOW(), NOW())
+                INSERT INTO tenants (id, name, slug, active, created_at, updated_at)
+                VALUES (?, ?, ?, true, NOW(), NOW())
                 """,
                 tenantId,
-                "Test tenant " + tenantId
+                "Test tenant " + tenantId,
+                "test-tenant-" + tenantId
         );
 
         return tenantId;

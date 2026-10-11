@@ -1,13 +1,15 @@
-INSERT INTO tenants (id, name, active, created_at, updated_at) VALUES
+INSERT INTO tenants (id, slug, name, active, created_at, updated_at) VALUES
     ('00000000-0000-0000-0000-000000000001',
+     'tenant-1',
      'Dev Tenant',
      TRUE,
      now(),
      now())
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO tenants (id, name, active, created_at, updated_at) VALUES
+INSERT INTO tenants (id, slug, name, active, created_at, updated_at) VALUES
     ('00000000-0000-0000-0000-000000000002',
+     'tenant-2',
      'Test Tenant',
      TRUE,
      now(),

@@ -212,8 +212,9 @@ class HolidayIntegrationTest extends BaseIntegrationTest {
 
     private UUID insertTenant() {
         UUID id = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO tenants (id, name, active, created_at, updated_at)"
-                + " VALUES (?, 'Арендатор', true, now(), now())", id);
+        String slug = "tenant-" + id.toString().replace("-", "");
+        jdbcTemplate.update("INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
+                + " VALUES (?, 'Арендатор', ?, true, now(), now())", id, slug);
         jdbcTemplate.update("INSERT INTO tenant_settings (tenant_id, timezone, created_at,"
                 + " updated_at) VALUES (?, 'Europe/Moscow', now(), now())", id);
         return id;
