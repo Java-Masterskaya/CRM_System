@@ -13,9 +13,12 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.practicum.crm.common.error.ApiException;
+import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.security.config.JwtProperties;
 import ru.practicum.crm.security.domain.RefreshToken;
 import ru.practicum.crm.security.repository.RefreshTokenRepository;
+import ru.practicum.crm.security.service.RefreshTokenRotation;
 import ru.practicum.crm.security.service.RefreshTokenService;
 
 @Service
@@ -51,6 +54,59 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         refreshTokenRepository.save(entity);
 
         return refreshToken;
+    }
+
+    @Override
+    @Transactional
+    public RefreshTokenRotation rotate(String rawRefreshToken) {
+        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+            throw invalidRefreshToken();
+        }
+
+        String tokenHash = hash(rawRefreshToken);
+
+        RefreshToken current = refreshTokenRepository
+                .findByTokenHashForUpdate(tokenHash)
+                .orElseThrow(this::invalidRefreshToken);
+
+        Instant nowInstant = clock.instant();
+        OffsetDateTime now = toOffsetDateTime(nowInstant);
+
+        if (current.isUsed()
+                || current.isRevoked()
+                || current.isExpired(now)) {
+            throw invalidRefreshToken();
+        }
+
+        current.markUsed(now);
+        refreshTokenRepository.save(current);
+
+        String nextRawToken = generateToken();
+
+        RefreshToken replacement = new RefreshToken(
+                UUID.randomUUID(),
+                current.getFamilyId(),
+                current.getUserId(),
+                current.getTenantId(),
+                hash(nextRawToken),
+                toOffsetDateTime(nowInstant.plus(jwtProperties.refreshTtl())),
+                now
+        );
+
+        refreshTokenRepository.save(replacement);
+
+        return new RefreshTokenRotation(
+                current.getUserId(),
+                current.getTenantId(),
+                nextRawToken
+        );
+    }
+
+    private ApiException invalidRefreshToken() {
+        return new ApiException(
+                ErrorCode.UNAUTHENTICATED,
+                "Refresh-токен недействителен."
+        );
     }
 
     private String generateToken() {
