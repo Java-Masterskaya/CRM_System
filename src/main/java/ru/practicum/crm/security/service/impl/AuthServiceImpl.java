@@ -3,7 +3,8 @@ package ru.practicum.crm.security.service.impl;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import ru.practicum.crm.common.error.ApiException;
+import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.security.api.dto.AuthResponse;
 import ru.practicum.crm.security.api.dto.LoginRequest;
 import ru.practicum.crm.security.service.AuthService;
@@ -49,11 +50,19 @@ public class AuthServiceImpl implements AuthService {
         );
     }
 
+    /**
+     * Обмен refresh-токена на новую пару (T-027).
+     *
+     * <p>Метод намеренно не транзакционный. Обмен — а при повторном использовании токена отзыв
+     * всей цепочки входа (T-028) — фиксируется в транзакции {@link RefreshTokenService#rotate},
+     * и отказ бросается уже после неё. Внутри общей транзакции исключение откатило бы отзыв
+     * цепочки, и украденный токен остался бы рабочим.
+     */
     @Override
-    @Transactional
     public AuthResponse refresh(String rawRefreshToken) {
-        RefreshTokenRotation rotation =
-                refreshTokenService.rotate(rawRefreshToken);
+        RefreshTokenRotation rotation = refreshTokenService.rotate(rawRefreshToken)
+                .orElseThrow(() -> new ApiException(ErrorCode.UNAUTHENTICATED,
+                        "Refresh-токен недействителен."));
 
         Set<String> permissions =
                 userPermissionService.getUserPermissionCodes(rotation.userId());
