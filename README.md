@@ -650,3 +650,19 @@ SELECT crm_apply_tenant_rls();
 ```sql
 SELECT crm_apply_tenant_rls();
 ```
+
+## Исходящие события из бизнес-операций
+
+Письма и другие сообщения наружу внутри бизнес-операции не отправляются (SPEC §3.5). Операция
+записывает событие через `OutboxPublisher` из `outbox.api` — в той же транзакции, что и само
+изменение. Доставляет его фоновый обработчик: отправителю, объявившему этот тип события
+(`OutboxEventSender`). Откат операции убирает и событие, а вызов вне транзакции отклоняется.
+
+Например, письмо о смене статуса заявки — одно событие на одного адресата:
+
+```java
+outboxPublisher.publish(request.getTenantId(), EmailNotification.EVENT_TYPE,
+        "REQUEST", request.getId(),
+        new EmailNotification(email, NotificationType.REQUEST_STATUS_CHANGED, variables)
+                .toPayload());
+```

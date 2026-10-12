@@ -47,6 +47,9 @@ import ru.practicum.crm.common.model.TenantIds;
 )
 public class OutboxEvent {
 
+    /** Наибольшая длина типа события и вида объекта — как у колонок в базе. */
+    public static final int TYPE_MAX_LENGTH = 100;
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", nullable = false, updatable = false)
@@ -55,10 +58,10 @@ public class OutboxEvent {
     @Column(name = "tenant_id", nullable = false, updatable = false)
     private UUID tenantId;
 
-    @Column(name = "event_type", nullable = false, updatable = false, length = 100)
+    @Column(name = "event_type", nullable = false, updatable = false, length = TYPE_MAX_LENGTH)
     private String eventType;
 
-    @Column(name = "aggregate_type", updatable = false, length = 100)
+    @Column(name = "aggregate_type", updatable = false, length = TYPE_MAX_LENGTH)
     private String aggregateType;
 
     @Column(name = "aggregate_id", updatable = false)
