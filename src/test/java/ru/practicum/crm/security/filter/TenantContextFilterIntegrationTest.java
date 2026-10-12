@@ -35,6 +35,8 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
 
     private static final UUID TENANT_ID =
             UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final UUID TENANT_ID_B =
+            UUID.fromString("22222222-2222-2222-2222-222222222222");
 
     @Autowired
     private MockMvc mockMvc;
@@ -101,17 +103,61 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
     }
 
     private Authentication jwtAuthentication() {
+        return jwtAuthentication(TENANT_ID);
+    }
+
+    private Authentication jwtAuthentication(UUID tenantId) {
         Instant now = Instant.now();
 
         Jwt jwt = Jwt.withTokenValue("test-token")
                 .header("alg", "HS256")
                 .subject("test-user-id")
-                .claim("tenant_id", TENANT_ID.toString())
+                .claim("tenant_id", tenantId.toString())
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(3600))
                 .build();
 
         return new JwtAuthenticationToken(jwt, List.of());
+    }
+
+    @Test
+    void secondRequest_ofAnotherTenant_doesNotSeePreviousTenant() throws Exception {
+        org.mockito.Mockito.when(tenantActiveChecker.isActive(TENANT_ID)).thenReturn(true);
+        org.mockito.Mockito.when(tenantActiveChecker.isActive(TENANT_ID_B)).thenReturn(true);
+
+        mockMvc.perform(
+                        get("/admin/test/tenant")
+                                .with(authentication(jwtAuthentication(TENANT_ID))))
+                .andExpect(status().isOk());
+        assertThat(testController.getTenantSeenByController()).isEqualTo(TENANT_ID);
+
+        mockMvc.perform(
+                        get("/admin/test/tenant")
+                                .with(authentication(jwtAuthentication(TENANT_ID_B))))
+                .andExpect(status().isOk());
+
+        assertThat(testController.getTenantSeenByController())
+                .as("второй запрос не должен видеть арендатора первого")
+                .isEqualTo(TENANT_ID_B);
+    }
+
+    @Test
+    void requestWithoutAuthentication_afterAuthenticatedRequest_doesNotSeePreviousTenant()
+            throws Exception {
+        org.mockito.Mockito.when(tenantActiveChecker.isActive(TENANT_ID)).thenReturn(true);
+
+        mockMvc.perform(
+                        get("/admin/test/tenant")
+                                .with(authentication(jwtAuthentication(TENANT_ID))))
+                .andExpect(status().isOk());
+        assertThat(testController.getTenantSeenByController()).isEqualTo(TENANT_ID);
+
+        mockMvc.perform(get("/admin/test/tenant"))
+                .andExpect(status().isOk());
+
+        assertThat(testController.getTenantSeenByController())
+                .as("запрос без арендатора не должен видеть арендатора предыдущего запроса")
+                .isNull();
     }
 
     @RestController

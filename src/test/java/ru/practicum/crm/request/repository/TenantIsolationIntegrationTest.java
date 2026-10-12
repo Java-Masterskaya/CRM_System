@@ -5,9 +5,15 @@ import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,6 +42,9 @@ public class TenantIsolationIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private TransactionTemplate transactionTemplate;
+
+    @Autowired
+    private DataSource dataSource;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -68,6 +77,28 @@ public class TenantIsolationIntegrationTest extends BaseIntegrationTest {
                 jdbcTemplate.queryForList(query, String.class));
 
         assertThat(subjects).containsExactly("Заявка А");
+    }
+
+    @Test
+    void list_whenQueryRunsOnRawConnectionWithoutTenantBinding_leaksAllTenants()
+            throws SQLException {
+        UUID idA = insertRequest(tenantA, "Заявка А");
+        UUID idB = insertRequest(tenantB, "Заявка Б");
+
+        List<UUID> seen = new ArrayList<>();
+        try (
+                Connection raw = dataSource.getConnection();
+                PreparedStatement statement = raw.prepareStatement(
+                        "SELECT id FROM requests WHERE deleted = FALSE");
+                ResultSet rs = statement.executeQuery()) {
+            while (rs.next()) {
+                seen.add(rs.getObject("id", UUID.class));
+            }
+        }
+
+        assertThat(seen)
+                .as("соединение без привязки к тенант-контексту - защита не держит")
+                .contains(idA, idB);
     }
 
     @Test
