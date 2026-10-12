@@ -3,10 +3,12 @@ package ru.practicum.crm.security.service.impl;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.crm.security.api.dto.AuthResponse;
 import ru.practicum.crm.security.api.dto.LoginRequest;
 import ru.practicum.crm.security.service.AuthService;
 import ru.practicum.crm.security.service.JwtTokenService;
+import ru.practicum.crm.security.service.RefreshTokenRotation;
 import ru.practicum.crm.security.service.RefreshTokenService;
 import ru.practicum.crm.tenant.api.TenantService;
 import ru.practicum.crm.tenant.api.dto.TenantAuthDto;
@@ -44,6 +46,27 @@ public class AuthServiceImpl implements AuthService {
         return new AuthResponse(
                 accessToken,
                 refreshToken
+        );
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse refresh(String rawRefreshToken) {
+        RefreshTokenRotation rotation =
+                refreshTokenService.rotate(rawRefreshToken);
+
+        Set<String> permissions =
+                userPermissionService.getUserPermissionCodes(rotation.userId());
+
+        String accessToken = jwtTokenService.createAccessToken(
+                rotation.userId(),
+                rotation.tenantId(),
+                permissions
+        );
+
+        return new AuthResponse(
+                accessToken,
+                rotation.refreshToken()
         );
     }
 }
