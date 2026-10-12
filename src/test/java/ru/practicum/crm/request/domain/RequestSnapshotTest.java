@@ -57,7 +57,7 @@ class RequestSnapshotTest {
         final RequestSnapshot before = RequestSnapshot.of(request);
         request.setStatus(RequestStatus.IN_PROGRESS);
         request.setSubject("Другая тема");
-        request.setOverdue(true);
+        request.setResolutionOverdue(true);
 
         assertThat(before.changesTo(RequestSnapshot.of(request)))
                 .as("статус пишется в историю статусов, остальное — не значимые поля")
