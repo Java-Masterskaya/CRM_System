@@ -135,6 +135,9 @@ docker compose up
 | `POSTGRES_USER`              | Нет             | Пользователь PostgreSQL для локального Docker Compose. По умолчанию `crm_user` |
 | `POSTGRES_PASSWORD`          | **Да, local**   | Пароль PostgreSQL для локального Docker Compose                                |
 | `POSTGRES_PORT`              | Нет             | Порт PostgreSQL на хосте. По умолчанию `5432`                                  |
+| `REFRESH_TOKEN_CLEANUP_SCHEDULER_ENABLED` | Нет | Удалять ли истёкшие и отозванные refresh-токены по расписанию. По умолчанию `true` |
+| `REFRESH_TOKEN_CLEANUP_BATCH_SIZE` | Нет       | Сколько refresh-токенов очистка удаляет за одну транзакцию, от 1 до 1000. По умолчанию `500` |
+| `REFRESH_TOKEN_CLEANUP_POLL_INTERVAL` | Нет    | Пауза между проходами очистки refresh-токенов. По умолчанию `1h`               |
 | `SERVER_PORT`                | Нет             | Порт HTTP-сервера CRM. По умолчанию `8080`                                     |
 | `SMTP_HOST`                  | Нет             | SMTP-хост для локальной среды. По умолчанию `mailhog`                          |
 | `SMTP_PORT`                  | Нет             | SMTP-порт для локальной среды. По умолчанию `1025`                             |

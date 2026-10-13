@@ -50,7 +50,8 @@ public class SecurityConfig {
                                     HttpMethod.POST,
                                     "/auth/register",
                                     "/auth/login",
-                                    "/auth/refresh"
+                                    "/auth/refresh",
+                                    "/auth/logout"
                             ).permitAll()
                             .requestMatchers(
                                     "/health",

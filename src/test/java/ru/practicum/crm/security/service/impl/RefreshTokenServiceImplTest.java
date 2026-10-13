@@ -39,8 +39,8 @@ import ru.practicum.crm.security.repository.RefreshTokenRepository;
 import ru.practicum.crm.security.service.RefreshTokenRotation;
 
 /**
- * Обмен refresh-токена без базы (T-027, T-028): репозиторий — заглушка, часы стоят. Блокировки,
- * транзакции и одновременные обмены проверяет {@code RefreshTokenReuseIntegrationTest}.
+ * Обмен, выход и отзыв refresh-токенов без базы (T-027–T-029): репозиторий — заглушка, часы
+ * стоят. Блокировки, транзакции и одновременные обмены проверяют интеграционные тесты.
  */
 class RefreshTokenServiceImplTest {
 
@@ -188,6 +188,52 @@ class RefreshTokenServiceImplTest {
                 new JwtProperties("secret", JwtAlgorithm.HMAC_SHA256, 32, Duration.ofMinutes(15),
                         REFRESH_TTL),
                 Clock.fixed(NOW, ZoneOffset.UTC));
+    }
+
+    /**
+     * DoD T-029: после выхода токен не обменивается. Отзывается вся цепочка входа: сначала
+     * блокируется, затем отзывается.
+     */
+    @Test
+    void logout_revokesChainOfPresentedToken() {
+        when(repository.findByTokenHash(sha256(RAW_TOKEN)))
+                .thenReturn(Optional.of(token(NOW_UTC.plusDays(1))));
+
+        service.logout(RAW_TOKEN);
+
+        InOrder order = inOrder(repository);
+        order.verify(repository).lockFamily(FAMILY_ID);
+        order.verify(repository).revokeFamily(FAMILY_ID, NOW_UTC);
+        assertThat(logs.list).as("выход — не тревога").isEmpty();
+    }
+
+    /** DoD T-029: повторный выход и выход с неизвестным токеном — без ошибки и без изменений. */
+    @Test
+    void logout_withUnknownOrBlankToken_changesNothing() {
+        when(repository.findByTokenHash(sha256(RAW_TOKEN))).thenReturn(Optional.empty());
+
+        service.logout(RAW_TOKEN);
+        service.logout(" ");
+        service.logout(null);
+
+        verify(repository, never()).lockFamily(any());
+        verify(repository, never()).revokeFamily(any(), any());
+    }
+
+    /** DoD T-029: отзыв всех токенов пользователя — на всех его входах, с блокировкой перед ним. */
+    @Test
+    void revokeAll_locksAndRevokesEveryTokenOfUser() {
+        when(repository.revokeAllOfUser(USER_ID, NOW_UTC)).thenReturn(4);
+
+        assertThat(service.revokeAll(USER_ID)).isEqualTo(4);
+
+        InOrder order = inOrder(repository);
+        order.verify(repository).lockAllOfUser(USER_ID);
+        order.verify(repository).revokeAllOfUser(USER_ID, NOW_UTC);
+        assertThat(logs.list).singleElement().satisfies(event -> {
+            assertThat(event.getLevel()).isEqualTo(Level.INFO);
+            assertThat(event.getFormattedMessage()).contains(USER_ID.toString(), "4");
+        });
     }
 
     private void presented(RefreshToken token) {

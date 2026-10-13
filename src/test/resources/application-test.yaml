@@ -56,3 +56,6 @@ crm:
   security:
     jwt:
       secret: ${CRM_JWT_SECRET:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
+    # Тесты вызывают очистку refresh-токенов сами: по расписанию она удаляла бы их данные.
+    refresh-token-cleanup:
+      scheduler-enabled: false
