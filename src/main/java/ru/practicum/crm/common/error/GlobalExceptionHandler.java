@@ -21,6 +21,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.lang.Nullable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.method.ParameterErrors;
@@ -73,6 +74,22 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail body = ProblemDetailFactory.create(ex.getErrorCode(), ex.getDetail(),
                 instanceOf(request), ex.getErrors());
         return ResponseEntity.status(ex.getErrorCode().getStatus())
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(body);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ProblemDetail> handleAccessDenied(
+            HttpServletRequest request
+    ) {
+        ProblemDetail body = ProblemDetailFactory.create(
+                ErrorCode.ACCESS_DENIED,
+                null,
+                instanceOf(request),
+                List.of()
+        );
+
+        return ResponseEntity.status(ErrorCode.ACCESS_DENIED.getStatus())
                 .contentType(MediaType.APPLICATION_PROBLEM_JSON)
                 .body(body);
     }

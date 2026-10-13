@@ -73,6 +73,8 @@ dependencies {
 	implementation("org.springframework.security:spring-security-oauth2-jose")
 	implementation("org.springframework.security:spring-security-oauth2-resource-server")
 	implementation("org.springframework.boot:spring-boot-starter-security")
+
+	testCompileOnly("com.github.spotbugs:spotbugs-annotations:4.10.4")
 }
 
 tasks.withType<Test> {
