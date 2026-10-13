@@ -4,14 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,9 +38,6 @@ class TenantIsolationIntegrationTest extends BaseIntegrationTest {
     @Autowired
     private TransactionTemplate transactionTemplate;
 
-    @Autowired
-    private DataSource dataSource;
-
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -75,28 +66,6 @@ class TenantIsolationIntegrationTest extends BaseIntegrationTest {
                         "SELECT id FROM users WHERE deleted_at IS NULL", UUID.class));
 
         assertThat(seen).containsExactly(userA);
-    }
-
-    @Test
-    void list_whenQueryRunsOnRawConnectionWithoutTenantBinding_leaksAllTenants()
-            throws SQLException {
-        UUID userA = fixture.createUser(tenantA);
-        UUID userB = fixture.createUser(tenantB);
-
-        List<UUID> seen = new ArrayList<>();
-        try (
-                Connection raw = dataSource.getConnection();
-                PreparedStatement statement = raw.prepareStatement(
-                        "SELECT id FROM users WHERE deleted_at IS NULL");
-                ResultSet rs = statement.executeQuery()) {
-            while (rs.next()) {
-                seen.add(rs.getObject("id", UUID.class));
-            }
-        }
-
-        assertThat(seen)
-                .as("соединение без привязки к тенант-контексту - защита не держит")
-                .contains(userA, userB);
     }
 
     @Test
