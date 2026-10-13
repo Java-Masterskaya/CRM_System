@@ -17,6 +17,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -56,6 +57,9 @@ class SecurityConfigSliceTest {
     @MockBean
     private TenantContext tenantContext;
 
+    @MockBean
+    private JwtDecoder jwtDecoder;
+
     @BeforeEach
     void setUpMockMvc() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context)
@@ -87,10 +91,10 @@ class SecurityConfigSliceTest {
     }
 
     @Test
-    void givenNoCredentials_whenCallingNewRouteBeforeAuthentication_thenReachesMvcLookup()
+    void givenNoCredentials_whenCallingNewRoute_thenReturnsUnauthorized()
             throws Exception {
         mockMvc.perform(get("/route-added-without-security-rule").with(anonymous()))
-                .andExpect(status().isNotFound())
+                .andExpect(status().isUnauthorized())
                 .andExpect(result -> assertThat(result.getRequest().getSession(false)).isNull());
     }
 
@@ -117,13 +121,24 @@ class SecurityConfigSliceTest {
     }
 
     @Test
-    void givenNoCredentials_whenCallingUnimplementedAuthRoutes_thenReturnsNotFound()
+    void givenNoCredentials_whenCallingUnimplementedPublicAuthRoutes_thenReturnsNotFound()
             throws Exception {
+
         for (String path : new String[] {
-                "/auth/register", "/auth/login", "/auth/refresh", "/auth/logout"
+                "/auth/register",
+                "/auth/login",
+                "/auth/refresh"
         }) {
             mockMvc.perform(post(path).with(anonymous()))
                     .andExpect(status().isNotFound());
         }
+    }
+
+    @Test
+    void givenNoCredentials_whenCallingLogout_thenReturnsUnauthorized()
+            throws Exception {
+
+        mockMvc.perform(post("/auth/logout").with(anonymous()))
+                .andExpect(status().isUnauthorized());
     }
 }

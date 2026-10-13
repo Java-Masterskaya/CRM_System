@@ -16,9 +16,11 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
-import org.springframework.security.web.context.SecurityContextHolderFilter;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ProblemDetailFactory;
 import ru.practicum.crm.security.api.PermissionCode;
@@ -45,6 +47,19 @@ public class SecurityConfig {
                 .logout(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt
+                                .jwtAuthenticationConverter(jwtAuthenticationConverter())
+                        )
+                        .authenticationEntryPoint((request, response, exception) ->
+                                writeProblem(
+                                        request.getRequestURI(),
+                                        response,
+                                        objectMapper,
+                                        ErrorCode.UNAUTHENTICATED
+                                )
+                        )
+                )
                 .authorizeHttpRequests(authorize -> {
                     authorize.requestMatchers(
                                     HttpMethod.POST,
@@ -80,7 +95,7 @@ public class SecurityConfig {
                                 .anyRequest()
                                 .authenticated();
                     } else {
-                        authorize.anyRequest().permitAll();
+                        authorize.anyRequest().authenticated();
                     }
                 })
                 .exceptionHandling(errors -> errors
@@ -105,7 +120,7 @@ public class SecurityConfig {
                 )
                 .addFilterAfter(
                         tenantContextFilter,
-                        SecurityContextHolderFilter.class
+                        BearerTokenAuthenticationFilter.class
                 )
                 .addFilterBefore(
                         systemSecretFilter,
@@ -144,5 +159,19 @@ public class SecurityConfig {
                 new FilterRegistrationBean<>(tenantContextFilter);
         registration.setEnabled(false);
         return registration;
+    }
+
+    @Bean
+    public JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtGrantedAuthoritiesConverter authoritiesConverter =
+                new JwtGrantedAuthoritiesConverter();
+
+        authoritiesConverter.setAuthoritiesClaimName("permissions");
+        authoritiesConverter.setAuthorityPrefix("");
+
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(authoritiesConverter);
+
+        return converter;
     }
 }

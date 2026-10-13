@@ -1,8 +1,9 @@
 package ru.practicum.crm.security.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -13,6 +14,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,8 +24,10 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import ru.practicum.crm.common.health.HealthController;
@@ -56,8 +61,18 @@ class SecurityAuthorizationRulesTest {
     @MockBean
     private TenantContext tenantContext;
 
+    @MockBean
+    private JwtDecoder jwtDecoder;
+
+    private static final UUID TENANT_ID =
+            UUID.fromString("11111111-1111-1111-1111-111111111111");
+
+    private static final String USER_ID =
+            "33333333-3333-3333-3333-333333333333";
+
     @BeforeEach
     void setUpMockMvc() {
+        when(tenantActiveChecker.isActive(TENANT_ID)).thenReturn(true);
         mockMvc = MockMvcBuilders.webAppContextSetup(context)
                 .addFilters(new SecurityTestRequestIdFilter())
                 .apply(springSecurity())
@@ -88,8 +103,7 @@ class SecurityAuthorizationRulesTest {
     void givenReadAllPermission_whenReadingTenantSettings_thenReturnsForbidden()
             throws Exception {
         mockMvc.perform(get("/admin/tenant/settings")
-                        .with(user("operator").authorities(
-                                new SimpleGrantedAuthority("REQUEST_READ_ALL"))))
+                        .with(jwtWithAuthority("REQUEST_READ_ALL")))
                 .andExpect(status().isForbidden());
     }
 
@@ -97,8 +111,7 @@ class SecurityAuthorizationRulesTest {
     void givenSettingsReadPermission_whenReadingTenantSettings_thenReachesMvcLookup()
             throws Exception {
         mockMvc.perform(get("/admin/tenant/settings")
-                        .with(user("admin").authorities(
-                                new SimpleGrantedAuthority("TENANT_SETTINGS_READ"))))
+                        .with(jwtWithAuthority("TENANT_SETTINGS_READ")))
                 .andExpect(status().isNotFound());
     }
 
@@ -106,8 +119,7 @@ class SecurityAuthorizationRulesTest {
     void givenSettingsReadPermission_whenUpdatingTenantSettings_thenReturnsForbidden()
             throws Exception {
         mockMvc.perform(put("/admin/tenant/settings")
-                        .with(user("admin").authorities(
-                                new SimpleGrantedAuthority("TENANT_SETTINGS_READ"))))
+                        .with(jwtWithAuthority("TENANT_SETTINGS_READ")))
                 .andExpect(status().isForbidden());
     }
 
@@ -115,8 +127,7 @@ class SecurityAuthorizationRulesTest {
     void givenSettingsManagePermission_whenUpdatingTenantSettings_thenReachesMvcLookup()
             throws Exception {
         mockMvc.perform(put("/admin/tenant/settings")
-                        .with(user("admin").authorities(
-                                new SimpleGrantedAuthority("TENANT_SETTINGS_MANAGE"))))
+                        .with(jwtWithAuthority("TENANT_SETTINGS_MANAGE")))
                 .andExpect(status().isNotFound());
     }
 
@@ -124,8 +135,7 @@ class SecurityAuthorizationRulesTest {
     void givenReadAllPermission_whenCallingNewAdminRoute_thenReturnsForbidden()
             throws Exception {
         mockMvc.perform(get("/admin/users")
-                        .with(user("operator").authorities(
-                                new SimpleGrantedAuthority("REQUEST_READ_ALL"))))
+                        .with(jwtWithAuthority("REQUEST_READ_ALL")))
                 .andExpect(status().isForbidden());
     }
 
@@ -133,8 +143,16 @@ class SecurityAuthorizationRulesTest {
     void givenClientPermission_whenCallingUnmappedClientRoute_thenReturnsForbidden()
             throws Exception {
         mockMvc.perform(get("/client/requests")
-                        .with(user("client").authorities(
-                                new SimpleGrantedAuthority("REQUEST_READ_OWN"))))
+                        .with(jwtWithAuthority("REQUEST_READ_OWN")))
                 .andExpect(status().isForbidden());
+    }
+
+    private RequestPostProcessor jwtWithAuthority(String authority) {
+        return jwt()
+                .jwt(token -> token
+                        .subject(USER_ID)
+                        .claim("tenant_id", TENANT_ID.toString())
+                        .claim("permissions", List.of(authority)))
+                .authorities(new SimpleGrantedAuthority(authority));
     }
 }
