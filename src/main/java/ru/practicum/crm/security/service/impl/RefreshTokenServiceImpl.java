@@ -67,6 +67,10 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
      * <p>Проверки идут в таком порядке. Отозванный токен просто не обменивается: цепочку уже
      * отозвали — при выходе или прошлом срабатывании. Использованный — сигнал кражи, даже если
      * он к тому же просрочен: кто его предъявил, тот держит копию. И только потом срок жизни.
+     *
+     * <p>Новый токен наследует срок жизни предъявленного, а не получает его заново: срок у входа
+     * абсолютный — {@code refresh-ttl} от входа по паролю. Иначе каждый обмен продлевал бы вход,
+     * и, пока клиент обменивает токены, вход не кончался бы никогда.
      */
     @Override
     @Transactional
@@ -82,8 +86,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         }
         RefreshToken current = found.get();
 
-        Instant nowInstant = clock.instant();
-        OffsetDateTime now = toOffsetDateTime(nowInstant);
+        OffsetDateTime now = toOffsetDateTime(clock.instant());
 
         if (current.isRevoked()) {
             return Optional.empty();
@@ -107,7 +110,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
                 current.getUserId(),
                 current.getTenantId(),
                 hash(nextRawToken),
-                toOffsetDateTime(nowInstant.plus(jwtProperties.refreshTtl())),
+                current.getExpiresAt(),
                 now
         );
 
