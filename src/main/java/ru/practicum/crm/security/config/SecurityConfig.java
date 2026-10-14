@@ -65,19 +65,15 @@ public class SecurityConfig {
                         )
                 )
                 .authorizeHttpRequests(authorize -> {
-                    authorize.requestMatchers(
-                                    HttpMethod.POST,
-                                    "/auth/register",
-                                    "/auth/login",
-                                    "/auth/refresh"
-                            ).permitAll()
-                            .requestMatchers(
-                                    "/health",
-                                    "/actuator/**",
-                                    "/v3/api-docs/**",
-                                    "/swagger-ui/**",
-                                    "/swagger-ui.html"
-                            ).permitAll()
+                    authorize.requestMatchers(HttpMethod.POST,
+                                    "/auth/register", "/auth/login", "/auth/refresh",
+                                    "/auth/logout").permitAll()
+                            .requestMatchers(HttpMethod.GET, "/client/profile")
+                                    .hasAuthority(PermissionCode.PROFILE_READ_OWN.name())
+                            .requestMatchers(HttpMethod.PUT, "/client/profile")
+                                    .hasAuthority(PermissionCode.PROFILE_EDIT_OWN.name())
+                            .requestMatchers("/health", "/actuator/**", "/v3/api-docs/**",
+                                    "/swagger-ui/**", "/swagger-ui.html").permitAll()
                             .requestMatchers("/system/**").permitAll();
 
                     if (authorizationEnabled) {

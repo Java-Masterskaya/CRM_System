@@ -1,9 +1,11 @@
 package ru.practicum.crm.tenant.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import jakarta.persistence.EntityManager;
@@ -11,11 +13,16 @@ import java.time.ZoneId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import ru.practicum.crm.common.error.ApiException;
+import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.tenant.api.dto.TenantDto;
 import ru.practicum.crm.tenant.api.mapper.TenantMapper;
 import ru.practicum.crm.tenant.api.seeding.TenantAccessSeeder;
@@ -53,6 +60,22 @@ class TenantServiceImplTest {
                 tenantCalendarSeeder,
                 entityManager
         );
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "\t"})
+    void createTenant_rejectsMissingSlugBeforePersistence(String slug) {
+        assertThatThrownBy(() -> service.createTenant(new TenantDto("Ромашка", slug, true)))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.VALIDATION_FAILED));
+        assertThatThrownBy(() -> service.create("Лютик", slug))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.VALIDATION_FAILED));
+        verifyNoInteractions(tenantRepository, mapper, entityManager,
+                tenantAccessSeeder, tenantCalendarSeeder);
     }
 
     @Test

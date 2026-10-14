@@ -16,6 +16,12 @@ public class UserEntity extends TenantScopedEntity {
     @Column(name = "email", nullable = false)
     private String email;
 
+    @Column(name = "name", length = 255)
+    private String name;
+
+    @Column(name = "phone", length = 40)
+    private String phone;
+
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
@@ -39,6 +45,28 @@ public class UserEntity extends TenantScopedEntity {
         this.email = email;
         this.passwordHash = passwordHash;
         this.status = status;
+    }
+
+    public UserEntity(UUID tenantId, String email, String name, String passwordHash,
+            UserStatus status) {
+        this(tenantId, email, passwordHash, status);
+        this.name = name;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
     }
 
     public String getEmail() {

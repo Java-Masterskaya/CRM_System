@@ -2,6 +2,7 @@ import com.github.spotbugs.snom.Confidence
 import com.github.spotbugs.snom.Effort
 import com.github.spotbugs.snom.SpotBugsTask
 import org.springframework.boot.gradle.plugin.SpringBootPlugin
+import org.gradle.process.CommandLineArgumentProvider
 
 plugins {
 	java
@@ -25,7 +26,13 @@ repositories {
 	mavenCentral()
 }
 
+val byteBuddyAgent by configurations.creating
+
 dependencies {
+	byteBuddyAgent(platform(SpringBootPlugin.BOM_COORDINATES))
+	byteBuddyAgent("net.bytebuddy:byte-buddy-agent") {
+		isTransitive = false
+	}
 	implementation(platform(SpringBootPlugin.BOM_COORDINATES))
 	annotationProcessor(platform(SpringBootPlugin.BOM_COORDINATES))
 	testAnnotationProcessor(platform(SpringBootPlugin.BOM_COORDINATES))
@@ -80,6 +87,13 @@ dependencies {
 tasks.withType<Test> {
 	useJUnitPlatform()
 	environment("SPRING_PROFILES_ACTIVE", "test")
+	maxParallelForks = 1
+	maxHeapSize = "512m"
+	systemProperty("spring.test.context.cache.maxSize", "4")
+	// Load instrumentation at JVM startup so Mockito does not fork an attach process.
+	jvmArgumentProviders.add(CommandLineArgumentProvider {
+		listOf("-javaagent:${byteBuddyAgent.singleFile.absolutePath}")
+	})
 }
 
 checkstyle {
@@ -101,6 +115,7 @@ spotbugs {
 }
 
 tasks.withType<SpotBugsTask> {
+	maxHeapSize = "512m"
 	reports.create("html") {
 		required = true
 	}

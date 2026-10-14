@@ -27,4 +27,5 @@ public class TenantTest {
         assertThat(tenant.getSlug()).isEqualTo("disabled-tenant");
         assertThat(tenant.isActive()).isFalse();
     }
+
 }

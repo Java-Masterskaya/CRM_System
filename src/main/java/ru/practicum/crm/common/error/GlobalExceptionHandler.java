@@ -94,6 +94,27 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .body(body);
     }
 
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ProblemDetail> handleRateLimitExceeded(
+            RateLimitExceededException ex,
+            HttpServletRequest request
+    ) {
+        ProblemDetail body = ProblemDetailFactory.create(
+                ErrorCode.RATE_LIMITED,
+                null,
+                instanceOf(request),
+                List.of()
+        );
+
+        return ResponseEntity.status(ErrorCode.RATE_LIMITED.getStatus())
+                .header(
+                        HttpHeaders.RETRY_AFTER,
+                        Long.toString(ex.getRetryAfterSeconds())
+                )
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(body);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetail> handleUnexpected(Exception ex,
             HttpServletRequest request) {
