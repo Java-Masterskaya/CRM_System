@@ -8,6 +8,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import jakarta.validation.Validator;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,10 +21,15 @@ import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.tenant.api.TenantContext;
+import ru.practicum.crm.tenant.api.TenantService;
+import ru.practicum.crm.tenant.api.dto.TenantDto;
 import ru.practicum.crm.user.api.UserService;
 import ru.practicum.crm.user.api.dto.AuthenticatedUserDto;
 import ru.practicum.crm.user.api.dto.ChangePasswordRequest;
+import ru.practicum.crm.user.api.dto.ClientProfileDto;
+import ru.practicum.crm.user.api.dto.ClientRegistrationRequest;
 import ru.practicum.crm.user.api.dto.CreateUserRequest;
+import ru.practicum.crm.user.api.dto.UpdateClientProfileRequest;
 import ru.practicum.crm.user.api.dto.UserDto;
 import ru.practicum.crm.user.context.UserContext;
 import ru.practicum.crm.user.domain.UserEntity;
@@ -38,6 +45,15 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private ru.practicum.crm.user.service.UserService clientUserService;
+
+    @Autowired
+    private TenantService tenantService;
+
+    @Autowired
+    private Validator validator;
 
     @Autowired
     private UserRepository userRepository;
@@ -245,6 +261,117 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
                                 .isEqualTo(ErrorCode.INVALID_CREDENTIALS));
     }
 
+    @Test
+    void registerClient_persistsPasswordHashAndAssignsOnlyClientRole() {
+        String slug = uniqueTenantSlug();
+        UUID tenantId = createTenantWithSlug(slug);
+
+        clientUserService.registerClient(registration(
+                slug,
+                "client@example.com",
+                "Client"
+        ));
+
+        UserEntity savedUser = findUser(tenantId, "client@example.com");
+        assertThat(passwordEncoder.matches(VALID_PASSWORD, savedUser.getPasswordHash()))
+                .isTrue();
+
+        List<String> assignedRoles = jdbcTemplate.queryForList(
+                """
+                SELECT r.code
+                FROM roles r
+                JOIN user_roles ur ON ur.role_id = r.id AND ur.tenant_id = r.tenant_id
+                WHERE ur.user_id = ? AND ur.tenant_id = ?
+                """,
+                String.class,
+                savedUser.getId(),
+                tenantId
+        );
+        assertThat(assignedRoles).containsExactly("CLIENT");
+    }
+
+    @Test
+    void registerClient_rejectsDuplicateEmailButAllowsItInAnotherTenant() {
+        String firstSlug = uniqueTenantSlug();
+        UUID firstTenantId = createTenantWithSlug(firstSlug);
+        clientUserService.registerClient(registration(
+                firstSlug,
+                "Duplicate@example.com",
+                "First client"
+        ));
+
+        assertThatThrownBy(() -> clientUserService.registerClient(registration(
+                firstSlug,
+                "duplicate@EXAMPLE.com",
+                "Duplicate client"
+        )))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.ALREADY_EXISTS));
+        assertThat(userRepository.findAllActiveByTenantId(firstTenantId)).hasSize(1);
+
+        String secondSlug = uniqueTenantSlug();
+        UUID secondTenantId = createTenantWithSlug(secondSlug);
+        clientUserService.registerClient(registration(
+                secondSlug,
+                "duplicate@example.com",
+                "Other tenant client"
+        ));
+
+        assertThat(userRepository.findAllActiveByTenantId(secondTenantId)).hasSize(1);
+    }
+
+    @Test
+    void registerClient_trimsEmailBeforeBeanValidation() {
+        ClientRegistrationRequest request = new ClientRegistrationRequest(
+                uniqueTenantSlug(),
+                "  client@example.com  ",
+                VALID_PASSWORD,
+                "Client"
+        );
+
+        assertThat(request.email()).isEqualTo("client@example.com");
+        assertThat(validator.validate(request)).isEmpty();
+    }
+
+    @Test
+    void clientProfile_readsAndUpdatesOnlyCurrentUsersNameAndPhone() {
+        String slug = uniqueTenantSlug();
+        UUID tenantId = createTenantWithSlug(slug);
+        clientUserService.registerClient(registration(
+                slug,
+                "owner@example.com",
+                "Owner"
+        ));
+        clientUserService.registerClient(registration(
+                slug,
+                "other@example.com",
+                "Other user"
+        ));
+
+        UserEntity owner = findUser(tenantId, "owner@example.com");
+        UserEntity otherUser = findUser(tenantId, "other@example.com");
+        when(userContext.getCurrentUserId()).thenReturn(owner.getId());
+
+        assertThat(clientUserService.getClientProfile())
+                .isEqualTo(new ClientProfileDto("Owner", "owner@example.com", null));
+
+        ClientProfileDto updated = clientUserService.updateClientProfile(
+                new UpdateClientProfileRequest("Updated Owner", "+1 234 567 8901")
+        );
+
+        assertThat(updated).isEqualTo(new ClientProfileDto(
+                "Updated Owner",
+                "owner@example.com",
+                "+1 234 567 8901"
+        ));
+        assertThat(reloadUser(owner.getId(), tenantId).getEmail())
+                .isEqualTo("owner@example.com");
+        UserEntity unchangedOtherUser = reloadUser(otherUser.getId(), tenantId);
+        assertThat(unchangedOtherUser.getName()).isEqualTo("Other user");
+        assertThat(unchangedOtherUser.getPhone()).isNull();
+    }
+
     /** Условие то же, что при входе: активен и не удалён (нужно обмену refresh-токена). */
     @Test
     void canLogIn_isTrueOnlyForActiveNotDeletedUserOfThatTenant() {
@@ -277,6 +404,30 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
 
         when(tenantContext.getCurrentTenantId()).thenReturn(id);
         return id;
+    }
+
+    private UUID createTenantWithSlug(String slug) {
+        when(tenantContext.getCurrentTenantId()).thenReturn(null);
+        tenantService.createTenant(new TenantDto("Registration tenant", slug, true));
+        UUID tenantId = jdbcTemplate.queryForObject(
+                "SELECT id FROM tenants WHERE slug = ?",
+                UUID.class,
+                slug
+        );
+        when(tenantContext.getCurrentTenantId()).thenReturn(tenantId);
+        return tenantId;
+    }
+
+    private String uniqueTenantSlug() {
+        return "registration-" + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private ClientRegistrationRequest registration(
+            String tenantSlug,
+            String email,
+            String name
+    ) {
+        return new ClientRegistrationRequest(tenantSlug, email, VALID_PASSWORD, name);
     }
 
     private UserEntity createUserWithPassword(String password) {

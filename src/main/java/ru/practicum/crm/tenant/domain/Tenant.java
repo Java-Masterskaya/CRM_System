@@ -20,11 +20,11 @@ public class Tenant extends BaseEntity {
     @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false)
-    private boolean active;
-
     @Column(name = "slug", nullable = false, unique = true, length = 63)
     private String slug;
+
+    @Column(nullable = false)
+    private boolean active;
 
     @OneToOne(
             mappedBy = "tenant",

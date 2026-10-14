@@ -2,10 +2,15 @@ package ru.practicum.crm.tenant.service.impl;
 
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
+import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
+import ru.practicum.crm.common.error.ValidationError;
+import ru.practicum.crm.tenant.api.TenantLookup;
+import ru.practicum.crm.tenant.api.TenantReference;
 import ru.practicum.crm.tenant.api.TenantService;
 import ru.practicum.crm.tenant.api.dto.TenantAuthDto;
 import ru.practicum.crm.tenant.api.dto.TenantDto;
@@ -19,8 +24,8 @@ import ru.practicum.crm.tenant.repository.TenantRepository;
 
 @Service
 @RequiredArgsConstructor
-public class TenantServiceImpl implements TenantService, TenantProvisioning {
-
+public class TenantServiceImpl implements TenantService, TenantLookup,
+        TenantProvisioning {
     private final TenantRepository tenantRepository;
     private final TenantMapper mapper;
     private final TenantAccessSeeder tenantAccessSeeder;
@@ -51,7 +56,12 @@ public class TenantServiceImpl implements TenantService, TenantProvisioning {
     }
 
     private Tenant createTenantInternal(String name, String slug) {
-        if (slug != null && tenantRepository.existsBySlug(slug)) {
+        if (slug == null || slug.isBlank()) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED,
+                    "Необходимо явно указать slug арендатора.",
+                    List.of(ValidationError.ofField("slug", "не должен быть пустым")));
+        }
+        if (tenantRepository.existsBySlug(slug)) {
             throw new ApiException(
                     ErrorCode.ALREADY_EXISTS,
                     "Арендатор с slug '" + slug + "' уже существует."
@@ -82,5 +92,11 @@ public class TenantServiceImpl implements TenantService, TenantProvisioning {
                 );
 
         return mapper.toAuthDto(tenant);
+    }
+
+    @Override
+    public Optional<TenantReference> findActiveReferenceBySlug(String slug) {
+        return tenantRepository.findBySlugAndActiveTrue(slug)
+                .map(tenant -> new TenantReference(tenant.getId()));
     }
 }

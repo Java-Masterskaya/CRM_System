@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.Objects;
 import java.util.UUID;
 import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -123,6 +124,12 @@ class DefaultAccessSeedMigrationIntegrationTest extends BaseIntegrationTest {
                 localUserId,
                 localRoleId
         )).isEqualTo(existingTenantId);
+    }
+
+    @AfterEach
+    void restoreTenantIsolationPolicies() {
+        // DROP COLUMN CASCADE removes RLS policies; restore them for subsequent tests.
+        jdbcTemplate.execute("SELECT crm_apply_tenant_rls()");
     }
 
     private void removeT021ObjectsAndHistory() {
