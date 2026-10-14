@@ -12,8 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
-import ru.practicum.crm.security.api.PermissionCode;
 import ru.practicum.crm.tenant.api.seeding.TenantAccessSeeder;
+import ru.practicum.crm.user.domain.PermissionCode;
 
 class DefaultAccessSeedIntegrationTest extends BaseIntegrationTest {
 
@@ -69,10 +69,11 @@ class DefaultAccessSeedIntegrationTest extends BaseIntegrationTest {
     private UUID createTenant() {
         UUID tenantId = UUID.randomUUID();
         jdbcTemplate.update(
-                "INSERT INTO tenants (id, name, active, created_at, updated_at) "
-                        + "VALUES (?, ?, true, NOW(), NOW())",
+                "INSERT INTO tenants (id, name, slug, active, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, true, NOW(), NOW())",
                 tenantId,
-                "Access seed integration tenant"
+                "Access seed integration tenant",
+                "access-seed-integration-tenant"
         );
         tenantAccessSeeder.seedDefaults(tenantId);
         return tenantId;

@@ -5,6 +5,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -26,13 +27,18 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import ru.practicum.crm.common.health.HealthController;
+import ru.practicum.crm.security.system.SystemFilterConfig;
 import ru.practicum.crm.tenant.api.TenantActiveChecker;
 import ru.practicum.crm.tenant.api.TenantContext;
 
 @WebMvcTest(controllers = HealthController.class)
-@TestPropertySource(properties = "app.security.authorization.enabled=true")
+@TestPropertySource(properties = {
+        "app.security.authorization.enabled=true",
+        "crm.system.secret=test-system-secret"
+})
 @Import({
     SecurityConfig.class,
+    SystemFilterConfig.class,
     SecurityConfigSliceTest.TestTenantFilterConfiguration.class
 })
 class SecurityAuthorizationRulesTest {
@@ -77,6 +83,17 @@ class SecurityAuthorizationRulesTest {
                             result.getResponse().getHeader(
                                     SecurityTestRequestIdFilter.HEADER_NAME));
                 });
+    }
+
+    /**
+     * Выход (T-029) — без access-токена, как и обмен: доказательство права на выход — сам
+     * refresh-токен в теле запроса. Контроллера в этом срезе нет, поэтому запрос доходит до
+     * поиска обработчика и получает 404, а не 401.
+     */
+    @Test
+    void givenNoCredentials_whenLoggingOut_thenReachesMvcLookup() throws Exception {
+        mockMvc.perform(post("/auth/logout").with(anonymous()))
+                .andExpect(status().isNotFound());
     }
 
     @Test

@@ -47,8 +47,8 @@ class OutboxRetryJitterIntegrationTest extends BaseIntegrationTest {
     @Test
     void processBatch_whenEventsFailTogether_spreadsRetriesWithinJitterBounds() {
         UUID tenantId = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO tenants (id, name, active, created_at, updated_at)"
-                + " VALUES (?, 'Арендатор', true, now(), now())", tenantId);
+        jdbcTemplate.update("INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
+                + " VALUES (?, 'Арендатор', 'arendator', true, now(), now())", tenantId);
         for (int i = 0; i < 10; i++) {
             repository.save(new OutboxEvent(tenantId, FAILING, Map.of("n", i)));
         }

@@ -17,13 +17,18 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Filter;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.springframework.data.jpa.convert.threeten.Jsr310JpaConverters.ZoneIdConverter;
+import ru.practicum.crm.common.model.TenantIds;
 
 @Entity
 @Table(name = "tenant_settings")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Filter(name = TenantIds.FILTER_NAME,
+        condition = "tenant_id = :" + TenantIds.PARAM
+)
 public class TenantSettings {
 
     @Id

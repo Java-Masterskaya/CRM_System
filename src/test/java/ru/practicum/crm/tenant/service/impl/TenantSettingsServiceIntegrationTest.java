@@ -34,8 +34,8 @@ class TenantSettingsServiceIntegrationTest extends BaseIntegrationTest {
     @Test
     @Transactional
     void getTenantSettings_whenCurrentTenantIsB_doesNotReturnSettingsOfA() {
-        Tenant tenantA = tenantRepository.save(new Tenant("Tenant A"));
-        Tenant tenantB = tenantRepository.save(new Tenant("Tenant B"));
+        Tenant tenantA = tenantRepository.save(new Tenant("Tenant A", "tenant-a"));
+        Tenant tenantB = tenantRepository.save(new Tenant("Tenant B", "tenant-b"));
 
         TenantSettings settingsA = new TenantSettings(
                 tenantA,

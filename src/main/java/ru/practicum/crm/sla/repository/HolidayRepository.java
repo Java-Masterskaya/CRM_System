@@ -31,6 +31,12 @@ public interface HolidayRepository extends Repository<Holiday, UUID> {
     /** Все даты арендатора — для календаря; их немного, десятки в год. */
     List<Holiday> findByTenantId(UUID tenantId);
 
+    /**
+     * Даты арендатора начиная с {@code from} включительно — для расчёта сроков, которому прошлые
+     * годы справочника не нужны. Читается по индексу уникальности (арендатор, дата).
+     */
+    List<Holiday> findByTenantIdAndDateGreaterThanEqual(UUID tenantId, LocalDate from);
+
     /** Страница справочника по порядку дат; дата у арендатора уникальна, порядок однозначен. */
     Page<Holiday> findByTenantIdOrderByDateAsc(UUID tenantId, Pageable pageable);
 }

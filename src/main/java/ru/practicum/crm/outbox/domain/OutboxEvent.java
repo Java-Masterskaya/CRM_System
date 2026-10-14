@@ -15,8 +15,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import lombok.Getter;
+import org.hibernate.annotations.Filter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import ru.practicum.crm.common.model.TenantIds;
 
 /**
  * Исходящее событие: факт изменения, который нужно доставить наружу — письмом или вебхуком.
@@ -40,7 +42,13 @@ import org.hibernate.type.SqlTypes;
 @Entity
 @Table(name = "outbox_events")
 @Getter
+@Filter(name = TenantIds.FILTER_NAME,
+        condition = "tenant_id = :" + TenantIds.PARAM
+)
 public class OutboxEvent {
+
+    /** Наибольшая длина типа события и вида объекта — как у колонок в базе. */
+    public static final int TYPE_MAX_LENGTH = 100;
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -50,10 +58,10 @@ public class OutboxEvent {
     @Column(name = "tenant_id", nullable = false, updatable = false)
     private UUID tenantId;
 
-    @Column(name = "event_type", nullable = false, updatable = false, length = 100)
+    @Column(name = "event_type", nullable = false, updatable = false, length = TYPE_MAX_LENGTH)
     private String eventType;
 
-    @Column(name = "aggregate_type", updatable = false, length = 100)
+    @Column(name = "aggregate_type", updatable = false, length = TYPE_MAX_LENGTH)
     private String aggregateType;
 
     @Column(name = "aggregate_id", updatable = false)

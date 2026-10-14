@@ -6,12 +6,17 @@ import jakarta.validation.constraints.Pattern;
 public record TenantDto(
         @NotBlank
         String name,
-        Boolean active,
-        @Pattern(regexp = "[a-z0-9]+(?:-[a-z0-9]+)*")
-        String slug
+        @NotBlank
+        @Pattern(
+                regexp = "^[a-z0-9-]{2,63}$",
+                message = "slug должен содержать только строчные "
+                          + "латинские буквы, цифры и дефисы, длина от 2 до 63 символов"
+        )
+        String slug,
+        Boolean active
 ) {
     public TenantDto(String name, Boolean active) {
-        this(name, active, toSlug(name));
+        this(name, toSlug(name), active);
     }
 
     private static String toSlug(String value) {

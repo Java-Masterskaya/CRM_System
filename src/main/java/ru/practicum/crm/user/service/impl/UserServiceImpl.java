@@ -2,6 +2,7 @@ package ru.practicum.crm.user.service.impl;
 
 import jakarta.persistence.EntityManager;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.exception.ConstraintViolationException;
@@ -12,10 +13,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
-import ru.practicum.crm.common.error.ValidationError;
-import ru.practicum.crm.security.api.PasswordPolicy;
 import ru.practicum.crm.tenant.api.TenantContext;
 import ru.practicum.crm.tenant.api.TenantLookup;
+import ru.practicum.crm.user.api.PasswordHashProvider;
+import ru.practicum.crm.user.api.PasswordPolicy;
+import ru.practicum.crm.user.api.dto.AuthenticatedUserDto;
+import ru.practicum.crm.common.error.ValidationError;
 import ru.practicum.crm.user.api.dto.ChangePasswordRequest;
 import ru.practicum.crm.user.api.dto.ClientProfileDto;
 import ru.practicum.crm.user.api.dto.ClientRegistrationRequest;
@@ -36,7 +39,8 @@ import ru.practicum.crm.user.service.UserService;
 
 @Service
 @RequiredArgsConstructor
-public class UserServiceImpl implements UserService {
+public class UserServiceImpl implements UserService,
+        ru.practicum.crm.user.api.UserService {
 
     private final UserRepository userRepository;
     private final TenantLookup tenantLookup;
@@ -46,6 +50,7 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     private final PasswordPolicy passwordPolicy;
     private final EntityManager entityManager;
+    private final PasswordHashProvider passwordHashProvider;
 
     private final TransactionTemplate transactionTemplate;
 
@@ -76,7 +81,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public void registerClient(ClientRegistrationRequest request) {
-        UUID tenantId = tenantLookup.findActiveBySlug(request.tenantSlug())
+        UUID tenantId = tenantLookup.findActiveReferenceBySlug(request.tenantSlug())
                 .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND,
                         "Регистрация для указанного арендатора недоступна."))
                 .id();
@@ -177,11 +182,46 @@ public class UserServiceImpl implements UserService {
         });
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public AuthenticatedUserDto authenticate(UUID tenantId, String email, String password) {
+        Optional<UserEntity> userOptional =
+                userRepository.findByTenantIdAndEmail(tenantId, email);
+
+        String passwordHash = userOptional.map(UserEntity::getPasswordHash)
+                .orElse(passwordHashProvider.dummyHash());
+
+        boolean passwordMatches = passwordEncoder.matches(password, passwordHash);
+
+        UserEntity user = userOptional.orElseThrow(this::invalidCredentials);
+
+        if (!passwordMatches || !user.canLogIn()) {
+            throw invalidCredentials();
+        }
+
+        return userMapper.toAuthenticatedUserDto(user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean canLogIn(UUID tenantId, UUID userId) {
+        return userRepository.findById(userId, tenantId)
+                .map(UserEntity::canLogIn)
+                .orElse(false);
+    }
+
     private UserEntity findUserById(UUID userId, UUID tenantId) {
         return userRepository.findById(userId, tenantId)
                 .orElseThrow(() -> new ApiException(
                         ErrorCode.NOT_FOUND,
                         "Пользователь с id " + userId + " не найден. У tenantId: " + tenantId
                 ));
+    }
+
+    private ApiException invalidCredentials() {
+        return new ApiException(
+                ErrorCode.INVALID_CREDENTIALS,
+                ErrorCode.INVALID_CREDENTIALS.getDefaultDetail()
+        );
     }
 }

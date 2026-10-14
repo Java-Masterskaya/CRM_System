@@ -5,6 +5,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -13,15 +14,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.practicum.crm.base.BaseIntegrationTest;
-import ru.practicum.crm.security.principal.TenantPrincipal;
 import ru.practicum.crm.tenant.api.TenantActiveChecker;
 import ru.practicum.crm.tenant.api.TenantContext;
 
@@ -35,9 +35,14 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
 
     private static final UUID TENANT_ID =
             UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final UUID TENANT_ID_B =
+            UUID.fromString("22222222-2222-2222-2222-222222222222");
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private TestController testController;
 
     @MockBean
     private TenantActiveChecker tenantActiveChecker;
@@ -45,60 +50,40 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
     @AfterEach
     void tearDown() {
         tenantContext.clear();
+        testController.clear();
     }
 
     @Test
-    void request_whenAuthenticatedWithTenant_passesTenantToBusinessLayer()
-            throws Exception {
+    void request_whenAuthenticatedWithTenant_passesTenantToBusinessLayer() throws Exception {
 
-        org.mockito.Mockito.when(
-                        tenantActiveChecker.isActive(TENANT_ID))
+        org.mockito.Mockito.when(tenantActiveChecker.isActive(TENANT_ID))
                 .thenReturn(true);
 
-        Authentication authentication =
-                new UsernamePasswordAuthenticationToken(
-                        new TenantPrincipal(TENANT_ID),
-                        null,
-                        List.of(new SimpleGrantedAuthority("REQUEST_READ_ALL")));
-
-        mockMvc.perform(
-                        get("/admin/test/tenant")
-                                .with(authentication(authentication)))
+        mockMvc.perform(get("/admin/test/tenant")
+                        .with(authentication(jwtAuthentication())))
                 .andExpect(status().isOk());
 
-        assertThat(TestController.tenantSeenByController)
-                .isEqualTo(TENANT_ID);
+        assertThat(testController.getTenantSeenByController()).isEqualTo(TENANT_ID);
     }
 
     @Test
     void request_whenAuthenticationIsMissing_passesWithoutTenantContext()
             throws Exception {
 
-        TestController.setTenantSeen(null);
         mockMvc.perform(get("/admin/test/tenant"))
                 .andExpect(status().isOk());
 
-        assertThat(TestController.tenantSeenByController)
-                .isNull();
+        assertThat(testController.getTenantSeenByController()).isNull();
     }
 
     @Test
-    void request_whenTenantIsInactive_returnsUnauthorized()
-            throws Exception {
+    void request_whenTenantIsInactive_returnsUnauthorized() throws Exception {
 
-        org.mockito.Mockito.when(
-                        tenantActiveChecker.isActive(TENANT_ID))
+        org.mockito.Mockito.when(tenantActiveChecker.isActive(TENANT_ID))
                 .thenReturn(false);
 
-        Authentication authentication =
-                new UsernamePasswordAuthenticationToken(
-                        new TenantPrincipal(TENANT_ID),
-                        null,
-                        List.of(new SimpleGrantedAuthority("REQUEST_READ_ALL")));
-
-        mockMvc.perform(
-                        get("/admin/test/tenant")
-                                .with(authentication(authentication)))
+        mockMvc.perform(get("/admin/test/tenant")
+                        .with(authentication(jwtAuthentication())))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -109,18 +94,70 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
                         tenantActiveChecker.isActive(TENANT_ID))
                 .thenReturn(true);
 
-        Authentication authentication =
-                new UsernamePasswordAuthenticationToken(
-                        new TenantPrincipal(TENANT_ID),
-                        null,
-                        List.of(new SimpleGrantedAuthority("REQUEST_READ_ALL")));
-
         mockMvc.perform(
                         get("/admin/test/tenant")
-                                .with(authentication(authentication)))
+                                .with(authentication(jwtAuthentication())))
                 .andExpect(status().isOk());
 
         assertThat(tenantContext.getCurrentTenantId()).isNull();
+    }
+
+    private Authentication jwtAuthentication() {
+        return jwtAuthentication(TENANT_ID);
+    }
+
+    private Authentication jwtAuthentication(UUID tenantId) {
+        Instant now = Instant.now();
+
+        Jwt jwt = Jwt.withTokenValue("test-token")
+                .header("alg", "HS256")
+                .subject("test-user-id")
+                .claim("tenant_id", tenantId.toString())
+                .issuedAt(now)
+                .expiresAt(now.plusSeconds(3600))
+                .build();
+
+        return new JwtAuthenticationToken(jwt, List.of());
+    }
+
+    @Test
+    void secondRequest_ofAnotherTenant_doesNotSeePreviousTenant() throws Exception {
+        org.mockito.Mockito.when(tenantActiveChecker.isActive(TENANT_ID)).thenReturn(true);
+        org.mockito.Mockito.when(tenantActiveChecker.isActive(TENANT_ID_B)).thenReturn(true);
+
+        mockMvc.perform(
+                        get("/admin/test/tenant")
+                                .with(authentication(jwtAuthentication(TENANT_ID))))
+                .andExpect(status().isOk());
+        assertThat(testController.getTenantSeenByController()).isEqualTo(TENANT_ID);
+
+        mockMvc.perform(
+                        get("/admin/test/tenant")
+                                .with(authentication(jwtAuthentication(TENANT_ID_B))))
+                .andExpect(status().isOk());
+
+        assertThat(testController.getTenantSeenByController())
+                .as("второй запрос не должен видеть арендатора первого")
+                .isEqualTo(TENANT_ID_B);
+    }
+
+    @Test
+    void requestWithoutAuthentication_afterAuthenticatedRequest_doesNotSeePreviousTenant()
+            throws Exception {
+        org.mockito.Mockito.when(tenantActiveChecker.isActive(TENANT_ID)).thenReturn(true);
+
+        mockMvc.perform(
+                        get("/admin/test/tenant")
+                                .with(authentication(jwtAuthentication(TENANT_ID))))
+                .andExpect(status().isOk());
+        assertThat(testController.getTenantSeenByController()).isEqualTo(TENANT_ID);
+
+        mockMvc.perform(get("/admin/test/tenant"))
+                .andExpect(status().isOk());
+
+        assertThat(testController.getTenantSeenByController())
+                .as("запрос без арендатора не должен видеть арендатора предыдущего запроса")
+                .isNull();
     }
 
     @RestController
@@ -129,16 +166,20 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
         @Autowired
         private TenantContext tenantContext;
 
-        private static UUID tenantSeenByController;
+        private UUID tenantSeenByController;
 
-        private static void setTenantSeen(UUID value) {
-            tenantSeenByController = value;
+        void clear() {
+            tenantSeenByController = null;
+        }
+
+        UUID getTenantSeenByController() {
+            return tenantSeenByController;
         }
 
         @GetMapping("/admin/test/tenant")
         UUID tenant() {
             UUID currentTenant = tenantContext.getCurrentTenantId();
-            setTenantSeen(currentTenant);
+            tenantSeenByController = currentTenant;
             return currentTenant;
         }
     }

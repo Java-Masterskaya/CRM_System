@@ -22,8 +22,9 @@ import ru.practicum.crm.common.model.TenantScopedEntity;
  * Заявка на обработку данных — главная сущность продукта (ТЗ §4.2).
  *
  * <p>Состав полей зафиксирован в T-033 (#34). Правила переходов статусов (T-043),
- * выбор приоритета новой заявки ({@link RequestPriority#resolve}) и расчёт сроков по SLA (T-049)
- * находятся за пределами сущности: здесь только хранение состояния.
+ * выбор приоритета новой заявки ({@link RequestPriority#resolve}) и расчёт сроков по SLA (T-058,
+ * {@code RequestDeadlineAssigner}) находятся за пределами сущности: здесь только хранение
+ * состояния.
  */
 @Entity
 @Table(name = "requests")
@@ -82,9 +83,21 @@ public class Request extends TenantScopedEntity {
     @Column(name = "resolution_due_at")
     private Instant resolutionDueAt;
 
+    /**
+     * Срок первого ответа истёк, пока заявка была в {@link RequestStatus#NEW}. Ставит фоновая
+     * проверка (T-060); на жизненный цикл не влияет.
+     */
     @Setter
-    @Column(name = "overdue", nullable = false)
-    private boolean overdue;
+    @Column(name = "first_response_overdue", nullable = false)
+    private boolean firstResponseOverdue;
+
+    /**
+     * Срок решения истёк, пока заявка не была завершена. Ставит фоновая проверка (T-060); на
+     * жизненный цикл не влияет.
+     */
+    @Setter
+    @Column(name = "resolution_overdue", nullable = false)
+    private boolean resolutionOverdue;
 
     @Setter
     @Column(name = "deleted", nullable = false)
@@ -139,6 +152,11 @@ public class Request extends TenantScopedEntity {
         if (version != expectedVersion) {
             throw new ObjectOptimisticLockingFailureException(Request.class, getId());
         }
+    }
+
+    /** Просрочен хотя бы один из сроков — первого ответа или решения. */
+    public boolean isOverdue() {
+        return firstResponseOverdue || resolutionOverdue;
     }
 
     @Override

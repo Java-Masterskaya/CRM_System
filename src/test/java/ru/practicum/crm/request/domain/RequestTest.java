@@ -61,7 +61,8 @@ class RequestTest {
         request.setDesiredDueAt(desired);
         request.setFirstResponseDueAt(firstResponse);
         request.setResolutionDueAt(resolution);
-        request.setOverdue(true);
+        request.setFirstResponseOverdue(true);
+        request.setResolutionOverdue(true);
         request.setDeleted(true);
 
         assertThat(request.getTypeId()).isEqualTo(typeId);
@@ -73,8 +74,23 @@ class RequestTest {
         assertThat(request.getDesiredDueAt()).isEqualTo(desired);
         assertThat(request.getFirstResponseDueAt()).isEqualTo(firstResponse);
         assertThat(request.getResolutionDueAt()).isEqualTo(resolution);
-        assertThat(request.isOverdue()).isTrue();
+        assertThat(request.isFirstResponseOverdue()).isTrue();
+        assertThat(request.isResolutionOverdue()).isTrue();
         assertThat(request.isDeleted()).isTrue();
+    }
+
+    /** Заявка просрочена, если истёк хотя бы один из сроков (T-060). */
+    @Test
+    void isOverdue_whenEitherDeadlineMissed_isTrue() {
+        request.setFirstResponseOverdue(true);
+        assertThat(request.isOverdue()).isTrue();
+
+        request.setFirstResponseOverdue(false);
+        request.setResolutionOverdue(true);
+        assertThat(request.isOverdue()).isTrue();
+
+        request.setResolutionOverdue(false);
+        assertThat(request.isOverdue()).isFalse();
     }
 
     @Test

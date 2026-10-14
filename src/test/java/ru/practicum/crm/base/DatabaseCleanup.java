@@ -46,6 +46,7 @@ public class DatabaseCleanup implements InitializingBean {
     public void cleanup() {
         if (!tableNames.isEmpty()) {
             entityManager.flush();
+            entityManager.createNativeQuery("SET LOCAL ROLE NONE").executeUpdate();
             entityManager.createNativeQuery("SET CONSTRAINTS ALL DEFERRED").executeUpdate();
             for (String tableName : tableNames) {
                 String sql = "TRUNCATE TABLE %s RESTART IDENTITY CASCADE".formatted(tableName);

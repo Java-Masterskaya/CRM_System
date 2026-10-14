@@ -35,8 +35,8 @@ class RequestPriorityIntegrationTest extends BaseIntegrationTest {
     @BeforeEach
     void createTenant() {
         tenantId = UUID.randomUUID();
-        jdbcTemplate.update("INSERT INTO tenants (id, name, active, created_at, updated_at)"
-                + " VALUES (?, 'Арендатор', true, now(), now())", tenantId);
+        jdbcTemplate.update("INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
+                + " VALUES (?, 'Арендатор', 'arendator', true, now(), now())", tenantId);
     }
 
     @Test
