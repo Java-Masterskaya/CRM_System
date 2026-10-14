@@ -5,4 +5,7 @@ import java.util.List;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record InboundSeries(String key, List<InboundPoint> points) {
+    public InboundSeries {
+        points = points != null ? List.copyOf(points) : List.of();
+    }
 }

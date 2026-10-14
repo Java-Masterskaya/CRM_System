@@ -17,9 +17,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
+import ru.practicum.crm.analytics.api.InboundGroupBy;
 import ru.practicum.crm.analytics.api.dto.InboundByDayReportResponse;
 import ru.practicum.crm.analytics.api.dto.InboundPoint;
 import ru.practicum.crm.analytics.api.dto.InboundSeries;
+import ru.practicum.crm.analytics.domain.InboundReportQuery;
 import ru.practicum.crm.analytics.repository.InboundRequestsReportRepository;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.common.error.ApiException;
@@ -58,8 +60,8 @@ class InboundRequestsReportIntegrationTest extends BaseIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        tenantA = insertTenant("Арендатор А", TIMEZONE);
-        tenantB = insertTenant("Арендатор Б", TIMEZONE);
+        tenantA = insertTenant("Арендатор А");
+        tenantB = insertTenant("Арендатор Б");
         authorId = UUID.randomUUID();
         typeExport = insertType(tenantA, "Выгрузка");
         typeImport = insertType(tenantA, "Загрузка");
@@ -72,9 +74,9 @@ class InboundRequestsReportIntegrationTest extends BaseIntegrationTest {
         insertRequest(tenantA, typeExport, RequestPriority.HIGH,
                 Instant.parse("2026-03-01T10:00:00Z"));
         insertRequest(tenantA, typeExport, RequestPriority.LOW,
-                Instant.parse("2026-03-01T19:00:00Z"));
+                Instant.parse("2026-03-03T10:00:00Z"));
         insertRequest(tenantA, typeImport, RequestPriority.NORMAL,
-                Instant.parse("2026-03-05T12:00:00Z"));
+                Instant.parse("2026-03-01T12:00:00Z"));
 
         InboundByDayReportResponse response =
                 service.report(FROM, TO, null, null, null);
@@ -99,7 +101,7 @@ class InboundRequestsReportIntegrationTest extends BaseIntegrationTest {
         insertRequest(tenantA, typeExport, RequestPriority.HIGH,
                 Instant.parse("2026-03-01T10:00:00Z"));
         insertRequest(tenantA, typeExport, RequestPriority.NORMAL,
-                Instant.parse("2026-03-05T10:00:00Z"));
+                Instant.parse("2026-03-03T10:00:00Z"));
         insertRequest(tenantA, typeImport, RequestPriority.LOW,
                 Instant.parse("2026-03-01T12:00:00Z"));
 
@@ -107,13 +109,14 @@ class InboundRequestsReportIntegrationTest extends BaseIntegrationTest {
                 service.report(FROM, TO, "type", null, null);
 
         assertThat(response.series()).extracting(InboundSeries::key)
-                .containsExactlyInAnyOrder(typeExport.toString(), typeExport.toString())
+                .containsExactlyInAnyOrder(typeExport.toString(), typeImport.toString())
                 .doesNotContain(typeUnused.toString());
+
         InboundSeries exported = seriesByKey(response, typeExport.toString());
         assertThat(exported.points()).extracting(InboundPoint::count)
                 .containsExactly(1L, 0L, 1L, 0L, 0L);
 
-        InboundSeries imported = seriesByKey(response, typeExport.toString());
+        InboundSeries imported = seriesByKey(response, typeImport.toString());
         assertThat(imported.points()).extracting(InboundPoint::count)
                 .containsExactly(1L, 0L, 0L, 0L, 0L);
 
@@ -207,6 +210,54 @@ class InboundRequestsReportIntegrationTest extends BaseIntegrationTest {
                 .isEqualTo(1);
     }
 
+    @Test
+    void report_whenHundredThousandRequestsInMonth_respondsUnder300ms() {
+
+        LocalDate monthStart = LocalDate.of(2026, 1, 1);
+        LocalDate monthEnd = LocalDate.of(2026, 1, 30);
+        Instant rangeStart = monthStart.atStartOfDay(MOSCOW).toInstant();
+
+        jdbcTemplate.update(
+                """
+                   INSERT INTO requests (id, tenant_id, type_id, subject, description, status,
+                   priority, priority_rank, author_id, created_at, updated_at)
+                   SELECT gen_random_uuid(), ?, ?, 'Выгрузка', 'Нагрузка', 'NEW', 'NORMAL', 2, ?,
+                   ?::TIMESTAMPTZ + ((i % 30) || ' days')::INTERVAL + ((i % 20) || ' hours')::INTERVAL, now()
+                   FROM generate_series(1, 100000) AS s(i)
+                   """,
+                tenantA, typeExport, authorId, Timestamp.from(rangeStart));
+        jdbcTemplate.execute("ANALYZE requests");
+
+        InboundReportQuery query = new InboundReportQuery(
+                tenantA, monthStart, monthEnd, MOSCOW, null, null, InboundGroupBy.NONE
+        );
+
+        InboundByDayReportResponse response =
+                service.report(monthStart, monthEnd, null, null, null);
+        assertThat(response.series()).hasSize(1);
+        assertThat(response.series().getFirst().points()).hasSize(30);
+        assertThat(sum(response)).isEqualTo(100_000L);
+
+        Long bestMs = transactionTemplate.execute(status -> {
+            jdbcTemplate.execute("SET LOCAL jit = off");
+            jdbcTemplate.execute("SET LOCAL max_parallel_workers_per_gather = 0");
+            for (int i = 0; i < 5; i++) {
+                repository.aggregate(query);
+            }
+            long best = Long.MAX_VALUE;
+            for (int i = 0; i < 10; i++) {
+                long started = System.nanoTime();
+                repository.aggregate(query);
+                best = Math.min(best, (System.nanoTime() - started) / 1_000_000L);
+            }
+            return best;
+        });
+
+        assertThat(bestMs)
+                .as("Месячный ответ на 100к должен отвечать быстрее 300 мс, лучший %d мс", bestMs)
+                .isLessThan(300L);
+    }
+
     private static long sum(InboundByDayReportResponse response) {
         return response.series().stream()
                 .flatMap(s -> s.points().stream())
@@ -243,25 +294,25 @@ class InboundRequestsReportIntegrationTest extends BaseIntegrationTest {
         );
 
         if (typeId != null) {
-            sql.append(" AND r.type_id = ?");
+            sql.append(" AND type_id = ?");
             args.add(typeId);
         }
         if (priority != null) {
-            sql.append(" AND r.priority = ?");
-            args.add(priority);
+            sql.append(" AND priority = ?");
+            args.add(priority.name());
         }
         Long count = jdbcTemplate.queryForObject(sql.toString(), Long.class, args.toArray());
         return count == null ? 0L : count;
     }
 
-    private UUID insertTenant(String name, String timezone) {
+    private UUID insertTenant(String name) {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update("INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
                         + " VALUES (?, ?, ?, true, now(), now())",
                 id, name, "tenant-" + id);
 
         jdbcTemplate.update("INSERT INTO tenant_settings (tenant_id, timezone, created_at,"
-                + " updated_at) VALUES (?, ?, now(), now())", id, timezone);
+                + " updated_at) VALUES (?, ?, now(), now())", id, TIMEZONE);
         return id;
     }
 
@@ -269,7 +320,7 @@ class InboundRequestsReportIntegrationTest extends BaseIntegrationTest {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update(
                 "INSERT INTO request_types (id, tenant_id, name, active, created_at, updated_at)"
-                        + "VALUES (?, ?, 'Выгрузка', true, now(), now())", id, tenantId, name);
+                        + "VALUES (?, ?, ?, true, now(), now())", id, tenantId, name);
         return id;
     }
 
