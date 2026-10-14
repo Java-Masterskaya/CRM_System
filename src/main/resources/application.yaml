@@ -59,6 +59,8 @@ app:
     scheduler-enabled: ${OVERDUE_DETECTION_SCHEDULER_ENABLED:true}
     batch-size: ${OVERDUE_DETECTION_BATCH_SIZE:500}
     poll-interval: ${OVERDUE_DETECTION_POLL_INTERVAL:1m}
+  analitics:
+    max-period-days: ${MAX-PERIOD-DAYS:30}
 
 crm:
   security:

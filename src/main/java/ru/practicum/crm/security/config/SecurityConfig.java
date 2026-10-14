@@ -68,6 +68,8 @@ public class SecurityConfig {
                                         "/admin/tenant/settings"
                                 )
                                 .hasAuthority(PermissionCode.TENANT_SETTINGS_MANAGE.name())
+                                .requestMatchers("/analytics/**")
+                                .hasAuthority(PermissionCode.ANALYTICS_READ.name())
                                 .requestMatchers(
                                         "/admin/**",
                                         "/client/**"
