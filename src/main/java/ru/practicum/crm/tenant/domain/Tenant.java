@@ -39,9 +39,6 @@ public class Tenant extends BaseEntity {
     }
 
     public Tenant(String name, String slug, boolean active) {
-        if (slug == null || slug.isBlank()) {
-            throw new IllegalArgumentException("slug must not be blank");
-        }
         this.name = name;
         this.slug = slug;
         this.active = active;

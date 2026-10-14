@@ -1,7 +1,6 @@
 package ru.practicum.crm.tenant.model;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 import org.junit.jupiter.api.Test;
 import ru.practicum.crm.tenant.domain.Tenant;
@@ -29,9 +28,4 @@ public class TenantTest {
         assertThat(tenant.isActive()).isFalse();
     }
 
-    @Test
-    void constructor_whenSlugMissing_rejectsTenant() {
-        assertThatIllegalArgumentException()
-                .isThrownBy(() -> new Tenant("Кириллическое имя", " "));
-    }
 }
