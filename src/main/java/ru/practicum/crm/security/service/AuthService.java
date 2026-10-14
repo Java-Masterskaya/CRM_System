@@ -7,6 +7,8 @@ public interface AuthService {
 
     AuthResponse authenticate(LoginRequest request);
 
+    AuthResponse authenticate(LoginRequest request, String sourceIp);
+
     AuthResponse refresh(String refreshToken);
 
     /**

@@ -20,6 +20,7 @@ import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.security.api.dto.AuthResponse;
 import ru.practicum.crm.security.service.JwtTokenService;
+import ru.practicum.crm.security.service.LoginRateLimiter;
 import ru.practicum.crm.security.service.RefreshTokenRotation;
 import ru.practicum.crm.security.service.RefreshTokenService;
 import ru.practicum.crm.tenant.api.TenantActiveChecker;
@@ -41,10 +42,13 @@ class AuthServiceImplRefreshTest {
     private final UserPermissionService permissions = mock(UserPermissionService.class);
     private final JwtTokenService jwtTokens = mock(JwtTokenService.class);
     private final RefreshTokenService refreshTokens = mock(RefreshTokenService.class);
+    private final LoginRateLimiter loginRateLimiter =
+            mock(LoginRateLimiter.class);
     private final TenantActiveChecker tenants = mock(TenantActiveChecker.class);
     private final SimpleTransactionStatus transaction = new SimpleTransactionStatus();
     private final AuthServiceImpl service = new AuthServiceImpl(mock(TenantService.class), users,
-            permissions, jwtTokens, refreshTokens, tenants, inTransaction(transaction));
+            permissions, jwtTokens, refreshTokens, loginRateLimiter,
+            tenants, inTransaction(transaction));
 
     @BeforeEach
     void userAndTenantCanWork() {
@@ -77,7 +81,9 @@ class AuthServiceImplRefreshTest {
         verifyNoInteractions(permissions, jwtTokens);
     }
 
-    /** Заблокирован после входа: тот же отказ, что при входе, а ротация откатывается. */
+    /**
+     * Заблокирован после входа: тот же отказ, что при входе, а ротация откатывается.
+     */
     @Test
     void refresh_whenUserBlockedAfterLogin_isUnauthenticatedAndRollsRotationBack() {
         exchanged("old");
