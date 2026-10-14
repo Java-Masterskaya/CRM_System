@@ -149,4 +149,26 @@ class SecurityAuthorizationRulesTest {
                                 new SimpleGrantedAuthority("REQUEST_READ_OWN"))))
                 .andExpect(status().isForbidden());
     }
+
+    @Test
+    void givenAnalyticsReadPermission_whenReadingInboundReport_thenReachesMvcLookup()
+            throws Exception {
+        mockMvc.perform(get("/analytics/request/inbound")
+                        .param("from", "2026-01-01")
+                        .param("to", "2026-01-10")
+                        .with(user("admin").authorities(
+                                new SimpleGrantedAuthority("ANALYTICS_READ"))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void givenSettingsReadPermission_whenReadingInboundReport_thenReturnsForbidden()
+            throws Exception {
+        mockMvc.perform(get("/analytics/request/inbound")
+                        .param("from", "2026-01-01")
+                        .param("to", "2026-01-10")
+                        .with(user("admin").authorities(
+                                new SimpleGrantedAuthority("TENANT_SETTINGS_READ"))))
+                .andExpect(status().isForbidden());
+    }
 }
