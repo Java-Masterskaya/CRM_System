@@ -15,14 +15,4 @@ public record TenantDto(
         String slug,
         Boolean active
 ) {
-    public TenantDto(String name, Boolean active) {
-        this(name, toSlug(name), active);
-    }
-
-    private static String toSlug(String value) {
-        String slugValue = value == null ? "" : value.toLowerCase(java.util.Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("^-|-$", "");
-        return slugValue.isBlank() ? "tenant" : slugValue;
-    }
 }

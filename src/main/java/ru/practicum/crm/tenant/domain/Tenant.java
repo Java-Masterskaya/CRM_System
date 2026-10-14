@@ -38,21 +38,13 @@ public class Tenant extends BaseEntity {
         this(name, slug, true);
     }
 
-    public Tenant(String name) {
-        this(name, toSlug(name), true);
-    }
-
     public Tenant(String name, String slug, boolean active) {
+        if (slug == null || slug.isBlank()) {
+            throw new IllegalArgumentException("slug must not be blank");
+        }
         this.name = name;
-        this.slug = slug == null || slug.isBlank() ? toSlug(name) : slug;
+        this.slug = slug;
         this.active = active;
-    }
-
-    private static String toSlug(String value) {
-        String slugValue = value == null ? "" : value.toLowerCase(java.util.Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("^-|-$", "");
-        return slugValue.isBlank() ? "tenant" : slugValue;
     }
 
     @SuppressFBWarnings(

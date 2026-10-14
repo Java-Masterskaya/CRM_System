@@ -20,4 +20,7 @@ public record ClientRegistrationRequest(
         @Size(max = 255)
         String name
 ) {
+    public ClientRegistrationRequest {
+        email = email == null ? null : email.trim();
+    }
 }
