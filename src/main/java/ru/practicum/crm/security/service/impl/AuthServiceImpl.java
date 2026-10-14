@@ -78,4 +78,9 @@ public class AuthServiceImpl implements AuthService {
                 rotation.refreshToken()
         );
     }
+
+    @Override
+    public void logout(String rawRefreshToken) {
+        refreshTokenService.logout(rawRefreshToken);
+    }
 }
