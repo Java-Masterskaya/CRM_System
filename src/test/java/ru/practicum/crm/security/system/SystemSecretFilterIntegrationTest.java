@@ -1,6 +1,7 @@
 package ru.practicum.crm.security.system;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -76,7 +77,9 @@ class SystemSecretFilterIntegrationTest extends BaseIntegrationTest {
     void request_whenPathIsNotSystem_doesNotRequireSystemSecret()
             throws Exception {
 
-        mockMvc.perform(get("/not-system/test"))
+        mockMvc.perform(
+                        get("/not-system/test")
+                                .with(user("test-user")))
                 .andExpect(status().isOk());
 
         assertThat(testController.called).isTrue();

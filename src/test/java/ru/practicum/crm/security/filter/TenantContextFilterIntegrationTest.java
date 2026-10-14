@@ -67,13 +67,14 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void request_whenAuthenticationIsMissing_passesWithoutTenantContext()
+    void request_whenAuthenticationIsMissing_returnsUnauthorized()
             throws Exception {
 
         mockMvc.perform(get("/admin/test/tenant"))
-                .andExpect(status().isOk());
+                .andExpect(status().isUnauthorized());
 
         assertThat(testController.getTenantSeenByController()).isNull();
+        assertThat(tenantContext.getCurrentTenantId()).isNull();
     }
 
     @Test
@@ -144,20 +145,29 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
     @Test
     void requestWithoutAuthentication_afterAuthenticatedRequest_doesNotSeePreviousTenant()
             throws Exception {
-        org.mockito.Mockito.when(tenantActiveChecker.isActive(TENANT_ID)).thenReturn(true);
+
+        org.mockito.Mockito.when(tenantActiveChecker.isActive(TENANT_ID))
+                .thenReturn(true);
 
         mockMvc.perform(
                         get("/admin/test/tenant")
                                 .with(authentication(jwtAuthentication(TENANT_ID))))
                 .andExpect(status().isOk());
-        assertThat(testController.getTenantSeenByController()).isEqualTo(TENANT_ID);
-
-        mockMvc.perform(get("/admin/test/tenant"))
-                .andExpect(status().isOk());
 
         assertThat(testController.getTenantSeenByController())
-                .as("запрос без арендатора не должен видеть арендатора предыдущего запроса")
-                .isNull();
+                .isEqualTo(TENANT_ID);
+
+        assertThat(tenantContext.getCurrentTenantId()).isNull();
+
+        // Сбрасываем наблюдение, чтобы проверить, будет ли вызван контроллер
+        // при следующем запросе.
+        testController.clear();
+
+        mockMvc.perform(get("/admin/test/tenant"))
+                .andExpect(status().isUnauthorized());
+
+        assertThat(testController.getTenantSeenByController()).isNull();
+        assertThat(tenantContext.getCurrentTenantId()).isNull();
     }
 
     @RestController
