@@ -10,4 +10,10 @@ public interface AuthService {
     AuthResponse authenticate(LoginRequest request, String sourceIp);
 
     AuthResponse refresh(String refreshToken);
+
+    /**
+     * Выход: refresh-токены этого входа больше не обмениваются (T-029). Повторный выход
+     * безопасен.
+     */
+    void logout(String refreshToken);
 }

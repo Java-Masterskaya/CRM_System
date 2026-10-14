@@ -104,6 +104,14 @@ public class UserServiceImpl implements UserService {
         return userMapper.toAuthenticatedUserDto(user);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public boolean canLogIn(UUID tenantId, UUID userId) {
+        return userRepository.findById(userId, tenantId)
+                .map(UserEntity::canLogIn)
+                .orElse(false);
+    }
+
     private UserEntity findUserById(UUID userId, UUID tenantId) {
         return userRepository.findById(userId, tenantId)
                 .orElseThrow(() -> new ApiException(

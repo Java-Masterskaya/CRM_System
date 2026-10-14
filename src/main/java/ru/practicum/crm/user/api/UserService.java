@@ -12,4 +12,13 @@ public interface UserService {
     void changePassword(ChangePasswordRequest request);
 
     AuthenticatedUserDto authenticate(UUID tenantId, String email, String password);
+
+    /**
+     * Может ли пользователь работать в системе — то же условие, что при входе: активен и не
+     * удалён. Нужен обмену refresh-токена: пользователь, заблокированный после входа, не должен
+     * получать новые токены.
+     *
+     * @return {@code false} и для пользователя, которого у арендатора нет
+     */
+    boolean canLogIn(UUID tenantId, UUID userId);
 }

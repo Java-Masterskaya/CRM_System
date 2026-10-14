@@ -1,5 +1,7 @@
 package ru.practicum.crm.security.service.impl;
 
+import static net.logstash.logback.argument.StructuredArguments.value;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -9,12 +11,13 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.HexFormat;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.practicum.crm.common.error.ApiException;
-import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.security.config.JwtProperties;
 import ru.practicum.crm.security.domain.RefreshToken;
 import ru.practicum.crm.security.repository.RefreshTokenRepository;
@@ -24,6 +27,8 @@ import ru.practicum.crm.security.service.RefreshTokenService;
 @Service
 @RequiredArgsConstructor
 public class RefreshTokenServiceImpl implements RefreshTokenService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(RefreshTokenServiceImpl.class);
 
     private static final int TOKEN_BYTES = 32;
 
@@ -56,26 +61,42 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         return refreshToken;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Проверки идут в таком порядке. Отозванный токен просто не обменивается: цепочку уже
+     * отозвали — при выходе или прошлом срабатывании. Использованный — сигнал кражи, даже если
+     * он к тому же просрочен: кто его предъявил, тот держит копию. И только потом срок жизни.
+     *
+     * <p>Новый токен наследует срок жизни предъявленного, а не получает его заново: срок у входа
+     * абсолютный — {@code refresh-ttl} от входа по паролю. Иначе каждый обмен продлевал бы вход,
+     * и, пока клиент обменивает токены, вход не кончался бы никогда.
+     */
     @Override
     @Transactional
-    public RefreshTokenRotation rotate(String rawRefreshToken) {
+    public Optional<RefreshTokenRotation> rotate(String rawRefreshToken) {
         if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
-            throw invalidRefreshToken();
+            return Optional.empty();
         }
 
-        String tokenHash = hash(rawRefreshToken);
+        Optional<RefreshToken> found = refreshTokenRepository
+                .findByTokenHashForUpdate(hash(rawRefreshToken));
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        RefreshToken current = found.get();
 
-        RefreshToken current = refreshTokenRepository
-                .findByTokenHashForUpdate(tokenHash)
-                .orElseThrow(this::invalidRefreshToken);
+        OffsetDateTime now = toOffsetDateTime(clock.instant());
 
-        Instant nowInstant = clock.instant();
-        OffsetDateTime now = toOffsetDateTime(nowInstant);
-
-        if (current.isUsed()
-                || current.isRevoked()
-                || current.isExpired(now)) {
-            throw invalidRefreshToken();
+        if (current.isRevoked()) {
+            return Optional.empty();
+        }
+        if (current.isUsed()) {
+            revokeFamilyOnReuse(current, now);
+            return Optional.empty();
+        }
+        if (current.isExpired(now)) {
+            return Optional.empty();
         }
 
         current.markUsed(now);
@@ -89,24 +110,72 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
                 current.getUserId(),
                 current.getTenantId(),
                 hash(nextRawToken),
-                toOffsetDateTime(nowInstant.plus(jwtProperties.refreshTtl())),
+                current.getExpiresAt(),
                 now
         );
 
         refreshTokenRepository.save(replacement);
 
-        return new RefreshTokenRotation(
+        return Optional.of(new RefreshTokenRotation(
                 current.getUserId(),
                 current.getTenantId(),
                 nextRawToken
-        );
+        ));
     }
 
-    private ApiException invalidRefreshToken() {
-        return new ApiException(
-                ErrorCode.UNAUTHENTICATED,
-                "Refresh-токен недействителен."
-        );
+    /**
+     * Использованный токен предъявлен снова — его копия есть у кого-то ещё (T-028). Отзывается
+     * вся цепочка входа, а не только этот токен: неизвестно, у кого из двоих сейчас её свежий
+     * токен.
+     *
+     * <p>В журнал пишутся цепочка, пользователь и арендатор, но не токен и не его хеш.
+     */
+    private void revokeFamilyOnReuse(RefreshToken reused, OffsetDateTime now) {
+        int revoked = revokeFamily(reused.getFamilyId(), now);
+        LOG.warn("Повторно предъявлен использованный refresh-токен: цепочка входа {} пользователя"
+                        + " {} арендатора {} отозвана, отозвано токенов: {}",
+                value("familyId", reused.getFamilyId()), value("userId", reused.getUserId()),
+                value("tenantId", reused.getTenantId()), value("revokedTokens", revoked));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Отзывается вся цепочка, а не только предъявленный токен: выход завершает вход целиком,
+     * и старые использованные токены этого входа потом не поднимут тревогу о краже (T-028) —
+     * они уже отозваны.
+     */
+    @Override
+    @Transactional
+    public void logout(String rawRefreshToken) {
+        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+            return;
+        }
+        refreshTokenRepository.findByTokenHash(hash(rawRefreshToken))
+                .ifPresent(token -> revokeFamily(token.getFamilyId(), now()));
+    }
+
+    @Override
+    @Transactional
+    public int revokeAll(UUID userId) {
+        refreshTokenRepository.lockAllOfUser(userId);
+        int revoked = refreshTokenRepository.revokeAllOfUser(userId, now());
+        LOG.info("Отозваны все refresh-токены пользователя {}: {}", value("userId", userId),
+                value("revokedTokens", revoked));
+        return revoked;
+    }
+
+    /**
+     * Сначала цепочка блокируется, затем отзывается — почему двумя запросами, сказано в
+     * {@link RefreshTokenRepository#lockFamily}.
+     */
+    private int revokeFamily(UUID familyId, OffsetDateTime now) {
+        refreshTokenRepository.lockFamily(familyId);
+        return refreshTokenRepository.revokeFamily(familyId, now);
+    }
+
+    private OffsetDateTime now() {
+        return toOffsetDateTime(clock.instant());
     }
 
     private String generateToken() {

@@ -131,10 +131,16 @@ docker compose up
 | `OUTBOX_RETRY_JITTER`        | Нет             | Доля случайного разброса задержки, от 0 до 0.9: задержка берётся от (1 − доля) × расчётной до расчётной, чтобы повторы после сбоя не шли одной волной. По умолчанию `0.5` |
 | `OUTBOX_MAX_RETRY_DELAY`     | Нет             | Верхняя граница задержки между попытками. По умолчанию `2h`                    |
 | `OUTBOX_MAX_ATTEMPTS`        | Нет             | Сколько всего попыток до окончательного неуспеха, от 1 до 100. По умолчанию `8`. Постоянная неудача (неверный адрес, отказ 5xx) не повторяется |
+| `OVERDUE_DETECTION_SCHEDULER_ENABLED` | Нет    | Запускать ли проверку просроченных заявок по расписанию. По умолчанию `true`   |
+| `OVERDUE_DETECTION_BATCH_SIZE` | Нет           | Сколько заявок проверка помечает за одну транзакцию, от 1 до 1000. По умолчанию `500` |
+| `OVERDUE_DETECTION_POLL_INTERVAL` | Нет        | Пауза между проходами проверки просроченных заявок. По умолчанию `1m`          |
 | `POSTGRES_DB`                | Нет             | Имя базы PostgreSQL для локального Docker Compose. По умолчанию `crm_db`       |
 | `POSTGRES_USER`              | Нет             | Пользователь PostgreSQL для локального Docker Compose. По умолчанию `crm_user` |
 | `POSTGRES_PASSWORD`          | **Да, local**   | Пароль PostgreSQL для локального Docker Compose                                |
 | `POSTGRES_PORT`              | Нет             | Порт PostgreSQL на хосте. По умолчанию `5432`                                  |
+| `REFRESH_TOKEN_CLEANUP_SCHEDULER_ENABLED` | Нет | Удалять ли истёкшие и отозванные refresh-токены по расписанию. По умолчанию `true` |
+| `REFRESH_TOKEN_CLEANUP_BATCH_SIZE` | Нет       | Сколько refresh-токенов очистка удаляет за одну транзакцию, от 1 до 1000. По умолчанию `500` |
+| `REFRESH_TOKEN_CLEANUP_POLL_INTERVAL` | Нет    | Пауза между проходами очистки refresh-токенов. По умолчанию `1h`               |
 | `SERVER_PORT`                | Нет             | Порт HTTP-сервера CRM. По умолчанию `8080`                                     |
 | `SMTP_HOST`                  | Нет             | SMTP-хост для локальной среды. По умолчанию `mailhog`                          |
 | `SMTP_PORT`                  | Нет             | SMTP-порт для локальной среды. По умолчанию `1025`                             |
@@ -646,4 +652,20 @@ SELECT crm_apply_tenant_rls();
 
 ```sql
 SELECT crm_apply_tenant_rls();
+```
+
+## Исходящие события из бизнес-операций
+
+Письма и другие сообщения наружу внутри бизнес-операции не отправляются (SPEC §3.5). Операция
+записывает событие через `OutboxPublisher` из `outbox.api` — в той же транзакции, что и само
+изменение. Доставляет его фоновый обработчик: отправителю, объявившему этот тип события
+(`OutboxEventSender`). Откат операции убирает и событие, а вызов вне транзакции отклоняется.
+
+Например, письмо о смене статуса заявки — одно событие на одного адресата:
+
+```java
+outboxPublisher.publish(request.getTenantId(), EmailNotification.EVENT_TYPE,
+        "REQUEST", request.getId(),
+        new EmailNotification(email, NotificationType.REQUEST_STATUS_CHANGED, variables)
+                .toPayload());
 ```

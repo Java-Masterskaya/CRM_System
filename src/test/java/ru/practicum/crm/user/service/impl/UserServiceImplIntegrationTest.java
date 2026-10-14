@@ -245,6 +245,26 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
                                 .isEqualTo(ErrorCode.INVALID_CREDENTIALS));
     }
 
+    /** Условие то же, что при входе: активен и не удалён (нужно обмену refresh-токена). */
+    @Test
+    void canLogIn_isTrueOnlyForActiveNotDeletedUserOfThatTenant() {
+        UserEntity user = createUserWithPassword(VALID_PASSWORD);
+        UUID tenantId = user.getTenantId();
+
+        assertThat(userService.canLogIn(tenantId, user.getId())).as("активный").isTrue();
+        assertThat(userService.canLogIn(UUID.randomUUID(), user.getId()))
+                .as("другой арендатор").isFalse();
+        assertThat(userService.canLogIn(tenantId, UUID.randomUUID()))
+                .as("неизвестный").isFalse();
+
+        jdbcTemplate.update("UPDATE users SET status = 'BLOCKED' WHERE id = ?", user.getId());
+        assertThat(userService.canLogIn(tenantId, user.getId())).as("заблокирован").isFalse();
+
+        jdbcTemplate.update("UPDATE users SET status = 'ACTIVE', deleted_at = now() WHERE id = ?",
+                user.getId());
+        assertThat(userService.canLogIn(tenantId, user.getId())).as("удалён").isFalse();
+    }
+
     private UUID createTenant(String name) {
         UUID id = UUID.randomUUID();
         String slug = "tenant-" + id.toString().replace("-", "");
