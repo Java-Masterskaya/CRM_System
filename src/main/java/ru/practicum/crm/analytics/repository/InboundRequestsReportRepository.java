@@ -45,27 +45,26 @@ public class InboundRequestsReportRepository {
 
     private InboundSeries singleSeries(InboundReportQuery query) {
 
-        final String sql =
-                """
-                WITH days AS (
-                    SELECT generate_series(?::date, ?::date, interval '1 day')::date AS day
-                ),
-                agg AS (
-                    SELECT (r.created_at AT TIME ZONE ?)::date AS day,
-                           COUNT(*)::BIGINT AS cnt
-                    FROM requests AS r
-                    WHERE r.tenant_id = ?
-                        AND NOT r.deleted
-                        AND r.created_at >= ?
-                        AND r.created_at < ?
-                        %s
-                    GROUP BY 1
-                )
-                SELECT d.day, COALESCE(a.cnt, 0) AS cnt
-                FROM days AS d
-                LEFT JOIN agg AS a ON a.day = d.day
-                ORDER BY d.day
-                """.formatted(query.filterClause());
+        final String sql = (
+                "WITH days AS ( "
+                + "    SELECT generate_series(?::date, ?::date, interval '1 day')::date AS day "
+                + "), "
+                + "agg AS ( "
+                + "    SELECT (r.created_at AT TIME ZONE ?)::date AS day, "
+                + "           COUNT(*)::BIGINT AS cnt "
+                + "    FROM requests AS r "
+                + "    WHERE r.tenant_id = ? "
+                + "        AND NOT r.deleted "
+                + "        AND r.created_at >= ? "
+                + "        AND r.created_at < ? "
+                + "        %s "
+                + "    GROUP BY 1 "
+                + ") "
+                + "SELECT d.day, COALESCE(a.cnt, 0) AS cnt "
+                + "FROM days AS d "
+                + "LEFT JOIN agg AS a ON a.day = d.day "
+                + "ORDER BY d.day"
+        ).formatted(query.filterClause());
 
         List<Object> args = query.baseArgs();
 
@@ -81,40 +80,39 @@ public class InboundRequestsReportRepository {
     private List<InboundSeries> groupedSeries(
             InboundReportQuery query, GroupAxis axis) {
 
-        final String sql =
-                """
-                WITH days AS (
-                    SELECT generate_series(?::date, ?::date, interval '1 day')::date AS day
-                ),
-                agg AS (
-                    SELECT (r.created_at AT TIME ZONE ?)::date AS day,
-                           %s AS %s,
-                           COUNT(*)::BIGINT AS cnt
-                    FROM requests AS r
-                    WHERE r.tenant_id = ?
-                        AND NOT r.deleted
-                        AND r.created_at >= ?
-                        AND r.created_at < ?
-                        %s
-                    GROUP BY 1, 2
-                ),
-                keys AS (
-                    SELECT DISTINCT %s AS %s FROM agg
-                )
-                SELECT k.%s AS series_key,
-                    d.day, COALESCE(a.cnt, 0) AS cnt
-                FROM keys AS k
-                CROSS JOIN days AS d
-                LEFT JOIN agg AS a ON a.day = d.day AND a.%s IS NOT DISTINCT FROM k.%s
-                ORDER BY k.%s NULLS FIRST, d.day
-                """.formatted(
-                        axis.expression, axis.alias,
-                        query.filterClause(),
-                        axis.alias, axis.alias,
-                        axis.alias,
-                        axis.alias, axis.alias,
-                        axis.alias
-                );
+        final String sql = (
+                "WITH days AS ( "
+                + "    SELECT generate_series(?::date, ?::date, interval '1 day')::date AS day "
+                + "), "
+                + "agg AS ( "
+                + "    SELECT (r.created_at AT TIME ZONE ?)::date AS day, "
+                + "           %s AS %s, "
+                + "           COUNT(*)::BIGINT AS cnt "
+                + "    FROM requests AS r "
+                + "    WHERE r.tenant_id = ? "
+                + "        AND NOT r.deleted "
+                + "        AND r.created_at >= ? "
+                + "        AND r.created_at < ? "
+                + "        %s "
+                + "    GROUP BY 1, 2 "
+                + "), "
+                + "keys AS ( "
+                + "    SELECT DISTINCT %s AS %s FROM agg "
+                + ") "
+                + "SELECT k.%s AS series_key, "
+                + "    d.day, COALESCE(a.cnt, 0) AS cnt "
+                + "FROM keys AS k "
+                + "CROSS JOIN days AS d "
+                + "LEFT JOIN agg AS a ON a.day = d.day AND a.%s IS NOT DISTINCT FROM k.%s "
+                + "ORDER BY k.%s NULLS FIRST, d.day"
+        ).formatted(
+                axis.expression, axis.alias,
+                query.filterClause(),
+                axis.alias, axis.alias,
+                axis.alias,
+                axis.alias, axis.alias,
+                axis.alias
+        );
 
         List<Object> args = query.baseArgs();
 
