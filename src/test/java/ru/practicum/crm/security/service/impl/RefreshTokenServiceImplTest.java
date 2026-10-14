@@ -91,7 +91,8 @@ class RefreshTokenServiceImplTest {
             assertThat(next.getTenantId()).isEqualTo(TENANT_ID);
             assertThat(next.getTokenHash()).isEqualTo(sha256(rotation.orElseThrow()
                     .refreshToken()));
-            assertThat(next.getExpiresAt()).isEqualTo(NOW_UTC.plus(REFRESH_TTL));
+            assertThat(next.getExpiresAt()).as("срок входа абсолютный — наследуется")
+                    .isEqualTo(current.getExpiresAt());
         });
         verify(repository, never()).revokeFamily(any(), any());
         assertThat(logs.list).isEmpty();
