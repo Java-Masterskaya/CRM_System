@@ -56,7 +56,8 @@ public class TenantContextFilter extends OncePerRequestFilter {
                 .substring(request.getContextPath().length());
 
         return PROTECTED_PREFIXES.stream()
-                .noneMatch(path::startsWith);
+                .noneMatch(prefix ->
+                        path.equals(prefix) || path.startsWith(prefix + "/"));
     }
 
     @Override
@@ -70,10 +71,16 @@ public class TenantContextFilter extends OncePerRequestFilter {
             Authentication authentication =
                     SecurityContextHolder.getContext().getAuthentication();
 
-            UUID tenantId = extractTenantId(authentication);
+            if (!(authentication instanceof JwtAuthenticationToken jwtAuthentication)
+                    || !jwtAuthentication.isAuthenticated()) {
+                writeUnauthorized(request, response, "Требуется аутентификация.");
+                return;
+            }
+
+            UUID tenantId = extractTenantId(jwtAuthentication);
 
             if (tenantId == null) {
-                filterChain.doFilter(request, response);
+                writeUnauthorized(request, response, "Требуется аутентификация.");
                 return;
             }
 
@@ -81,7 +88,7 @@ public class TenantContextFilter extends OncePerRequestFilter {
                 writeUnauthorized(
                         request,
                         response,
-                        "Арендатор не активен"
+                        "Арендатор не активен."
                 );
                 return;
             }
@@ -98,15 +105,9 @@ public class TenantContextFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             String detail
     ) throws IOException {
-        response.setStatus(
-                ErrorCode.UNAUTHENTICATED.getStatus().value()
-        );
-        response.setContentType(
-                MediaType.APPLICATION_PROBLEM_JSON_VALUE
-        );
-        response.setCharacterEncoding(
-                StandardCharsets.UTF_8.name()
-        );
+        response.setStatus(ErrorCode.UNAUTHENTICATED.getStatus().value());
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
 
         ProblemDetail problem = ProblemDetailFactory.create(
                 ErrorCode.UNAUTHENTICATED,
@@ -115,18 +116,11 @@ public class TenantContextFilter extends OncePerRequestFilter {
                 List.of()
         );
 
-        problemWriter.writeValue(
-                response.getOutputStream(),
-                problem
-        );
+        problemWriter.writeValue(response.getOutputStream(), problem);
     }
 
-    private UUID extractTenantId(Authentication authentication) {
-        if (!(authentication instanceof JwtAuthenticationToken jwtAuthentication)) {
-            return null;
-        }
-
-        String tenantId = jwtAuthentication.getToken()
+    private UUID extractTenantId(JwtAuthenticationToken authentication) {
+        String tenantId = authentication.getToken()
                 .getClaimAsString(CLAIM_TENANT_ID);
 
         if (tenantId == null || tenantId.isBlank()) {

@@ -28,7 +28,8 @@ class LoginRateLimitIntegrationTest extends BaseIntegrationTest {
     private static final String PASSWORD = "StrongPassword1!";
     private static final String WRONG_PASSWORD = "WrongPassword2!";
     private static final int MAX_ATTEMPTS = 5;
-    private static final long WAIT_FOR_EXPIRATION_MILLIS = 2_200L;
+    private static final long WAIT_FOR_BLOCK_EXPIRATION_MILLIS = 2_200L;
+    private static final long WAIT_FOR_WINDOW_EXPIRATION_MILLIS = 10_200L;
 
     @Autowired
     private MockMvc mockMvc;
@@ -47,7 +48,7 @@ class LoginRateLimitIntegrationTest extends BaseIntegrationTest {
         );
         registry.add(
                 "crm.security.login-rate-limit.window",
-                () -> "2s"
+                () -> "10s"
         );
         registry.add(
                 "crm.security.login-rate-limit.block-duration",
@@ -78,7 +79,7 @@ class LoginRateLimitIntegrationTest extends BaseIntegrationTest {
 
         assertRateLimited(account);
 
-        TimeUnit.MILLISECONDS.sleep(WAIT_FOR_EXPIRATION_MILLIS);
+        TimeUnit.MILLISECONDS.sleep(WAIT_FOR_BLOCK_EXPIRATION_MILLIS);
 
         MvcResult result = login(account, PASSWORD);
 
@@ -121,7 +122,7 @@ class LoginRateLimitIntegrationTest extends BaseIntegrationTest {
             assertInvalidCredentials(account);
         }
 
-        TimeUnit.MILLISECONDS.sleep(WAIT_FOR_EXPIRATION_MILLIS);
+        TimeUnit.MILLISECONDS.sleep(WAIT_FOR_WINDOW_EXPIRATION_MILLIS);
 
         for (int i = 0; i < MAX_ATTEMPTS; i++) {
             assertInvalidCredentials(account);
@@ -200,9 +201,6 @@ class LoginRateLimitIntegrationTest extends BaseIntegrationTest {
 
         for (int i = 0; i < MAX_ATTEMPTS; i++) {
             assertInvalidCredentials(existingAccount);
-        }
-
-        for (int i = 0; i < MAX_ATTEMPTS; i++) {
             assertInvalidCredentials(unknownAccount);
         }
 
