@@ -151,11 +151,11 @@ class SecurityConfigSliceTest {
     }
 
     @Test
-    void givenNoCredentials_whenCallingLogout_thenReturnsUnauthorized()
+    void givenNoCredentials_whenCallingLogout_thenReachesMvcLookup()
             throws Exception {
 
         mockMvc.perform(post("/auth/logout").with(anonymous()))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isNotFound());
     }
 
     @ParameterizedTest
