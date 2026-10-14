@@ -53,8 +53,8 @@ import ru.practicum.crm.tenant.api.TenantContext;
 
 @AutoConfigureMockMvc
 @TestPropertySource(properties = "app.security.authorization.enabled=false")
-@Import(JwtAuthenticationIT.SecurityProbeController.class)
-class JwtAuthenticationIT extends BaseIntegrationTest {
+@Import(JwtAuthenticationIntegrationTest.SecurityProbeController.class)
+class JwtAuthenticationIntegrationTest extends BaseIntegrationTest {
 
     private static final String CONTEXT_PATH = "/admin/test/jwt/context";
     private static final String PERMISSION_PATH = "/admin/test/jwt/permission";
