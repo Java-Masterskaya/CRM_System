@@ -177,7 +177,8 @@ class SecurityAuthorizationRulesTest {
                         .param("to", "2026-01-10")
                         .with(jwtWithAuthority("TENANT_SETTINGS_READ")))
                 .andExpect(status().isForbidden());
-      
+    }
+
     private RequestPostProcessor jwtWithAuthority(String authority) {
         return jwt()
                 .jwt(token -> token
