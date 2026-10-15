@@ -67,10 +67,9 @@ public class SecurityConfig {
                     authorize.requestMatchers(HttpMethod.POST,
                                     "/auth/register", "/auth/login", "/auth/refresh",
                                     "/auth/logout").permitAll()
-                            .requestMatchers(HttpMethod.GET, "/client/profile")
-                                    .hasAuthority(PermissionCode.PROFILE_READ_OWN.name())
-                            .requestMatchers(HttpMethod.PUT, "/client/profile")
-                                    .hasAuthority(PermissionCode.PROFILE_EDIT_OWN.name())
+                            // Право на профиль проверяет @PreAuthorize на методе сервиса
+                            // (T-030); здесь маршрут только требует токен.
+                            .requestMatchers("/client/profile").authenticated()
                             .requestMatchers("/health", "/actuator/**", "/v3/api-docs/**",
                                     "/swagger-ui/**", "/swagger-ui.html").permitAll()
                             .requestMatchers("/system/**").permitAll();
