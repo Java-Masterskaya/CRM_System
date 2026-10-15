@@ -22,6 +22,7 @@ import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.outbox.api.OutboxEventSender;
 import ru.practicum.crm.outbox.api.OutboxMessage;
 import ru.practicum.crm.outbox.api.OutboxPublisher;
+import ru.practicum.crm.tenant.api.TenantContext;
 
 /**
  * Запись события в транзакции бизнес-операции на реальной базе (T-065, DoD #87).
@@ -49,6 +50,9 @@ class OutboxEventPublisherIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private TenantContext tenantContext;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -137,6 +141,43 @@ class OutboxEventPublisherIntegrationTest extends BaseIntegrationTest {
 
         assertThatThrownBy(() -> publisher.publish(tenantId, PUBLISHED, payload))
                 .isInstanceOf(IllegalTransactionStateException.class);
+
+        assertThat(count("SELECT count(*) FROM outbox_events")).isZero();
+    }
+
+    /**
+     * Ошибка проверки не портит транзакцию вызывающего (#186): операция поймала её, продолжила
+     * работу и зафиксировалась. Без {@code noRollbackFor} фиксация упала бы с
+     * {@code UnexpectedRollbackException}, а изменение операции пропало бы.
+     */
+    @Test
+    void publish_whenRejectedAndCallerCatchesIt_operationStillCommits() {
+        UUID createdInOperation = UUID.randomUUID();
+
+        transactionTemplate.executeWithoutResult(status -> {
+            insertTenant(createdInOperation);
+            assertThatThrownBy(() -> publisher.publish(createdInOperation, " ", Map.of("n", 1)))
+                    .isInstanceOf(IllegalArgumentException.class);
+        });
+
+        assertThat(count("SELECT count(*) FROM tenants WHERE id = ?", createdInOperation))
+                .as("изменение операции зафиксировано").isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM outbox_events")).isZero();
+    }
+
+    /** Запрос арендатора не пишет событие чужого арендатора — понятной ошибкой ещё до RLS. */
+    @Test
+    void publish_forAnotherTenantThanCurrentRequest_isRejected() {
+        UUID otherTenant = UUID.randomUUID();
+        insertTenant(otherTenant);
+        tenantContext.setTenantId(tenantId);
+        try {
+            transactionTemplate.executeWithoutResult(status ->
+                    assertThatThrownBy(() -> publisher.publish(otherTenant, PUBLISHED,
+                            Map.of("n", 1))).isInstanceOf(IllegalArgumentException.class));
+        } finally {
+            tenantContext.clear();
+        }
 
         assertThat(count("SELECT count(*) FROM outbox_events")).isZero();
     }
