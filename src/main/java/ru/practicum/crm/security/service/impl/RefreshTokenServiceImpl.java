@@ -67,6 +67,10 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
      * <p>Проверки идут в таком порядке. Отозванный токен просто не обменивается: цепочку уже
      * отозвали — при выходе или прошлом срабатывании. Использованный — сигнал кражи, даже если
      * он к тому же просрочен: кто его предъявил, тот держит копию. И только потом срок жизни.
+     *
+     * <p>Новый токен наследует срок жизни предъявленного, а не получает его заново: срок у входа
+     * абсолютный — {@code refresh-ttl} от входа по паролю. Иначе каждый обмен продлевал бы вход,
+     * и, пока клиент обменивает токены, вход не кончался бы никогда.
      */
     @Override
     @Transactional
@@ -82,8 +86,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         }
         RefreshToken current = found.get();
 
-        Instant nowInstant = clock.instant();
-        OffsetDateTime now = toOffsetDateTime(nowInstant);
+        OffsetDateTime now = toOffsetDateTime(clock.instant());
 
         if (current.isRevoked()) {
             return Optional.empty();
@@ -107,7 +110,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
                 current.getUserId(),
                 current.getTenantId(),
                 hash(nextRawToken),
-                toOffsetDateTime(nowInstant.plus(jwtProperties.refreshTtl())),
+                current.getExpiresAt(),
                 now
         );
 
@@ -123,18 +126,56 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     /**
      * Использованный токен предъявлен снова — его копия есть у кого-то ещё (T-028). Отзывается
      * вся цепочка входа, а не только этот токен: неизвестно, у кого из двоих сейчас её свежий
-     * токен. Сначала цепочка блокируется, затем отзывается — почему двумя запросами, сказано в
-     * {@link RefreshTokenRepository#lockFamily}.
+     * токен.
      *
      * <p>В журнал пишутся цепочка, пользователь и арендатор, но не токен и не его хеш.
      */
     private void revokeFamilyOnReuse(RefreshToken reused, OffsetDateTime now) {
-        refreshTokenRepository.lockFamily(reused.getFamilyId());
-        int revoked = refreshTokenRepository.revokeFamily(reused.getFamilyId(), now);
+        int revoked = revokeFamily(reused.getFamilyId(), now);
         LOG.warn("Повторно предъявлен использованный refresh-токен: цепочка входа {} пользователя"
                         + " {} арендатора {} отозвана, отозвано токенов: {}",
                 value("familyId", reused.getFamilyId()), value("userId", reused.getUserId()),
                 value("tenantId", reused.getTenantId()), value("revokedTokens", revoked));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Отзывается вся цепочка, а не только предъявленный токен: выход завершает вход целиком,
+     * и старые использованные токены этого входа потом не поднимут тревогу о краже (T-028) —
+     * они уже отозваны.
+     */
+    @Override
+    @Transactional
+    public void logout(String rawRefreshToken) {
+        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+            return;
+        }
+        refreshTokenRepository.findByTokenHash(hash(rawRefreshToken))
+                .ifPresent(token -> revokeFamily(token.getFamilyId(), now()));
+    }
+
+    @Override
+    @Transactional
+    public int revokeAll(UUID userId) {
+        refreshTokenRepository.lockAllOfUser(userId);
+        int revoked = refreshTokenRepository.revokeAllOfUser(userId, now());
+        LOG.info("Отозваны все refresh-токены пользователя {}: {}", value("userId", userId),
+                value("revokedTokens", revoked));
+        return revoked;
+    }
+
+    /**
+     * Сначала цепочка блокируется, затем отзывается — почему двумя запросами, сказано в
+     * {@link RefreshTokenRepository#lockFamily}.
+     */
+    private int revokeFamily(UUID familyId, OffsetDateTime now) {
+        refreshTokenRepository.lockFamily(familyId);
+        return refreshTokenRepository.revokeFamily(familyId, now);
+    }
+
+    private OffsetDateTime now() {
+        return toOffsetDateTime(clock.instant());
     }
 
     private String generateToken() {

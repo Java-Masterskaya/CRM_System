@@ -55,4 +55,71 @@ public interface RefreshTokenRepository extends Repository<RefreshToken, UUID> {
             """)
     int revokeFamily(@Param("familyId") UUID familyId,
             @Param("revokedAt") OffsetDateTime revokedAt);
+
+    /**
+     * Блокирует все токены пользователя до конца транзакции — перед их отзывом (T-029). Зачем
+     * отдельным запросом, сказано в {@link #lockFamily}.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    @Query(nativeQuery = true,
+            value = "SELECT id FROM refresh_tokens WHERE user_id = :userId FOR UPDATE")
+    List<UUID> lockAllOfUser(@Param("userId") UUID userId);
+
+    /**
+     * Отзывает ещё не отозванные токены пользователя на всех его входах. Вызывать после
+     * {@link #lockAllOfUser}.
+     *
+     * @return сколько токенов отозвано
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    @Modifying
+    @Query(
+            """
+            update RefreshToken token set token.revokedAt = :revokedAt
+            where token.userId = :userId and token.revokedAt is null
+            """)
+    int revokeAllOfUser(@Param("userId") UUID userId,
+            @Param("revokedAt") OffsetDateTime revokedAt);
+
+    /**
+     * Удаляет порцию истёкших токенов (T-029). Строки, которые держит идущий обмен или отзыв,
+     * пропускаются ({@code SKIP LOCKED}) — их удалит следующий проход. Выборка идёт по индексу
+     * {@code idx_refresh_tokens_expires_at}.
+     *
+     * @return сколько токенов удалено
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    @Modifying
+    @Query(nativeQuery = true, value =
+            """
+            DELETE FROM refresh_tokens
+            WHERE id IN (
+                SELECT id FROM refresh_tokens
+                WHERE expires_at <= :now
+                LIMIT :limit
+                FOR UPDATE SKIP LOCKED)
+            """)
+    int purgeExpired(@Param("now") OffsetDateTime now, @Param("limit") int limit);
+
+    /**
+     * Удаляет порцию отозванных токенов (T-029). Остальное — как в {@link #purgeExpired};
+     * индекс — {@code idx_refresh_tokens_revoked}.
+     *
+     * <p>Использованные, но не отозванные и не истёкшие токены не удаляются: по ним обмен узнаёт
+     * повторное предъявление украденного токена (T-028).
+     *
+     * @return сколько токенов удалено
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    @Modifying
+    @Query(nativeQuery = true, value =
+            """
+            DELETE FROM refresh_tokens
+            WHERE id IN (
+                SELECT id FROM refresh_tokens
+                WHERE revoked_at IS NOT NULL
+                LIMIT :limit
+                FOR UPDATE SKIP LOCKED)
+            """)
+    int purgeRevoked(@Param("limit") int limit);
 }

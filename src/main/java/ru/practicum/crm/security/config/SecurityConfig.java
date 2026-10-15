@@ -18,6 +18,8 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
@@ -36,6 +38,7 @@ public class SecurityConfig {
             TenantContextFilter tenantContextFilter,
             SystemSecretFilter systemSecretFilter,
             ObjectMapper objectMapper,
+            BearerTokenResolver bearerTokenResolver,
             @Value("${app.security.authorization.enabled:false}")
             boolean authorizationEnabled
     ) throws Exception {
@@ -47,6 +50,7 @@ public class SecurityConfig {
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .oauth2ResourceServer(oauth2 -> oauth2
+                        .bearerTokenResolver(bearerTokenResolver)
                         .jwt(jwt -> jwt
                                 .jwtAuthenticationConverter(jwtAuthenticationConverter())
                         )
@@ -60,19 +64,15 @@ public class SecurityConfig {
                         )
                 )
                 .authorizeHttpRequests(authorize -> {
-                    authorize.requestMatchers(
-                                    HttpMethod.POST,
-                                    "/auth/register",
-                                    "/auth/login",
-                                    "/auth/refresh"
-                            ).permitAll()
-                            .requestMatchers(
-                                    "/health",
-                                    "/actuator/**",
-                                    "/v3/api-docs/**",
-                                    "/swagger-ui/**",
-                                    "/swagger-ui.html"
-                            ).permitAll()
+                    authorize.requestMatchers(HttpMethod.POST,
+                                    "/auth/register", "/auth/login", "/auth/refresh",
+                                    "/auth/logout").permitAll()
+                            .requestMatchers(HttpMethod.GET, "/client/profile")
+                                    .hasAuthority(PermissionCode.PROFILE_READ_OWN.name())
+                            .requestMatchers(HttpMethod.PUT, "/client/profile")
+                                    .hasAuthority(PermissionCode.PROFILE_EDIT_OWN.name())
+                            .requestMatchers("/health", "/actuator/**", "/v3/api-docs/**",
+                                    "/swagger-ui/**", "/swagger-ui.html").permitAll()
                             .requestMatchers("/system/**").permitAll();
 
                     if (authorizationEnabled) {
@@ -167,5 +167,30 @@ public class SecurityConfig {
         converter.setJwtGrantedAuthoritiesConverter(authoritiesConverter);
 
         return converter;
+    }
+
+    @Bean
+    public BearerTokenResolver bearerTokenResolver() {
+        DefaultBearerTokenResolver defaultResolver =
+                new DefaultBearerTokenResolver();
+
+        return request -> {
+            String path = request.getRequestURI();
+            String contextPath = request.getContextPath();
+
+            if (contextPath != null
+                    && !contextPath.isEmpty()
+                    && path.startsWith(contextPath)) {
+                path = path.substring(contextPath.length());
+            }
+
+            if (path.equals("/auth")
+                    || path.startsWith("/auth/")
+                    || path.equals("/health")) {
+                return null;
+            }
+
+            return defaultResolver.resolve(request);
+        };
     }
 }
