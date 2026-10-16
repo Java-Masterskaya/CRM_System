@@ -52,7 +52,7 @@ class ErrorCodeTest {
     void byStatus_whenDomainCodeSharesStatus_neverReturnsDomainCode(int status) {
         assertThat(ErrorCode.byStatus(status)).isNotIn(ErrorCode.VALIDATION_FAILED,
                 ErrorCode.INVALID_CREDENTIALS, ErrorCode.INVALID_TRANSITION,
-                ErrorCode.STALE_VERSION, ErrorCode.ALREADY_EXISTS);
+                ErrorCode.STALE_VERSION, ErrorCode.ALREADY_EXISTS, ErrorCode.REQUEST_CLOSED);
     }
 
     @Test
@@ -61,5 +61,10 @@ class ErrorCodeTest {
                 .hasToString("https://crm.example/problems/service-unavailable");
         assertThat(ErrorCode.NOT_ACCEPTABLE.getType())
                 .hasToString("https://crm.example/problems/not-acceptable");
+    }
+
+    @Test
+    void requestClosed_whenUsedForTerminalRequest_isConflict() {
+        assertThat(ErrorCode.REQUEST_CLOSED.getStatus().value()).isEqualTo(409);
     }
 }

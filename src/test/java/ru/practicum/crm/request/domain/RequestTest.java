@@ -47,13 +47,11 @@ class RequestTest {
     @Test
     void setters_whenValuesAssigned_areReturnedByGetters() {
         UUID typeId = UUID.randomUUID();
-        UUID assigneeId = UUID.randomUUID();
         Instant desired = Instant.parse("2026-10-01T09:00:00Z");
         Instant firstResponse = Instant.parse("2026-09-19T12:00:00Z");
         Instant resolution = Instant.parse("2026-09-25T12:00:00Z");
 
         request.setTypeId(typeId);
-        request.setAssigneeId(assigneeId);
         request.setSubject("Новая тема");
         request.setDescription("Новое описание");
         request.setPriority(RequestPriority.HIGH);
@@ -66,7 +64,6 @@ class RequestTest {
         request.setDeleted(true);
 
         assertThat(request.getTypeId()).isEqualTo(typeId);
-        assertThat(request.getAssigneeId()).isEqualTo(assigneeId);
         assertThat(request.getSubject()).isEqualTo("Новая тема");
         assertThat(request.getDescription()).isEqualTo("Новое описание");
         assertThat(request.getPriority()).isEqualTo(RequestPriority.HIGH);
@@ -159,5 +156,72 @@ class RequestTest {
         assertThat(RequestStatus.CONTACTED.isTerminal()).isFalse();
         assertThat(RequestStatus.IN_PROGRESS.isTerminal()).isFalse();
         assertThat(RequestStatus.ON_HOLD.isTerminal()).isFalse();
+    }
+
+    @Test
+    void changeAssignee_whenRequestHasNoAssigneeYet_setsAssigneeAndAssignedAtAndReturnsTrue() {
+        UUID assigneeId = UUID.randomUUID();
+        Instant occurredAt = Instant.parse("2026-10-13T10:00:00Z");
+
+        boolean changed = request.changeAssignee(assigneeId, occurredAt);
+
+        assertThat(changed).isTrue();
+        assertThat(request.getAssigneeId()).isEqualTo(assigneeId);
+        assertThat(request.getAssignedAt()).isEqualTo(occurredAt);
+    }
+
+    @Test
+    void changeAssignee_whenDifferentAssignee_reassignsAndMovesAssignedAt() {
+        UUID firstAssignee = UUID.randomUUID();
+        UUID secondAssignee = UUID.randomUUID();
+        request.changeAssignee(firstAssignee, Instant.parse("2026-10-13T10:00:00Z"));
+
+        Instant reassignedAt = Instant.parse("2026-10-14T08:30:00Z");
+        boolean changed = request.changeAssignee(secondAssignee, reassignedAt);
+
+        assertThat(changed).isTrue();
+        assertThat(request.getAssigneeId()).isEqualTo(secondAssignee);
+        assertThat(request.getAssignedAt()).isEqualTo(reassignedAt);
+    }
+
+    @Test
+    void changeAssignee_whenSameAssigneeAsCurrent_isNoOpAndKeepsOriginalAssignedAt() {
+        UUID assigneeId = UUID.randomUUID();
+        Instant firstAssignedAt = Instant.parse("2026-10-13T10:00:00Z");
+        request.changeAssignee(assigneeId, firstAssignedAt);
+
+        boolean changed = request.changeAssignee(assigneeId, Instant.parse("2026-10-14T08:30:00Z"));
+
+        assertThat(changed).isFalse();
+        assertThat(request.getAssigneeId()).isEqualTo(assigneeId);
+        assertThat(request.getAssignedAt()).isEqualTo(firstAssignedAt);
+    }
+
+    @Test
+    void changeAssignee_whenNullAndRequestHadAssignee_clearsAssigneeAndAssignedAtAndReturnsTrue() {
+        request.changeAssignee(UUID.randomUUID(), Instant.parse("2026-10-13T10:00:00Z"));
+
+        boolean changed = request.changeAssignee(null, Instant.parse("2026-10-14T08:30:00Z"));
+
+        assertThat(changed).isTrue();
+        assertThat(request.getAssigneeId()).isNull();
+        assertThat(request.getAssignedAt()).isNull();
+    }
+
+    @Test
+    void changeAssignee_whenNullAndRequestAlreadyHadNoAssignee_isNoOpAndReturnsFalse() {
+        boolean changed = request.changeAssignee(null, Instant.parse("2026-10-14T08:30:00Z"));
+
+        assertThat(changed).isFalse();
+        assertThat(request.getAssigneeId()).isNull();
+        assertThat(request.getAssignedAt()).isNull();
+    }
+
+    @Test
+    void changeAssignee_whenAssigneeGivenWithoutOccurredAt_isRejected() {
+        assertThatThrownBy(() -> request.changeAssignee(UUID.randomUUID(), null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(request.getAssigneeId()).isNull();
+        assertThat(request.getAssignedAt()).isNull();
     }
 }
