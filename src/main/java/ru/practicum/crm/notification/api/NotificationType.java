@@ -19,7 +19,11 @@ public enum NotificationType {
     REQUEST_STATUS_CHANGED("request-status-changed", "oldStatus", "newStatus"),
     REQUEST_ASSIGNED("request-assigned", "assigneeName"),
     PUBLIC_COMMENT_ADDED("public-comment-added", "commentAuthor", "commentText"),
-    SLA_BREACHED("sla-breached", "dueAt");
+    /**
+     * Нарушен срок заявки (T-061). {@code deadlineName} — какой срок, в родительном падеже:
+     * «первого ответа» или «решения»; по каждому сроку — своё письмо.
+     */
+    SLA_BREACHED("sla-breached", "deadlineName", "dueAt");
 
     private final String templateName;
     private final List<String> specificVariables;

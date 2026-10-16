@@ -6,8 +6,8 @@
 </head>
 <body>
 <p>Здравствуйте, <span th:text="${recipientName}">имя</span>!</p>
-<p>Срок решения заявки «<span th:text="${requestSubject}">тема</span>» истёк
-    <span th:text="${dueAt}">срок</span>, а заявка ещё не закрыта.</p>
+<p>По заявке «<span th:text="${requestSubject}">тема</span>» истёк срок
+    <span th:text="${deadlineName}">решения</span>: <span th:text="${dueAt}">срок</span>.</p>
 <p>Номер заявки: <span th:text="${requestId}">номер</span></p>
 <p>Это письмо отправлено автоматически, отвечать на него не нужно.</p>
 </body>

@@ -25,6 +25,7 @@ import ru.practicum.crm.user.api.dto.ClientProfileDto;
 import ru.practicum.crm.user.api.dto.ClientRegistrationRequest;
 import ru.practicum.crm.user.api.dto.CreateUserRequest;
 import ru.practicum.crm.user.api.dto.UpdateClientProfileRequest;
+import ru.practicum.crm.user.api.dto.UserContactDto;
 import ru.practicum.crm.user.api.dto.UserDto;
 import ru.practicum.crm.user.api.mapper.UserMapper;
 import ru.practicum.crm.user.domain.RoleEntity;
@@ -214,6 +215,26 @@ public class UserServiceImpl implements UserService,
     @Transactional(readOnly = true)
     public Optional<ActiveUserDto> findActiveInTenant(UUID userId, UUID tenantId) {
         return userRepository.findById(userId, tenantId).map(userMapper::toActiveUserDto);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<UserContactDto> findActiveContact(UUID tenantId, UUID userId) {
+        return userRepository.findById(userId, tenantId)
+                .filter(UserEntity::canLogIn)
+                .map(UserServiceImpl::toContact);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UserContactDto> findActiveWithPermission(UUID tenantId, String permissionCode) {
+        return userRepository.findAllActiveWithPermission(tenantId, permissionCode).stream()
+                .map(UserServiceImpl::toContact)
+                .toList();
+    }
+
+    private static UserContactDto toContact(UserEntity user) {
+        return new UserContactDto(user.getId(), user.getEmail(), user.getName());
     }
 
     private UserEntity findUserById(UUID userId, UUID tenantId) {

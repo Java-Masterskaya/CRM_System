@@ -1,1 +1,1 @@
-Нарушен срок по заявке «[(${requestSubject})]»
+Нарушен срок [(${deadlineName})] по заявке «[(${requestSubject})]»
