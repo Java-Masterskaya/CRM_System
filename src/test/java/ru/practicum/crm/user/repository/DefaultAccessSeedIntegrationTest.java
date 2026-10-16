@@ -13,7 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.tenant.api.seeding.TenantAccessSeeder;
-import ru.practicum.crm.user.domain.PermissionCode;
+import ru.practicum.crm.user.api.PermissionCode;
 
 class DefaultAccessSeedIntegrationTest extends BaseIntegrationTest {
 

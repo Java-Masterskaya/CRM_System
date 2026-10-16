@@ -12,8 +12,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import ru.practicum.crm.user.domain.PermissionCode;
+import ru.practicum.crm.user.api.PermissionCode;
 import ru.practicum.crm.user.repository.PermissionRepository;
+import ru.practicum.crm.user.service.impl.UserPermissionServiceImpl;
 
 @ExtendWith(MockitoExtension.class)
 class UserPermissionServiceTest {

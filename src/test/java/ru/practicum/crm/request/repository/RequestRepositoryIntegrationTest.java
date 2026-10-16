@@ -66,8 +66,9 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
         Request request = newRequest(tenantA, "Выгрузка отчёта");
         UUID typeId = createRequestType(tenantA, "Выгрузка данных");
         UUID assigneeId = UUID.randomUUID();
+        Instant assignedAt = Instant.parse("2026-09-20T08:00:00Z");
         request.setTypeId(typeId);
-        request.setAssigneeId(assigneeId);
+        request.changeAssignee(assigneeId, assignedAt);
         request.setPriority(RequestPriority.HIGH);
         request.setDataParams(Map.of("format", "csv", "rows", 1000));
         request.setDesiredDueAt(Instant.parse("2026-10-01T09:00:00Z"));
@@ -89,6 +90,7 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
         assertThat(saved.getStatus()).isEqualTo(RequestStatus.NEW);
         assertThat(saved.getAuthorId()).isEqualTo(authorId);
         assertThat(saved.getAssigneeId()).isEqualTo(assigneeId);
+        assertThat(saved.getAssignedAt()).isEqualTo(assignedAt);
         assertThat(saved.getDesiredDueAt()).isEqualTo(Instant.parse("2026-10-01T09:00:00Z"));
         assertThat(saved.getFirstResponseDueAt())
                 .isEqualTo(Instant.parse("2026-09-19T12:00:00Z"));
