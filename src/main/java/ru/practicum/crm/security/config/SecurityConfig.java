@@ -25,6 +25,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ProblemDetailFactory;
+import ru.practicum.crm.security.api.PermissionCode;
 import ru.practicum.crm.security.system.SystemSecretFilter;
 import ru.practicum.crm.tenant.api.TenantContextFilter;
 
@@ -80,6 +81,11 @@ public class SecurityConfig {
                         // которого нет в этом списке, по-прежнему закрыт (T-022).
                         authorize.requestMatchers("/admin/tenant/settings")
                                 .authenticated()
+                                .requestMatchers(
+                                        HttpMethod.PUT,
+                                        "/admin/requests/*/assignee"
+                                )
+                                .hasAuthority(PermissionCode.REQUEST_ASSIGN.name())
                                 .requestMatchers(
                                         "/admin/**",
                                         "/client/**"

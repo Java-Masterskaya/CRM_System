@@ -383,14 +383,19 @@ class OverdueEscalationIntegrationTest extends BaseIntegrationTest {
         return insertRequest(tenant, status, assignee, firstResponseDueAt, resolutionDueAt);
     }
 
+    /**
+     * Исполнитель и время назначения задаются вместе — этого требует ограничение
+     * {@code requests_assignment_check} (T-048).
+     */
     private UUID insertRequest(UUID tenantId, String status, UUID assignee,
             Instant firstResponseDueAt, Instant resolutionDueAt) {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update("INSERT INTO requests (id, tenant_id, subject, description, status,"
-                + " author_id, assignee_id, first_response_due_at, resolution_due_at, created_at,"
-                + " updated_at) VALUES (?, ?, 'Выгрузка за квартал', 'Нужен отчёт', ?, ?, ?,"
+                + " author_id, assignee_id, assigned_at, first_response_due_at,"
+                + " resolution_due_at, created_at, updated_at)"
+                + " VALUES (?, ?, 'Выгрузка за квартал', 'Нужен отчёт', ?, ?, ?, ?::timestamptz,"
                 + " ?::timestamptz, ?::timestamptz, now(), now())", id, tenantId, status,
-                UUID.randomUUID(), assignee,
+                UUID.randomUUID(), assignee, assignee == null ? null : hourAgo.toString(),
                 firstResponseDueAt == null ? null : firstResponseDueAt.toString(),
                 resolutionDueAt == null ? null : resolutionDueAt.toString());
         return id;

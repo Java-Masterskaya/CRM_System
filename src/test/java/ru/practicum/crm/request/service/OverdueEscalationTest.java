@@ -240,7 +240,7 @@ class OverdueEscalationTest {
         Request request = new Request(TENANT_ID, UUID.randomUUID(), "Выгрузка за квартал",
                 "Нужен отчёт", RequestStatus.NEW);
         ReflectionTestUtils.setField(request, "id", UUID.randomUUID());
-        request.setAssigneeId(assigneeId);
+        request.changeAssignee(assigneeId, FIRST_RESPONSE_DUE.minusSeconds(3600));
         request.setFirstResponseDueAt(FIRST_RESPONSE_DUE);
         request.setResolutionDueAt(RESOLUTION_DUE);
         return request;

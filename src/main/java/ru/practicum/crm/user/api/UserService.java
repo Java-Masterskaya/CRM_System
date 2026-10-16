@@ -3,6 +3,7 @@ package ru.practicum.crm.user.api;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import ru.practicum.crm.user.api.dto.ActiveUserDto;
 import ru.practicum.crm.user.api.dto.AuthenticatedUserDto;
 import ru.practicum.crm.user.api.dto.ChangePasswordRequest;
 import ru.practicum.crm.user.api.dto.CreateUserRequest;
@@ -24,6 +25,8 @@ public interface UserService {
      * @return {@code false} и для пользователя, которого у арендатора нет
      */
     boolean canLogIn(UUID tenantId, UUID userId);
+
+    Optional<ActiveUserDto> findActiveInTenant(UUID userId, UUID tenantId);
 
     /**
      * Контакт активного пользователя арендатора — например, исполнителя заявки для письма.

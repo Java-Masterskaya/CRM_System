@@ -42,9 +42,9 @@ import ru.practicum.crm.tenant.api.TenantContext;
         "crm.system.secret=test-system-secret"
 })
 @Import({
-    SecurityConfig.class,
-    SystemFilterConfig.class,
-    SecurityConfigSliceTest.TestTenantFilterConfiguration.class
+        SecurityConfig.class,
+        SystemFilterConfig.class,
+        SecurityConfigSliceTest.TestTenantFilterConfiguration.class
 })
 class SecurityAuthorizationRulesTest {
 
@@ -149,6 +149,21 @@ class SecurityAuthorizationRulesTest {
         mockMvc.perform(get("/client/requests")
                         .with(jwtWithAuthority("REQUEST_READ_OWN")))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenStatusChangePermission_whenAssigningExecutor_thenReturnsForbidden()
+            throws Exception {
+        mockMvc.perform(put("/admin/requests/{id}/assignee", UUID.randomUUID())
+                        .with(jwtWithAuthority("REQUEST_STATUS_CHANGE")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenAssignPermission_whenAssigningExecutor_thenReachesMvcLookup() throws Exception {
+        mockMvc.perform(put("/admin/requests/{id}/assignee", UUID.randomUUID())
+                        .with(jwtWithAuthority("REQUEST_ASSIGN")))
+                .andExpect(status().isNotFound());
     }
 
     private RequestPostProcessor jwtWithAuthority(String authority) {

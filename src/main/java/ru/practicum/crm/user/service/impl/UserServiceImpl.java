@@ -17,6 +17,8 @@ import ru.practicum.crm.tenant.api.TenantContext;
 import ru.practicum.crm.tenant.api.TenantLookup;
 import ru.practicum.crm.user.api.PasswordHashProvider;
 import ru.practicum.crm.user.api.PasswordPolicy;
+import ru.practicum.crm.user.api.UserContext;
+import ru.practicum.crm.user.api.dto.ActiveUserDto;
 import ru.practicum.crm.user.api.dto.AuthenticatedUserDto;
 import ru.practicum.crm.user.api.dto.ChangePasswordRequest;
 import ru.practicum.crm.user.api.dto.ClientProfileDto;
@@ -26,7 +28,6 @@ import ru.practicum.crm.user.api.dto.UpdateClientProfileRequest;
 import ru.practicum.crm.user.api.dto.UserContactDto;
 import ru.practicum.crm.user.api.dto.UserDto;
 import ru.practicum.crm.user.api.mapper.UserMapper;
-import ru.practicum.crm.user.context.UserContext;
 import ru.practicum.crm.user.domain.RoleEntity;
 import ru.practicum.crm.user.domain.UserEntity;
 import ru.practicum.crm.user.domain.UserRoleEntity;
@@ -208,6 +209,12 @@ public class UserServiceImpl implements UserService,
         return userRepository.findById(userId, tenantId)
                 .map(UserEntity::canLogIn)
                 .orElse(false);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<ActiveUserDto> findActiveInTenant(UUID userId, UUID tenantId) {
+        return userRepository.findById(userId, tenantId).map(userMapper::toActiveUserDto);
     }
 
     @Override

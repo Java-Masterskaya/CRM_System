@@ -32,6 +32,8 @@ public enum ErrorCode {
             "Объект изменён другим пользователем. Обновите данные и повторите изменения."),
     ALREADY_EXISTS(HttpStatus.CONFLICT, "Ресурс уже существует",
             "Объект с такими данными уже создан."),
+    REQUEST_CLOSED(HttpStatus.CONFLICT, "Заявка закрыта",
+            "Операция недоступна для заявки в терминальном статусе."),
     PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "Слишком большой запрос",
             "Размер запроса превышает допустимый предел."),
     RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "Слишком много попыток",
@@ -47,7 +49,8 @@ public enum ErrorCode {
     private static final String TYPE_BASE = "https://crm.example/problems/";
 
     private static final Set<ErrorCode> DOMAIN_SPECIFIC = EnumSet.of(VALIDATION_FAILED,
-            INVALID_CREDENTIALS, INVALID_TRANSITION, STALE_VERSION, ALREADY_EXISTS);
+            INVALID_CREDENTIALS, INVALID_TRANSITION, STALE_VERSION, ALREADY_EXISTS,
+            REQUEST_CLOSED);
 
     private static final Set<ErrorCode> FALLBACK_ONLY = EnumSet.of(CLIENT_ERROR);
 

@@ -9,6 +9,7 @@ import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
@@ -67,9 +68,11 @@ public class Request extends TenantScopedEntity {
     @Column(name = "author_id", nullable = false, updatable = false)
     private UUID authorId;
 
-    @Setter
     @Column(name = "assignee_id")
     private UUID assigneeId;
+
+    @Column(name = "assigned_at")
+    private Instant assignedAt;
 
     @Setter
     @Column(name = "desired_due_at")
@@ -116,7 +119,7 @@ public class Request extends TenantScopedEntity {
      *
      * <p>Остальные поля заполняются сеттерами по мере того, как их источники появятся:
      * тип и приоритет — при создании из клиентского API, сроки — из SLA-политики,
-     * исполнитель — при назначении.
+     * исполнитель вместе с моментом назначения — методом {@link #changeAssignee}.
      */
     public Request(UUID tenantId, UUID authorId, String subject, String description,
                    RequestStatus status) {
@@ -125,6 +128,27 @@ public class Request extends TenantScopedEntity {
         this.subject = subject;
         this.description = description;
         this.status = status;
+    }
+
+    /**
+     * Назначает, переназначает или снимает исполнителя и вместе с ним - момент, когда это
+     * произошло.
+     *
+     * @param occurredAt момент назначения; обязателен при назначении — при снятии не
+     *     используется, но тоже проверяется, чтобы у метода была одна понятная сигнатура.
+     * @return {@code true}, если исполнитель или факт его отсутствия сменился
+     * @throws IllegalArgumentException если назначается исполнитель, а момент не передан
+     */
+    public boolean changeAssignee(UUID newAssigneeId, Instant occurredAt) {
+        if (occurredAt == null) {
+            throw new IllegalArgumentException("Момент назначения обязателен");
+        }
+        if (Objects.equals(assigneeId, newAssigneeId)) {
+            return false;
+        }
+        assigneeId = newAssigneeId;
+        assignedAt = newAssigneeId == null ? null : occurredAt;
+        return true;
     }
 
     public Map<String, Object> getDataParams() {
@@ -154,7 +178,9 @@ public class Request extends TenantScopedEntity {
         }
     }
 
-    /** Просрочен хотя бы один из сроков — первого ответа или решения. */
+    /**
+     * Просрочен хотя бы один из сроков — первого ответа или решения.
+     */
     public boolean isOverdue() {
         return firstResponseOverdue || resolutionOverdue;
     }

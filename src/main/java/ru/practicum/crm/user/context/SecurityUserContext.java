@@ -4,6 +4,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.security.CurrentUser;
+import ru.practicum.crm.user.api.UserContext;
 
 /**
  * Текущий пользователь для пакета пользователей. Идентификатор из access-токена берёт
