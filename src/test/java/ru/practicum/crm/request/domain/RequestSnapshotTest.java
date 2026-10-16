@@ -31,7 +31,7 @@ class RequestSnapshotTest {
         request.setTypeId(TYPE_ID);
         request.setDesiredDueAt(DUE_AT);
         request.setDescription("Нужен отчёт с разбивкой по месяцам");
-        request.setAssigneeId(OPERATOR_ID);
+        request.changeAssignee(OPERATOR_ID, DUE_AT);
 
         assertThat(before.changesTo(RequestSnapshot.of(request))).containsExactly(
                 new FieldChange(AuditedField.PRIORITY, RequestPriority.FALLBACK.name(), "HIGH"),
@@ -44,9 +44,9 @@ class RequestSnapshotTest {
 
     @Test
     void changesTo_whenFieldCleared_recordsEmptyNewValue() {
-        request.setAssigneeId(OPERATOR_ID);
+        request.changeAssignee(OPERATOR_ID, DUE_AT);
         final RequestSnapshot before = RequestSnapshot.of(request);
-        request.setAssigneeId(null);
+        request.changeAssignee(null, DUE_AT);
 
         assertThat(before.changesTo(RequestSnapshot.of(request))).containsExactly(
                 new FieldChange(AuditedField.ASSIGNEE, OPERATOR_ID.toString(), null));
