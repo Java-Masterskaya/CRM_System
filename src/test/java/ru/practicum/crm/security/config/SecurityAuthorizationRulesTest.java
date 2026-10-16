@@ -1,6 +1,7 @@
 package ru.practicum.crm.security.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -159,6 +160,8 @@ class SecurityAuthorizationRulesTest {
                         .param("to", "2026-01-10")
                         .with(jwtWithAuthority("ANALYTICS_READ")))
                 .andExpect(status().isNotFound());
+
+        verify(tenantContext).setTenantId(TENANT_ID);
     }
 
     @Test
@@ -170,7 +173,7 @@ class SecurityAuthorizationRulesTest {
                         .with(jwtWithAuthority("TENANT_SETTINGS_READ")))
                 .andExpect(status().isForbidden());
     }
-  
+
     @Test
     void givenStatusChangePermission_whenAssigningExecutor_thenReturnsForbidden()
             throws Exception {

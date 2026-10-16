@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.analytics.api.InboundGroupBy;
 import ru.practicum.crm.analytics.api.dto.InboundByDayReportResponse;
@@ -29,6 +30,7 @@ import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.model.RequestPriority;
 import ru.practicum.crm.tenant.api.TenantContext;
 
+@WithMockUser(authorities = "ANALYTICS_READ")
 class InboundRequestsReportIntegrationTest extends BaseIntegrationTest {
 
     private static final String TIMEZONE = "Europe/Moscow";
@@ -218,13 +220,13 @@ class InboundRequestsReportIntegrationTest extends BaseIntegrationTest {
         Instant rangeStart = monthStart.atStartOfDay(MOSCOW).toInstant();
 
         jdbcTemplate.update(
-                   """
-                   INSERT INTO requests (id, tenant_id, type_id, subject, description, status,
-                   priority, priority_rank, author_id, created_at, updated_at)
-                   SELECT gen_random_uuid(), ?, ?, 'Выгрузка', 'Нагрузка', 'NEW', 'NORMAL', 2, ?,
-                   ?::TIMESTAMPTZ + ((i % 30) || ' days')::INTERVAL + ((i % 20) || ' hours')::INTERVAL, now()
-                   FROM generate_series(1, 100000) AS s(i)
-                   """, tenantA, typeExport, authorId, Timestamp.from(rangeStart));
+                """
+                INSERT INTO requests (id, tenant_id, type_id, subject, description, status,
+                priority, priority_rank, author_id, created_at, updated_at)
+                SELECT gen_random_uuid(), ?, ?, 'Выгрузка', 'Нагрузка', 'NEW', 'NORMAL', 2, ?,
+                ?::TIMESTAMPTZ + ((i % 30) || ' days')::INTERVAL + ((i % 20) || ' hours')::INTERVAL, now()
+                FROM generate_series(1, 100000) AS s(i)
+                """, tenantA, typeExport, authorId, Timestamp.from(rangeStart));
         jdbcTemplate.execute("ANALYZE requests");
 
         InboundReportQuery query = new InboundReportQuery(

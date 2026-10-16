@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.crm.analytics.api.InboundGroupBy;
@@ -39,6 +40,7 @@ public class InboundRequestReportService {
      * @param typeId фильтр по типу заявки (если параметр присутствует)
      * @param priorityRaw фильтр по приоритету (если параметр присутствует)
      * */
+    @PreAuthorize("hasAuthority('ANALYTICS_READ')")
     @Transactional(readOnly = true)
     public InboundByDayReportResponse report(
             LocalDate from, LocalDate to, String groupByRaw, UUID typeId, String priorityRaw) {
