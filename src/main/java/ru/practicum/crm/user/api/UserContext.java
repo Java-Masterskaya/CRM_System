@@ -1,4 +1,4 @@
-package ru.practicum.crm.user.context;
+package ru.practicum.crm.user.api;
 
 import java.util.UUID;
 

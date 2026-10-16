@@ -8,6 +8,7 @@ import java.time.ZoneId;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.security.test.context.support.WithMockUser;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.common.error.NotFoundException;
 import ru.practicum.crm.tenant.api.TenantContext;
@@ -31,8 +32,10 @@ class TenantSettingsServiceIntegrationTest extends BaseIntegrationTest {
     @MockBean
     private TenantContext tenantContext;
 
+    /** Право на чтение настроек проверяется на методе сервиса (T-030) — тест его даёт. */
     @Test
     @Transactional
+    @WithMockUser(authorities = "TENANT_SETTINGS_READ")
     void getTenantSettings_whenCurrentTenantIsB_doesNotReturnSettingsOfA() {
         Tenant tenantA = tenantRepository.save(new Tenant("Tenant A", "tenant-a"));
         Tenant tenantB = tenantRepository.save(new Tenant("Tenant B", "tenant-b"));

@@ -11,13 +11,14 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import ru.practicum.crm.common.error.ApiException;
+import ru.practicum.crm.common.security.CurrentUser;
 
 class SecurityUserContextTest {
 
     private static final UUID USER_ID =
             UUID.fromString("33333333-3333-3333-3333-333333333333");
 
-    private final SecurityUserContext userContext = new SecurityUserContext();
+    private final SecurityUserContext userContext = new SecurityUserContext(new CurrentUser());
 
     @AfterEach
     void tearDown() {

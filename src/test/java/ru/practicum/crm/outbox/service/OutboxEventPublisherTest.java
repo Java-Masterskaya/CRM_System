@@ -16,6 +16,7 @@ import org.mockito.ArgumentCaptor;
 import ru.practicum.crm.outbox.domain.OutboxEvent;
 import ru.practicum.crm.outbox.domain.OutboxStatus;
 import ru.practicum.crm.outbox.repository.OutboxEventRepository;
+import ru.practicum.crm.tenant.api.TenantContext;
 
 /**
  * Запись события без базы: репозиторий — заглушка. Транзакцию, откат и доставку проверяет
@@ -28,7 +29,33 @@ class OutboxEventPublisherTest {
     private static final String LONG_TYPE = "T".repeat(OutboxEvent.TYPE_MAX_LENGTH + 1);
 
     private final OutboxEventRepository repository = mock(OutboxEventRepository.class);
-    private final OutboxEventPublisher publisher = new OutboxEventPublisher(repository);
+    /** По умолчанию контекст пуст — как у фоновой задачи. */
+    private final TenantContext tenantContext = mock(TenantContext.class);
+    private final OutboxEventPublisher publisher =
+            new OutboxEventPublisher(repository, tenantContext);
+
+    /** Запрос арендатора пишет события только своего арендатора — и оба вида событий. */
+    @Test
+    void publish_forAnotherTenantThanCurrentRequest_isRejectedWithoutStoring() {
+        when(tenantContext.getCurrentTenantId()).thenReturn(UUID.randomUUID());
+
+        assertThatThrownBy(() -> publisher.publish(TENANT_ID, EVENT_TYPE, Map.of()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> publisher.publish(TENANT_ID, EVENT_TYPE, "REQUEST",
+                UUID.randomUUID(), Map.of()))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void publish_forTenantOfCurrentRequest_isStored() {
+        when(tenantContext.getCurrentTenantId()).thenReturn(TENANT_ID);
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        publisher.publish(TENANT_ID, EVENT_TYPE, Map.of());
+
+        assertThat(saved().getTenantId()).isEqualTo(TENANT_ID);
+    }
 
     @Test
     void publish_storesNewEventWithTenantTypeAndPayload() {

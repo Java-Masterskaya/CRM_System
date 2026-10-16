@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import jakarta.validation.Validator;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,13 +18,16 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.test.context.support.WithMockUser;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.tenant.api.TenantContext;
 import ru.practicum.crm.tenant.api.TenantService;
 import ru.practicum.crm.tenant.api.dto.TenantDto;
+import ru.practicum.crm.user.api.UserContext;
 import ru.practicum.crm.user.api.UserService;
+import ru.practicum.crm.user.api.dto.ActiveUserDto;
 import ru.practicum.crm.user.api.dto.AuthenticatedUserDto;
 import ru.practicum.crm.user.api.dto.ChangePasswordRequest;
 import ru.practicum.crm.user.api.dto.ClientProfileDto;
@@ -31,7 +35,6 @@ import ru.practicum.crm.user.api.dto.ClientRegistrationRequest;
 import ru.practicum.crm.user.api.dto.CreateUserRequest;
 import ru.practicum.crm.user.api.dto.UpdateClientProfileRequest;
 import ru.practicum.crm.user.api.dto.UserDto;
-import ru.practicum.crm.user.context.UserContext;
 import ru.practicum.crm.user.domain.UserEntity;
 import ru.practicum.crm.user.domain.UserStatus;
 import ru.practicum.crm.user.repository.UserRepository;
@@ -277,12 +280,12 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
                 .isTrue();
 
         List<String> assignedRoles = jdbcTemplate.queryForList(
-                """
-                SELECT r.code
-                FROM roles r
-                JOIN user_roles ur ON ur.role_id = r.id AND ur.tenant_id = r.tenant_id
-                WHERE ur.user_id = ? AND ur.tenant_id = ?
-                """,
+                        """
+                        SELECT r.code
+                        FROM roles r
+                        JOIN user_roles ur ON ur.role_id = r.id AND ur.tenant_id = r.tenant_id
+                        WHERE ur.user_id = ? AND ur.tenant_id = ?
+                        """,
                 String.class,
                 savedUser.getId(),
                 tenantId
@@ -334,7 +337,11 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
         assertThat(validator.validate(request)).isEmpty();
     }
 
+    /**
+     * Права на профиль проверяются на методах сервиса (T-030) — тест их даёт.
+     */
     @Test
+    @WithMockUser(authorities = {"PROFILE_READ_OWN", "PROFILE_EDIT_OWN"})
     void clientProfile_readsAndUpdatesOnlyCurrentUsersNameAndPhone() {
         String slug = uniqueTenantSlug();
         UUID tenantId = createTenantWithSlug(slug);
@@ -372,7 +379,9 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
         assertThat(unchangedOtherUser.getPhone()).isNull();
     }
 
-    /** Условие то же, что при входе: активен и не удалён (нужно обмену refresh-токена). */
+    /**
+     * Условие то же, что при входе: активен и не удалён (нужно обмену refresh-токена).
+     */
     @Test
     void canLogIn_isTrueOnlyForActiveNotDeletedUserOfThatTenant() {
         UserEntity user = createUserWithPassword(VALID_PASSWORD);
@@ -398,7 +407,7 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
 
         jdbcTemplate.update(
                 "INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
-                + " VALUES (?, ?, ?, true, now(), now())",
+                        + " VALUES (?, ?, ?, true, now(), now())",
                 id, name, slug
         );
 
@@ -449,5 +458,45 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
 
     private UserEntity reloadUser(UUID userId, UUID tenantId) {
         return userRepository.findById(userId, tenantId).orElseThrow();
+    }
+
+    @Test
+    void findActiveInTenant_whenUserExistsInTenant_returnsActiveUserDto() {
+        UUID tenantId = createTenant("Test Tenant");
+        UserEntity user = userRepository.save(new UserEntity(tenantId, "operator@example.com",
+                passwordEncoder.encode(VALID_PASSWORD), UserStatus.ACTIVE));
+
+        Optional<ActiveUserDto> found = userService.findActiveInTenant(user.getId(), tenantId);
+
+        assertThat(found).contains(new ActiveUserDto(user.getId(), "operator@example.com"));
+    }
+
+    @Test
+    void findActiveInTenant_whenUserBelongsToAnotherTenant_isEmpty() {
+        UUID ownTenantId = createTenant("Own Tenant");
+        UUID otherTenantId = createTenant("Other Tenant");
+        UserEntity user = userRepository.save(new UserEntity(otherTenantId,
+                "operator@example.com", passwordEncoder.encode(VALID_PASSWORD),
+                UserStatus.ACTIVE));
+
+        assertThat(userService.findActiveInTenant(user.getId(), ownTenantId)).isEmpty();
+    }
+
+    @Test
+    void findActiveInTenant_whenUserSoftDeleted_isEmpty() {
+        UUID tenantId = createTenant("Test Tenant");
+        UserEntity user = userRepository.save(new UserEntity(tenantId, "operator@example.com",
+                passwordEncoder.encode(VALID_PASSWORD), UserStatus.ACTIVE));
+        user.delete();
+        userRepository.save(user);
+
+        assertThat(userService.findActiveInTenant(user.getId(), tenantId)).isEmpty();
+    }
+
+    @Test
+    void findActiveInTenant_whenUserIdUnknown_isEmpty() {
+        UUID tenantId = createTenant("Test Tenant");
+
+        assertThat(userService.findActiveInTenant(UUID.randomUUID(), tenantId)).isEmpty();
     }
 }

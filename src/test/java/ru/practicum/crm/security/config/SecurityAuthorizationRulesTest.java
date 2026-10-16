@@ -42,9 +42,9 @@ import ru.practicum.crm.tenant.api.TenantContext;
         "crm.system.secret=test-system-secret"
 })
 @Import({
-    SecurityConfig.class,
-    SystemFilterConfig.class,
-    SecurityConfigSliceTest.TestTenantFilterConfiguration.class
+        SecurityConfig.class,
+        SystemFilterConfig.class,
+        SecurityConfigSliceTest.TestTenantFilterConfiguration.class
 })
 class SecurityAuthorizationRulesTest {
 
@@ -111,36 +111,28 @@ class SecurityAuthorizationRulesTest {
                 .andExpect(status().isNotFound());
     }
 
+    /**
+     * Маршрут настроек открыт для любого запроса с токеном: какое право нужно, проверяет
+     * {@code @PreAuthorize} на методе сервиса (T-030), а его здесь нет — контроллера в этом
+     * срезе нет, и запрос доходит до поиска обработчика. Права на сами операции проверяет
+     * {@code OperationPermissionsIntegrationTest}.
+     */
     @Test
-    void givenReadAllPermission_whenReadingTenantSettings_thenReturnsForbidden()
+    void givenAnyPermission_whenCallingTenantSettings_thenUrlRulePassesItToMethodCheck()
             throws Exception {
         mockMvc.perform(get("/admin/tenant/settings")
                         .with(jwtWithAuthority("REQUEST_READ_ALL")))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
-    void givenSettingsReadPermission_whenReadingTenantSettings_thenReachesMvcLookup()
-            throws Exception {
-        mockMvc.perform(get("/admin/tenant/settings")
-                        .with(jwtWithAuthority("TENANT_SETTINGS_READ")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(put("/admin/tenant/settings")
+                        .with(jwtWithAuthority("REQUEST_READ_ALL")))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    void givenSettingsReadPermission_whenUpdatingTenantSettings_thenReturnsForbidden()
+    void givenNoCredentials_whenCallingTenantSettings_thenReturnsUnauthorized()
             throws Exception {
-        mockMvc.perform(put("/admin/tenant/settings")
-                        .with(jwtWithAuthority("TENANT_SETTINGS_READ")))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
-    void givenSettingsManagePermission_whenUpdatingTenantSettings_thenReachesMvcLookup()
-            throws Exception {
-        mockMvc.perform(put("/admin/tenant/settings")
-                        .with(jwtWithAuthority("TENANT_SETTINGS_MANAGE")))
-                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/admin/tenant/settings").with(anonymous()))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -177,6 +169,21 @@ class SecurityAuthorizationRulesTest {
                         .param("to", "2026-01-10")
                         .with(jwtWithAuthority("TENANT_SETTINGS_READ")))
                 .andExpect(status().isForbidden());
+    }
+  
+    @Test
+    void givenStatusChangePermission_whenAssigningExecutor_thenReturnsForbidden()
+            throws Exception {
+        mockMvc.perform(put("/admin/requests/{id}/assignee", UUID.randomUUID())
+                        .with(jwtWithAuthority("REQUEST_STATUS_CHANGE")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenAssignPermission_whenAssigningExecutor_thenReachesMvcLookup() throws Exception {
+        mockMvc.perform(put("/admin/requests/{id}/assignee", UUID.randomUUID())
+                        .with(jwtWithAuthority("REQUEST_ASSIGN")))
+                .andExpect(status().isNotFound());
     }
 
     private RequestPostProcessor jwtWithAuthority(String authority) {
