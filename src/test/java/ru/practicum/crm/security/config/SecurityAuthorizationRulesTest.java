@@ -135,6 +135,30 @@ class SecurityAuthorizationRulesTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    /**
+     * Смена статуса заявки (T-044) — так же, как настройки: маршрут пропускает любой запрос с
+     * токеном, право {@code REQUEST_STATUS_CHANGE} проверяет сервис. Открыт только {@code PUT}:
+     * другой метод на том же пути по-прежнему закрыт.
+     */
+    @Test
+    void givenAnyPermission_whenChangingRequestStatus_thenUrlRulePassesOnlyPutToMethodCheck()
+            throws Exception {
+        String route = "/admin/requests/" + UUID.randomUUID() + "/status";
+
+        mockMvc.perform(put(route).with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get(route).with(jwtWithAuthority("REQUEST_STATUS_CHANGE")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenNoCredentials_whenChangingRequestStatus_thenReturnsUnauthorized()
+            throws Exception {
+        mockMvc.perform(put("/admin/requests/" + UUID.randomUUID() + "/status")
+                        .with(anonymous()))
+                .andExpect(status().isUnauthorized());
+    }
+
     @Test
     void givenReadAllPermission_whenCallingNewAdminRoute_thenReturnsForbidden()
             throws Exception {
