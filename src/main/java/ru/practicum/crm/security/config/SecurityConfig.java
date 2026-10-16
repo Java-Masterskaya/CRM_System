@@ -25,7 +25,6 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ProblemDetailFactory;
-import ru.practicum.crm.security.api.PermissionCode;
 import ru.practicum.crm.security.system.SystemSecretFilter;
 import ru.practicum.crm.tenant.api.TenantContextFilter;
 
@@ -68,25 +67,19 @@ public class SecurityConfig {
                     authorize.requestMatchers(HttpMethod.POST,
                                     "/auth/register", "/auth/login", "/auth/refresh",
                                     "/auth/logout").permitAll()
-                            .requestMatchers(HttpMethod.GET, "/client/profile")
-                                    .hasAuthority(PermissionCode.PROFILE_READ_OWN.name())
-                            .requestMatchers(HttpMethod.PUT, "/client/profile")
-                                    .hasAuthority(PermissionCode.PROFILE_EDIT_OWN.name())
+                            // Право на профиль проверяет @PreAuthorize на методе сервиса
+                            // (T-030); здесь маршрут только требует токен.
+                            .requestMatchers("/client/profile").authenticated()
                             .requestMatchers("/health", "/actuator/**", "/v3/api-docs/**",
                                     "/swagger-ui/**", "/swagger-ui.html").permitAll()
                             .requestMatchers("/system/**").permitAll();
 
                     if (authorizationEnabled) {
-                        authorize.requestMatchers(
-                                        HttpMethod.GET,
-                                        "/admin/tenant/settings"
-                                )
-                                .hasAuthority(PermissionCode.TENANT_SETTINGS_READ.name())
-                                .requestMatchers(
-                                        HttpMethod.PUT,
-                                        "/admin/tenant/settings"
-                                )
-                                .hasAuthority(PermissionCode.TENANT_SETTINGS_MANAGE.name())
+                        // Маршрут открывается здесь только для запросов с токеном, а нужное
+                        // право проверяет @PreAuthorize на методе сервиса (T-030). Маршрут,
+                        // которого нет в этом списке, по-прежнему закрыт (T-022).
+                        authorize.requestMatchers("/admin/tenant/settings")
+                                .authenticated()
                                 .requestMatchers(
                                         "/admin/**",
                                         "/client/**"

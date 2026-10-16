@@ -17,6 +17,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.test.context.support.WithMockUser;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
@@ -334,7 +335,9 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
         assertThat(validator.validate(request)).isEmpty();
     }
 
+    /** Права на профиль проверяются на методах сервиса (T-030) — тест их даёт. */
     @Test
+    @WithMockUser(authorities = {"PROFILE_READ_OWN", "PROFILE_EDIT_OWN"})
     void clientProfile_readsAndUpdatesOnlyCurrentUsersNameAndPhone() {
         String slug = uniqueTenantSlug();
         UUID tenantId = createTenantWithSlug(slug);
