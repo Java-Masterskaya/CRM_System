@@ -2,6 +2,7 @@ package ru.practicum.crm.security.filter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -170,6 +171,19 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
         assertThat(tenantContext.getCurrentTenantId()).isNull();
     }
 
+    @Test
+    void request_whenAnalyticsPathWithJwt_passesTenantToBusinessLayer() throws Exception {
+        org.mockito.Mockito.when(tenantActiveChecker.isActive(TENANT_ID))
+                .thenReturn(true);
+
+        mockMvc.perform(get("/analytics/test/tenant")
+                        .with(jwt().jwt(token -> token
+                                .claim("tenant_id", TENANT_ID.toString()))))
+                .andExpect(status().isOk());
+
+        assertThat(testController.getTenantSeenByController()).isEqualTo(TENANT_ID);
+    }
+
     @RestController
     static class TestController {
 
@@ -186,7 +200,7 @@ class TenantContextFilterIntegrationTest extends BaseIntegrationTest {
             return tenantSeenByController;
         }
 
-        @GetMapping("/admin/test/tenant")
+        @GetMapping({"/admin/test/tenant", "/analytics/test/tenant"})
         UUID tenant() {
             UUID currentTenant = tenantContext.getCurrentTenantId();
             tenantSeenByController = currentTenant;

@@ -25,7 +25,8 @@ public class TenantContextFilter extends OncePerRequestFilter {
 
     private static final List<String> PROTECTED_PREFIXES = List.of(
             "/client",
-            "/admin"
+            "/admin",
+            "/analytics"
     );
 
     private static final String CLAIM_TENANT_ID = "tenant_id";

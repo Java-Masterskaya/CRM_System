@@ -86,6 +86,8 @@ public class SecurityConfig {
                                         "/admin/requests/*/assignee"
                                 )
                                 .hasAuthority(PermissionCode.REQUEST_ASSIGN.name())
+                                .requestMatchers("/analytics/**")
+                                .hasAuthority(PermissionCode.ANALYTICS_READ.name())
                                 .requestMatchers(
                                         "/admin/**",
                                         "/client/**"
