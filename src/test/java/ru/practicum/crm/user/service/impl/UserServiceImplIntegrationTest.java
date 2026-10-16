@@ -30,6 +30,7 @@ import ru.practicum.crm.user.api.dto.ClientProfileDto;
 import ru.practicum.crm.user.api.dto.ClientRegistrationRequest;
 import ru.practicum.crm.user.api.dto.CreateUserRequest;
 import ru.practicum.crm.user.api.dto.UpdateClientProfileRequest;
+import ru.practicum.crm.user.api.dto.UserContactDto;
 import ru.practicum.crm.user.api.dto.UserDto;
 import ru.practicum.crm.user.context.UserContext;
 import ru.practicum.crm.user.domain.UserEntity;
@@ -392,6 +393,56 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
         assertThat(userService.canLogIn(tenantId, user.getId())).as("удалён").isFalse();
     }
 
+    /** Адресат письма об эскалации (T-061): условие то же, что при входе. */
+    @Test
+    void findActiveContact_returnsContactOnlyOfActiveNotDeletedUserOfThatTenant() {
+        UUID tenantId = createTenant("Test Tenant");
+        UUID userId = insertUser(tenantId, "olga@example.com", "Ольга");
+
+        assertThat(userService.findActiveContact(tenantId, userId)).as("активный")
+                .contains(new UserContactDto(userId, "olga@example.com", "Ольга"));
+        assertThat(userService.findActiveContact(UUID.randomUUID(), userId))
+                .as("другой арендатор").isEmpty();
+
+        jdbcTemplate.update("UPDATE users SET status = 'BLOCKED' WHERE id = ?", userId);
+        assertThat(userService.findActiveContact(tenantId, userId)).as("заблокирован").isEmpty();
+
+        jdbcTemplate.update("UPDATE users SET status = 'ACTIVE', deleted_at = now() WHERE id = ?",
+                userId);
+        assertThat(userService.findActiveContact(tenantId, userId)).as("удалён").isEmpty();
+    }
+
+    /**
+     * Администраторы для эскалации (T-061) определяются правом, а не названием роли (T-030).
+     * Пользователь с двумя ролями, где есть это право, попадает в список один раз; список
+     * упорядочен по адресу.
+     */
+    @Test
+    void findActiveWithPermission_returnsEachActiveHolderOfPermissionInThatTenantOnce() {
+        UUID otherTenantId = createTenant("Other Tenant");
+        seedAccessDefaults(otherTenantId);
+        grantRole(otherTenantId, insertUser(otherTenantId, "other@example.com", "Чужой"),
+                "ADMIN");
+        UUID tenantId = createTenant("Test Tenant");
+        seedAccessDefaults(tenantId);
+        UUID admin = insertUser(tenantId, "b-admin@example.com", "Анна");
+        grantRole(tenantId, admin, "ADMIN");
+        UUID twoRoles = insertUser(tenantId, "a-both@example.com", null);
+        grantRole(tenantId, twoRoles, "ADMIN");
+        grantRole(tenantId, twoRoles, createRoleWith(tenantId, "SLA_POLICY_MANAGE"));
+        grantRole(tenantId, insertUser(tenantId, "operator@example.com", "Олег"), "OPERATOR");
+        UUID blocked = insertUser(tenantId, "blocked@example.com", "Борис");
+        grantRole(tenantId, blocked, "ADMIN");
+        jdbcTemplate.update("UPDATE users SET status = 'BLOCKED' WHERE id = ?", blocked);
+        UUID deleted = insertUser(tenantId, "deleted@example.com", "Дина");
+        grantRole(tenantId, deleted, "ADMIN");
+        jdbcTemplate.update("UPDATE users SET deleted_at = now() WHERE id = ?", deleted);
+
+        assertThat(userService.findActiveWithPermission(tenantId, "SLA_POLICY_MANAGE"))
+                .containsExactly(new UserContactDto(twoRoles, "a-both@example.com", null),
+                        new UserContactDto(admin, "b-admin@example.com", "Анна"));
+    }
+
     private UUID createTenant(String name) {
         UUID id = UUID.randomUUID();
         String slug = "tenant-" + id.toString().replace("-", "");
@@ -449,5 +500,34 @@ class UserServiceImplIntegrationTest extends BaseIntegrationTest {
 
     private UserEntity reloadUser(UUID userId, UUID tenantId) {
         return userRepository.findById(userId, tenantId).orElseThrow();
+    }
+
+    /** Роли и права арендатора по умолчанию — те же, что получает новый арендатор. */
+    private void seedAccessDefaults(UUID tenantId) {
+        jdbcTemplate.query("SELECT seed_tenant_access_defaults(?)", rs -> null, tenantId);
+    }
+
+    private UUID insertUser(UUID tenantId, String email, String name) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO users (id, tenant_id, email, name, password_hash)"
+                + " VALUES (?, ?, ?, ?, 'hash')", id, tenantId, email, name);
+        return id;
+    }
+
+    private void grantRole(UUID tenantId, UUID userId, String roleCode) {
+        jdbcTemplate.update("INSERT INTO user_roles (tenant_id, user_id, role_id)"
+                + " SELECT tenant_id, ?, id FROM roles WHERE tenant_id = ? AND code = ?",
+                userId, tenantId, roleCode);
+    }
+
+    /** Своя роль арендатора с одним правом из стандартных; возвращает код роли. */
+    private String createRoleWith(UUID tenantId, String permissionCode) {
+        UUID roleId = UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO roles (id, tenant_id, code, name)"
+                + " VALUES (?, ?, 'CUSTOM', 'Своя роль')", roleId, tenantId);
+        jdbcTemplate.update("INSERT INTO role_permissions (tenant_id, role_id, permission_id)"
+                + " SELECT tenant_id, ?, id FROM permissions WHERE tenant_id = ? AND code = ?",
+                roleId, tenantId, permissionCode);
+        return "CUSTOM";
     }
 }

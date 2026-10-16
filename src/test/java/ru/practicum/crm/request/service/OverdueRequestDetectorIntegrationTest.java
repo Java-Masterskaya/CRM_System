@@ -47,6 +47,9 @@ class OverdueRequestDetectorIntegrationTest extends BaseIntegrationTest {
     private RequestRepository requests;
 
     @Autowired
+    private OverdueEscalation escalation;
+
+    @Autowired
     private PlatformTransactionManager transactionManager;
 
     @Autowired
@@ -168,7 +171,7 @@ class OverdueRequestDetectorIntegrationTest extends BaseIntegrationTest {
         for (int minutes = 5; minutes >= 1; minutes--) {
             insertRequest(tenantA, "NEW", hourAgo.minus(Duration.ofMinutes(minutes)), null);
         }
-        OverdueRequestDetector batchesOfTwo = new OverdueRequestDetector(requests,
+        OverdueRequestDetector batchesOfTwo = new OverdueRequestDetector(requests, escalation,
                 transactionManager, new OverdueDetectionProperties(2, Duration.ofMinutes(1)));
         AtomicInteger checks = new AtomicInteger();
 

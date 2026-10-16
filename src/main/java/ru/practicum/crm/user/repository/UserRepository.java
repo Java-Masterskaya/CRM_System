@@ -49,4 +49,23 @@ public interface UserRepository extends Repository<UserEntity, UUID> {
             """
     )
     List<UserEntity> findAllActiveByTenantId(@Param("tenantId") UUID tenantId);
+
+    /**
+     * Активные пользователи арендатора, у которых есть право через любую из их ролей, — по
+     * порядку адресов. Связи ролей и прав ищутся в пределах арендатора, как в
+     * {@code PermissionRepository.findAllPermissionCodesByUserId}.
+     */
+    @Query(nativeQuery = true, value =
+            """
+            SELECT DISTINCT u.*
+            FROM users u
+            JOIN user_roles ur ON ur.user_id = u.id AND ur.tenant_id = u.tenant_id
+            JOIN role_permissions rp ON rp.role_id = ur.role_id AND rp.tenant_id = ur.tenant_id
+            JOIN permissions p ON p.id = rp.permission_id AND p.tenant_id = rp.tenant_id
+            WHERE u.tenant_id = :tenantId AND p.code = :permissionCode
+              AND u.status = 'ACTIVE' AND u.deleted_at IS NULL
+            ORDER BY u.email
+            """)
+    List<UserEntity> findAllActiveWithPermission(@Param("tenantId") UUID tenantId,
+            @Param("permissionCode") String permissionCode);
 }

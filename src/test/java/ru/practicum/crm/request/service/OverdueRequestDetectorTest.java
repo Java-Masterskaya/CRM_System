@@ -3,6 +3,7 @@ package ru.practicum.crm.request.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -18,21 +19,24 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.transaction.PlatformTransactionManager;
 import ru.practicum.crm.request.config.OverdueDetectionProperties;
 import ru.practicum.crm.request.repository.RequestRepository;
+import ru.practicum.crm.request.service.OverdueEscalation.Deadline;
 
 /**
- * Проход проверки без базы: репозиторий — заглушка, которая возвращает, сколько заявок
- * помечено в порции. Сами условия просрочки и блокировки проверяет интеграционный тест.
+ * Проход проверки без базы: репозиторий и эскалация — заглушки, которые возвращают, сколько
+ * заявок обработано в порции. Сами условия просрочки и блокировки проверяет интеграционный тест.
  */
 class OverdueRequestDetectorTest {
 
     private static final int BATCH = 2;
 
     private final RequestRepository repository = mock(RequestRepository.class);
+    private final OverdueEscalation escalation = mock(OverdueEscalation.class);
     private final OverdueRequestDetector detector = new OverdueRequestDetector(repository,
-            mock(PlatformTransactionManager.class),
+            escalation, mock(PlatformTransactionManager.class),
             new OverdueDetectionProperties(BATCH, Duration.ofMinutes(1)));
 
     @Test
@@ -56,7 +60,7 @@ class OverdueRequestDetectorTest {
         when(repository.markFirstResponseOverdue(any(), eq(BATCH))).thenReturn(2, 0);
         when(repository.markResolutionOverdue(any(), eq(BATCH))).thenReturn(1);
         OverdueRequestDetector withTickingClock = new OverdueRequestDetector(repository,
-                mock(PlatformTransactionManager.class),
+                escalation, mock(PlatformTransactionManager.class),
                 new OverdueDetectionProperties(BATCH, Duration.ofMinutes(1)), tickingClock());
 
         withTickingClock.detect(() -> false);
@@ -78,13 +82,47 @@ class OverdueRequestDetectorTest {
 
         verify(repository, times(1)).markFirstResponseOverdue(any(), eq(BATCH));
         verify(repository, times(0)).markResolutionOverdue(any(), eq(BATCH));
+        verifyNoInteractions(escalation);
     }
 
     @Test
     void detect_whenStoppedBeforeStart_touchesNothing() {
         assertThat(detector.detect(() -> true)).isZero();
 
-        verifyNoInteractions(repository);
+        verifyNoInteractions(repository, escalation);
+    }
+
+    /**
+     * Эскалация — после пометки: письма о только что просроченных заявках уходят в том же
+     * проходе. По каждому сроку — порция за порцией, пока порция полная; на результат прохода
+     * эскалация не влияет — он по-прежнему считает пометки.
+     */
+    @Test
+    void detect_afterMarking_escalatesEachDeadlineBatchAfterBatch() {
+        when(repository.markFirstResponseOverdue(any(), eq(BATCH))).thenReturn(1);
+        when(repository.markResolutionOverdue(any(), eq(BATCH))).thenReturn(0);
+        when(escalation.escalateBatch(Deadline.FIRST_RESPONSE, BATCH)).thenReturn(2, 1);
+        when(escalation.escalateBatch(Deadline.RESOLUTION, BATCH)).thenReturn(0);
+
+        assertThat(detector.detect(() -> false)).isEqualTo(1);
+
+        InOrder order = inOrder(repository, escalation);
+        order.verify(repository).markFirstResponseOverdue(any(), eq(BATCH));
+        order.verify(repository).markResolutionOverdue(any(), eq(BATCH));
+        order.verify(escalation, times(2)).escalateBatch(Deadline.FIRST_RESPONSE, BATCH);
+        order.verify(escalation).escalateBatch(Deadline.RESOLUTION, BATCH);
+    }
+
+    /** Остановка посреди эскалации: начатая порция дописана, следующие не начинаются. */
+    @Test
+    void detect_whenStopRequestedDuringEscalation_startsNoMoreBatches() {
+        when(escalation.escalateBatch(Deadline.FIRST_RESPONSE, BATCH)).thenReturn(2);
+        AtomicInteger checks = new AtomicInteger();
+
+        detector.detect(() -> checks.incrementAndGet() > 3);
+
+        verify(escalation, times(1)).escalateBatch(Deadline.FIRST_RESPONSE, BATCH);
+        verify(escalation, times(0)).escalateBatch(Deadline.RESOLUTION, BATCH);
     }
 
     /** Часы, которые при каждом обращении показывают на секунду больше. */
@@ -115,6 +153,6 @@ class OverdueRequestDetectorTest {
 
         assertThat(detector.detect()).isZero();
 
-        verifyNoInteractions(repository);
+        verifyNoInteractions(repository, escalation);
     }
 }

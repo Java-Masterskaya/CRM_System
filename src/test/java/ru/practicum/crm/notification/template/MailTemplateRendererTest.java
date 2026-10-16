@@ -58,6 +58,20 @@ class MailTemplateRendererTest {
                 .isEqualTo("Заявка «Отчёт Bcc: someone@example.com» принята");
     }
 
+    /** Письмо о нарушенном сроке (T-061) называет срок уже в теме: их у заявки два. */
+    @Test
+    void render_slaBreached_namesMissedDeadlineInSubjectAndBody() {
+        Map<String, Object> values = valuesFor(NotificationType.SLA_BREACHED);
+        values.put("requestSubject", "Отчёт");
+        values.put("deadlineName", "первого ответа");
+        values.put("dueAt", "15.10.2026 12:30 (Europe/Moscow)");
+
+        RenderedMail mail = renderer.render(NotificationType.SLA_BREACHED, values);
+
+        assertThat(mail.subject()).isEqualTo("Нарушен срок первого ответа по заявке «Отчёт»");
+        assertThat(mail.htmlBody()).contains("первого ответа", "15.10.2026 12:30 (Europe/Moscow)");
+    }
+
     @Test
     void render_whenRequiredValueMissing_failsNamingTheValue() {
         Map<String, Object> values = valuesFor(NotificationType.REQUEST_ASSIGNED);
