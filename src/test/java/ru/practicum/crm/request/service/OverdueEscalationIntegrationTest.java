@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -43,6 +44,7 @@ import ru.practicum.crm.request.service.OverdueEscalation.Deadline;
 class OverdueEscalationIntegrationTest extends BaseIntegrationTest {
 
     private static final String MIGRATION_VERSION = "202610151010";
+    private static final String STATUS_INDEX_MIGRATION_VERSION = "202610161500";
     private static final String PREVIOUS_MIGRATION = "202610122335";
     private static final ZoneId TENANT_ZONE = ZoneId.of("Europe/Moscow");
     private static final String ADMIN = "admin@example.com";
@@ -81,9 +83,11 @@ class OverdueEscalationIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void migration_whenApplied_isRecordedAsSuccessful() {
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT success FROM flyway_schema_history WHERE version = ?",
-                Boolean.class, MIGRATION_VERSION)).isTrue();
+        for (String version : List.of(MIGRATION_VERSION, STATUS_INDEX_MIGRATION_VERSION)) {
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT success FROM flyway_schema_history WHERE version = ?",
+                    Boolean.class, version)).as("миграция %s", version).isTrue();
+        }
     }
 
     /**
@@ -199,6 +203,33 @@ class OverdueEscalationIntegrationTest extends BaseIntegrationTest {
     }
 
     /**
+     * Ревью #198: заявку закрыли, ответили на неё или поставили на ожидание между пометкой
+     * просрочки и эскалацией — например, проход прервался, и эскалация досталась следующему. По
+     * сроку, который для её статуса уже не считается, письма нет. Закрытая заявка из выборок
+     * выпадает совсем — её признаки эскалации так и не ставятся.
+     */
+    @Test
+    void detect_whenRequestLeftCountedStatusBeforeEscalation_sendsNothingAboutIt() {
+        Map<String, UUID> byStatus = new LinkedHashMap<>();
+        for (String status : List.of("CONTACTED", "ON_HOLD", "DONE", "REJECTED", "CANCELLED")) {
+            UUID id = insertRequest(status, null, hourAgo, hourAgo);
+            jdbcTemplate.update("UPDATE requests SET first_response_overdue = TRUE,"
+                    + " resolution_overdue = TRUE WHERE id = ?", id);
+            byStatus.put(status, id);
+        }
+
+        detector.detect();
+
+        assertThat(emails()).as("письмо только о сроке решения заявки, которая ещё в работе")
+                .containsExactly(new Email(ADMIN, "решения", byStatus.get("CONTACTED")));
+        for (String closed : List.of("DONE", "REJECTED", "CANCELLED")) {
+            assertThat(flags(byStatus.get(closed))).as(closed)
+                    .containsEntry("first_response_escalated", false)
+                    .containsEntry("resolution_escalated", false);
+        }
+    }
+
+    /**
      * Писать некому — заявка всё равно отмечается, иначе каждый проход выбирал бы её снова.
      * Исполнитель заблокирован, а администраторов у арендатора нет.
      */
@@ -270,32 +301,34 @@ class OverdueEscalationIntegrationTest extends BaseIntegrationTest {
     }
 
     /**
-     * Двадцать тысяч давно просроченных и уже эскалированных заявок: выборки эскалации идут по
-     * своим частичным индексам, в которых таких заявок нет.
+     * Двадцать тысяч давно просроченных закрытых заявок: выборки эскалации идут по своим частичным
+     * индексам, в которых таких заявок нет, — ни эскалированных, ни закрытых до эскалации.
      */
     @Test
     void escalationSelections_whenTableIsLarge_useTheirPartialIndexes() {
+        // Половина — уже эскалированные, половина — закрытые без эскалации (случай из ревью
+        // #198): ни те, ни другие в частичные индексы не попадают.
         jdbcTemplate.update("INSERT INTO requests (id, tenant_id, subject, description, status,"
                 + " author_id, first_response_due_at, resolution_due_at, first_response_overdue,"
                 + " resolution_overdue, first_response_escalated, resolution_escalated,"
                 + " created_at, updated_at)"
                 + " SELECT gen_random_uuid(), ?, 'Тема', 'Описание', 'DONE', gen_random_uuid(),"
-                + " ?::timestamptz, ?::timestamptz, TRUE, TRUE, TRUE, TRUE, now(), now()"
-                + " FROM generate_series(1, 20000)",
+                + " ?::timestamptz, ?::timestamptz, TRUE, TRUE, i % 2 = 0, i % 2 = 0, now(),"
+                + " now() FROM generate_series(1, 20000) AS s(i)",
                 tenant, hourAgo.toString(), hourAgo.toString());
         UUID waiting = insertRequest("NEW", null, hourAgo, hourAgo);
         jdbcTemplate.update("UPDATE requests SET first_response_overdue = TRUE,"
                 + " resolution_overdue = TRUE WHERE id = ?", waiting);
         jdbcTemplate.execute("ANALYZE requests");
 
-        assertThat(plan("SELECT * FROM requests WHERE first_response_overdue"
+        assertThat(plan("SELECT * FROM requests WHERE status = 'NEW' AND first_response_overdue"
                 + " AND NOT first_response_escalated AND NOT deleted"
                 + " ORDER BY first_response_due_at LIMIT 500 FOR UPDATE SKIP LOCKED"))
                 .as("выборка эскалации первого ответа")
                 .contains("idx_requests_first_response_escalation").doesNotContain("Seq Scan");
-        assertThat(plan("SELECT * FROM requests WHERE resolution_overdue"
-                + " AND NOT resolution_escalated AND NOT deleted"
-                + " ORDER BY resolution_due_at LIMIT 500 FOR UPDATE SKIP LOCKED"))
+        assertThat(plan("SELECT * FROM requests WHERE status IN ('NEW', 'CONTACTED',"
+                + " 'IN_PROGRESS') AND resolution_overdue AND NOT resolution_escalated"
+                + " AND NOT deleted ORDER BY resolution_due_at LIMIT 500 FOR UPDATE SKIP LOCKED"))
                 .as("выборка эскалации решения")
                 .contains("idx_requests_resolution_escalation").doesNotContain("Seq Scan");
     }

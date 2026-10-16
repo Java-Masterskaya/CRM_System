@@ -110,6 +110,10 @@ public interface RequestRepository extends Repository<Request, UUID> {
     /**
      * Блокирует порцию заявок, у которых просрочен срок первого ответа, а эскалация по нему ещё
      * не отправлена (T-061). Строки, которые держит другой экземпляр приложения, пропускаются.
+     *
+     * <p>Статус — тот же, что при пометке ({@link #markFirstResponseOverdue}): заявка всё ещё в
+     * {@link RequestStatus#NEW}. Если на неё успели ответить между пометкой и эскалацией —
+     * например, проход прервался и эскалация досталась следующему, — письмо уже не нужно.
      * Условие совпадает с частичным индексом {@code idx_requests_first_response_escalation} —
      * менять только вместе.
      */
@@ -117,7 +121,8 @@ public interface RequestRepository extends Repository<Request, UUID> {
     @Query(nativeQuery = true, value =
             """
             SELECT * FROM requests
-            WHERE first_response_overdue AND NOT first_response_escalated AND NOT deleted
+            WHERE status = 'NEW' AND first_response_overdue AND NOT first_response_escalated
+              AND NOT deleted
             ORDER BY first_response_due_at
             LIMIT :limit
             FOR UPDATE SKIP LOCKED
@@ -125,13 +130,16 @@ public interface RequestRepository extends Repository<Request, UUID> {
     List<Request> lockFirstResponseToEscalate(@Param("limit") int limit);
 
     /**
-     * То же для срока решения; индекс — {@code idx_requests_resolution_escalation}.
+     * То же для срока решения. Статус — как в {@link #markResolutionOverdue}: заявку, которую
+     * закрыли или поставили на ожидание между пометкой и эскалацией, письмо не беспокоит. Индекс —
+     * {@code idx_requests_resolution_escalation}.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     @Query(nativeQuery = true, value =
             """
             SELECT * FROM requests
-            WHERE resolution_overdue AND NOT resolution_escalated AND NOT deleted
+            WHERE status IN ('NEW', 'CONTACTED', 'IN_PROGRESS') AND resolution_overdue
+              AND NOT resolution_escalated AND NOT deleted
             ORDER BY resolution_due_at
             LIMIT :limit
             FOR UPDATE SKIP LOCKED
