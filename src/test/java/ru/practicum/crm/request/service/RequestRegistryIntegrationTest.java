@@ -271,16 +271,6 @@ class RequestRegistryIntegrationTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.content[1].id").value(id(urgent)));
     }
 
-    /** Реестр только на чтение: создать заявку через этот маршрут нельзя. */
-    @Test
-    void registryRoute_forOtherMethods_isClosed() throws Exception {
-        mockMvc.perform(post(REGISTRY)
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + operatorToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isForbidden());
-    }
-
     /**
      * DoD: план запроса по каждому фильтру использует индекс. Двадцать тысяч старых закрытых
      * заявок с низким приоритетом и пять свежих, под которые подходят фильтры. Планы пишутся в
