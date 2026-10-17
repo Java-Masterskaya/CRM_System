@@ -189,6 +189,27 @@ class SecurityAuthorizationRulesTest {
                 .andExpect(status().isNotFound());
     }
 
+    /**
+     * Реестр заявок (T-040): маршрут пропускает любой запрос с токеном, право
+     * {@code REQUEST_READ_ALL} проверяет сервис. Открыто только чтение: другой метод на том же
+     * пути по-прежнему закрыт.
+     */
+    @Test
+    void givenAnyPermission_whenReadingRequestRegistry_thenUrlRulePassesOnlyGetToMethodCheck()
+            throws Exception {
+        mockMvc.perform(get("/admin/requests").with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/admin/requests").with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenNoCredentials_whenReadingRequestRegistry_thenReturnsUnauthorized()
+            throws Exception {
+        mockMvc.perform(get("/admin/requests").with(anonymous()))
+                .andExpect(status().isUnauthorized());
+    }
+
     private RequestPostProcessor jwtWithAuthority(String authority) {
         return jwt()
                 .jwt(token -> token

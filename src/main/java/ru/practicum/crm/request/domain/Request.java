@@ -179,10 +179,16 @@ public class Request extends TenantScopedEntity {
     }
 
     /**
-     * Просрочен хотя бы один из сроков — первого ответа или решения.
+     * Заявка просрочена сейчас: истёк срок, который для её статуса ещё считается. Срок первого
+     * ответа — пока заявка в {@link RequestStatus#NEW}, срок решения — пока она не завершена.
+     *
+     * <p>Признаки просрочки при этом остаются и у закрытых заявок: это факт о сроке, по нему
+     * считается доля закрытых в срок (T-094). Так же это правило записано в фильтре реестра
+     * ({@code RequestSpecifications.overdue}) — менять только вместе.
      */
     public boolean isOverdue() {
-        return firstResponseOverdue || resolutionOverdue;
+        return firstResponseOverdue && status == RequestStatus.NEW
+                || resolutionOverdue && !status.isTerminal();
     }
 
     @Override
