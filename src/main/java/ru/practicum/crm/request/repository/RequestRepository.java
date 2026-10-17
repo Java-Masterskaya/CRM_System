@@ -31,6 +31,13 @@ public interface RequestRepository extends Repository<Request, UUID> {
 
     <S extends Request> S save(S request);
 
+    /**
+     * Сохраняет и сразу пишет изменения в базу. Версия заявки растёт при записи, а вызывающему
+     * нужна уже новая — её получает клиент для следующего изменения (T-044). Одновременное
+     * изменение той же версии тоже обнаруживается здесь, а не при фиксации транзакции.
+     */
+    <S extends Request> S saveAndFlush(S request);
+
     Optional<Request> findByIdAndTenantIdAndDeletedFalse(UUID id, UUID tenantId);
 
     Page<Request> findByTenantIdAndDeletedFalse(UUID tenantId, Pageable pageable);
