@@ -81,6 +81,8 @@ public class SecurityConfig {
                         // которого нет в этом списке, по-прежнему закрыт (T-022).
                         authorize.requestMatchers("/admin/tenant/settings")
                                 .authenticated()
+                                .requestMatchers(HttpMethod.PUT, "/admin/requests/*/status")
+                                .authenticated()
                                 .requestMatchers(
                                         HttpMethod.PUT,
                                         "/admin/requests/*/assignee"
