@@ -128,7 +128,27 @@ class DefaultAccessSeedMigrationIntegrationTest extends BaseIntegrationTest {
 
     @AfterEach
     void restoreTenantIsolationPolicies() {
-        // DROP COLUMN CASCADE removes RLS policies; restore them for subsequent tests.
+        // Не оставляем зависимость от ключа, который может отсутствовать
+        // во время имитации старой схемы.
+        jdbcTemplate.execute(
+                "ALTER TABLE idempotency_records "
+                        + "DROP CONSTRAINT IF EXISTS fk_idempotency_records_user"
+        );
+
+        // Восстанавливаем отсутствующие миграции, если тест завершился раньше.
+        flyway.migrate();
+
+        // Возвращаем FK после восстановления ограничения T-021.
+        jdbcTemplate.execute(
+                """
+                ALTER TABLE idempotency_records
+                ADD CONSTRAINT fk_idempotency_records_user
+                    FOREIGN KEY (tenant_id, user_id)
+                    REFERENCES users (tenant_id, id)
+                """
+        );
+
+        // Восстанавливаем RLS-политики, которые могли удалиться через CASCADE.
         jdbcTemplate.execute("SELECT crm_apply_tenant_rls()");
     }
 
@@ -138,6 +158,10 @@ class DefaultAccessSeedMigrationIntegrationTest extends BaseIntegrationTest {
         jdbcTemplate.execute("DROP FUNCTION IF EXISTS seed_tenant_access_defaults(UUID)");
         jdbcTemplate.execute("ALTER TABLE role_permissions DROP CONSTRAINT IF EXISTS "
                 + "fk_role_permissions_role");
+        jdbcTemplate.execute(
+                "ALTER TABLE idempotency_records "
+                        + "DROP CONSTRAINT IF EXISTS fk_idempotency_records_user"
+        );
         jdbcTemplate.execute("ALTER TABLE role_permissions DROP CONSTRAINT IF EXISTS "
                 + "fk_role_permissions_permission");
         jdbcTemplate.execute("ALTER TABLE user_roles DROP CONSTRAINT IF EXISTS fk_user_roles_role");
