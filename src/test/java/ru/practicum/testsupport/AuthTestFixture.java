@@ -114,6 +114,56 @@ public class AuthTestFixture {
         );
     }
 
+    /**
+     * Assigns multiple permissions to the user in a single role.
+     * Creates one role, inserts each permission, and links them.
+     */
+    public void grantAllPermissions(
+            TestTenant tenant,
+            TestUser user,
+            String... permissionCodes
+    ) {
+        UUID roleId = UUID.randomUUID();
+
+        jdbcTemplate.update(
+                """
+                        INSERT INTO roles (
+                            id, tenant_id, code, name, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, NOW(), NOW())
+                """,
+                roleId, tenant.id(), "AUTH_TEST_ROLE", "Authentication test role"
+        );
+
+        for (String permissionCode : permissionCodes) {
+            UUID permissionId = UUID.randomUUID();
+
+            jdbcTemplate.update(
+                    """
+                            INSERT INTO permissions (
+                                id, tenant_id, code, created_at, updated_at
+                            ) VALUES (?, ?, ?, NOW(), NOW())
+                    """,
+                    permissionId, tenant.id(), permissionCode
+            );
+
+            jdbcTemplate.update(
+                    """
+                            INSERT INTO role_permissions (tenant_id, role_id, permission_id)
+                            VALUES (?, ?, ?)
+                    """,
+                    tenant.id(), roleId, permissionId
+            );
+        }
+
+        jdbcTemplate.update(
+                """
+                        INSERT INTO user_roles (tenant_id, user_id, role_id)
+                        VALUES (?, ?, ?)
+                """,
+                tenant.id(), user.id(), roleId
+        );
+    }
+
     public record TestTenant(UUID id, String slug) {
     }
 
