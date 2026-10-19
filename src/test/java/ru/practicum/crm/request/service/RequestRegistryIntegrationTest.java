@@ -217,7 +217,11 @@ class RequestRegistryIntegrationTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
 
-    /** DoD: неверное значение фильтра — ошибка валидации с именем параметра, а не пустой список. */
+    /**
+     * DoD: неверное значение фильтра — ошибка валидации с именем параметра, а не пустой список.
+     * Страница так далеко, что её смещение не помещается в {@code int}, — тоже 400, а не 500
+     * (ревью #201).
+     */
     @ParameterizedTest
     @CsvSource({
         "status, CLOSED",
@@ -228,7 +232,8 @@ class RequestRegistryIntegrationTest extends BaseIntegrationTest {
         "sort, subject",
         "sort, 'createdAt,up'",
         "size, 101",
-        "page, -1"
+        "page, -1",
+        "page, 999999999"
     })
     void list_withInvalidFilterValue_isValidationErrorNamingParameter(String name, String value)
             throws Exception {

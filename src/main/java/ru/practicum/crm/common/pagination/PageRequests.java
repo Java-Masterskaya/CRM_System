@@ -42,6 +42,8 @@ public final class PageRequests {
         } else if (resolvedSize > MAX_SIZE) {
             errors.add(ValidationError.ofParameter(SIZE_PARAM,
                     "должно быть не больше " + MAX_SIZE));
+        } else if (resolvedPage > maxPage(resolvedSize)) {
+            errors.add(pageTooFar(resolvedSize));
         }
 
         Sort resolvedSort = withTieBreaker(parseSort(sort, allowedSortFields, errors));
@@ -59,7 +61,9 @@ public final class PageRequests {
      * @throws IllegalArgumentException если страница не задана ({@link Pageable#unpaged()}) — это
      *     ошибка вызывающего кода, клиент такой запрос прислать не может
      * @throws ApiException {@code VALIDATION_FAILED} с параметром {@code size}, если страница
-     *     больше {@link #MAX_SIZE}: размер приходит от клиента, и ответ должен быть 400
+     *     больше {@link #MAX_SIZE}, или с параметром {@code page}, если страница так далеко, что
+     *     её смещение не помещается в {@code int}: размер и номер приходят от клиента, и ответ
+     *     должен быть 400
      */
     public static Pageable requireBounded(Pageable pageable) {
         if (pageable.isUnpaged()) {
@@ -69,7 +73,25 @@ public final class PageRequests {
             throw new ApiException(ErrorCode.VALIDATION_FAILED, null, List.of(ValidationError
                     .ofParameter(SIZE_PARAM, "должно быть не больше " + MAX_SIZE)));
         }
+        if (pageable.getPageNumber() > maxPage(pageable.getPageSize())) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, null,
+                    List.of(pageTooFar(pageable.getPageSize())));
+        }
         return pageable;
+    }
+
+    /**
+     * Самая дальняя страница при этом размере. Смещение страницы — номер, умноженный на размер, —
+     * база получает как {@code int}; дальше Spring Data отказывает исключением, и клиент получил
+     * бы 500 вместо ошибки в своём запросе.
+     */
+    private static int maxPage(int size) {
+        return Integer.MAX_VALUE / size;
+    }
+
+    private static ValidationError pageTooFar(int size) {
+        return ValidationError.ofParameter(PAGE_PARAM,
+                "при размере страницы " + size + " должно быть не больше " + maxPage(size));
     }
 
     private static Sort withTieBreaker(Sort sort) {
