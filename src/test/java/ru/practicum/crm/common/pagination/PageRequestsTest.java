@@ -107,6 +107,30 @@ class PageRequestsTest {
                 .containsExactly("page", "size", "sort");
     }
 
+    /**
+     * Смещение страницы — номер на размер — база получает как {@code int}: дальше Spring Data
+     * отказывает исключением, и вместо ошибки в запросе клиент получил бы 500 (ревью #201).
+     */
+    @Test
+    void toPageable_whenPageOffsetExceedsIntRange_rejectsWithValidationErrorOnPage() {
+        ApiException thrown = catchThrowableOfType(
+                () -> PageRequests.toPageable(999_999_999, 100, null, ALLOWED),
+                ApiException.class);
+
+        assertThat(thrown.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+        assertThat(thrown.getErrors()).containsExactly(ValidationError.ofParameter("page",
+                "при размере страницы 100 должно быть не больше 21474836"));
+    }
+
+    /** Самая дальняя допустимая страница ещё проходит: её смещение помещается в {@code int}. */
+    @Test
+    void toPageable_whenPageOffsetFitsIntRange_acceptsFarthestPage() {
+        Pageable farthest = PageRequests.toPageable(Integer.MAX_VALUE / 100, 100, null, ALLOWED);
+
+        assertThat(farthest.getOffset()).isLessThanOrEqualTo(Integer.MAX_VALUE);
+        assertThat(farthest.getPageNumber()).isEqualTo(21_474_836);
+    }
+
     @Test
     void toPageable_whenSortIsBlank_rejectsWithValidationError() {
         assertThatThrownBy(() -> PageRequests.toPageable(0, 20, List.of(" "), ALLOWED))
@@ -129,6 +153,17 @@ class PageRequestsTest {
         assertThat(thrown.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
         assertThat(thrown.getErrors())
                 .containsExactly(ValidationError.ofParameter("size", "должно быть не больше 100"));
+    }
+
+    /** Та же граница для страницы, собранной в обход {@link PageRequests#toPageable}. */
+    @Test
+    void requireBounded_whenPageOffsetExceedsIntRange_rejectsWithValidationErrorOnPage() {
+        ApiException thrown = catchThrowableOfType(
+                () -> PageRequests.requireBounded(PageRequest.of(999_999_999, 100)),
+                ApiException.class);
+
+        assertThat(thrown.getErrors()).extracting(ValidationError::parameter)
+                .containsExactly("page");
     }
 
     @Test

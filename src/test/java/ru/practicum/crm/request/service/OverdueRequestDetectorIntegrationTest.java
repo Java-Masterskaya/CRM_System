@@ -19,19 +19,18 @@ import org.flywaydb.core.api.configuration.FluentConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.request.config.OverdueDetectionProperties;
-import ru.practicum.crm.request.domain.Request;
 import ru.practicum.crm.request.repository.RequestRepository;
 
 /**
  * Фоновая проверка просроченных заявок на реальной базе (T-060): какие заявки помечаются и
- * какие нет, повторный проход, остановка между порциями, два экземпляра приложения, фильтр
- * реестра, планы запросов и миграция на базе, где заявки уже есть.
+ * какие нет, повторный проход, остановка между порциями, два экземпляра приложения, планы
+ * запросов и миграция на базе, где заявки уже есть. Фильтр реестра «просроченные» — в
+ * {@code RequestRegistryIntegrationTest} (T-040).
  *
  * <p>Заявки создаются запросами SQL: так в одном тесте видны и сроки, и статус, и признаки.
  */
@@ -59,14 +58,12 @@ class OverdueRequestDetectorIntegrationTest extends BaseIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     private UUID tenantA;
-    private UUID tenantB;
     private Instant hourAgo;
     private Instant tomorrow;
 
     @BeforeEach
     void setUp() {
         tenantA = insertTenant();
-        tenantB = insertTenant();
         Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         hourAgo = now.minus(Duration.ofHours(1));
         tomorrow = now.plus(Duration.ofDays(1));
@@ -217,27 +214,10 @@ class OverdueRequestDetectorIntegrationTest extends BaseIntegrationTest {
         assertThat(row(held)).containsEntry("resolution_overdue", true);
     }
 
-    /** DoD: просроченные заявки доступны отдельным фильтром реестра — только своего арендатора. */
-    @Test
-    void findOverdueByTenantId_returnsOverdueByEitherDeadlineOfThatTenantOnly() {
-        final UUID byFirstResponse = insertRequest(tenantA, "NEW", hourAgo, tomorrow);
-        final UUID byResolution = insertRequest(tenantA, "IN_PROGRESS", null, hourAgo);
-        insertRequest(tenantA, "NEW", tomorrow, tomorrow);
-        UUID deleted = insertRequest(tenantA, "NEW", hourAgo, hourAgo);
-        insertRequest(tenantB, "NEW", hourAgo, hourAgo);
-        detector.detect();
-        jdbcTemplate.update("UPDATE requests SET deleted = TRUE WHERE id = ?", deleted);
-
-        List<UUID> overdue = requests.findOverdueByTenantId(tenantA, PageRequest.of(0, 20))
-                .map(Request::getId).getContent();
-
-        assertThat(overdue).containsExactlyInAnyOrder(byFirstResponse, byResolution);
-    }
-
     /**
      * Двадцать тысяч завершённых заявок с истёкшими сроками и полсотни будущих: обе выборки
-     * проверки идут по своим частичным индексам, в которых завершённых заявок нет, а фильтр
-     * реестра — по индексу просроченных.
+     * проверки идут по своим частичным индексам, в которых завершённых заявок нет. Фильтр реестра
+     * «просроченные» и его план проверяет {@code RequestRegistryIntegrationTest} (T-040).
      */
     @Test
     void selections_whenTableIsLarge_useTheirPartialIndexes() {
@@ -266,10 +246,6 @@ class OverdueRequestDetectorIntegrationTest extends BaseIntegrationTest {
                 + " ORDER BY resolution_due_at LIMIT 500 FOR UPDATE SKIP LOCKED"))
                 .as("выборка просрочки решения")
                 .contains("idx_requests_resolution_check").doesNotContain("Seq Scan");
-        assertThat(plan("SELECT * FROM requests WHERE tenant_id = '" + tenantA + "'"
-                + " AND deleted = false AND (first_response_overdue OR resolution_overdue)"))
-                .as("фильтр реестра «просроченные»")
-                .contains("idx_requests_tenant_overdue").doesNotContain("Seq Scan");
     }
 
     /**

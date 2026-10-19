@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
@@ -47,16 +48,13 @@ public interface RequestRepository extends Repository<Request, UUID> {
     boolean existsByIdAndTenantIdAndDeletedFalse(UUID id, UUID tenantId);
 
     /**
-     * Просроченные заявки арендатора — по любому из сроков; для фильтра реестра (T-040).
-     * Обслуживается частичным индексом {@code idx_requests_tenant_overdue}.
+     * Страница заявок по условию — для реестра с фильтрами (T-040). Условие собирается из
+     * {@link RequestSpecifications} и всегда начинается с {@link RequestSpecifications#ofTenant}.
+     *
+     * <p>Метод взят из {@code JpaSpecificationExecutor} поимённо, как и остальные: целиком этот
+     * интерфейс открыл бы, например, удаление по условию.
      */
-    @Query(
-            """
-            SELECT r FROM Request r
-            WHERE r.tenantId = :tenantId AND r.deleted = false
-              AND (r.firstResponseOverdue = true OR r.resolutionOverdue = true)
-            """)
-    Page<Request> findOverdueByTenantId(@Param("tenantId") UUID tenantId, Pageable pageable);
+    Page<Request> findAll(Specification<Request> specification, Pageable pageable);
 
     /**
      * Помечает порцию заявок, у которых истёк срок первого ответа, а они всё ещё в

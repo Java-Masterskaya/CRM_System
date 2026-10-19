@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import ru.practicum.crm.common.model.RequestPriority;
 
 class RequestTest {
@@ -76,9 +78,9 @@ class RequestTest {
         assertThat(request.isDeleted()).isTrue();
     }
 
-    /** Заявка просрочена, если истёк хотя бы один из сроков (T-060). */
+    /** Заявка в NEW просрочена, если истёк хотя бы один из сроков (T-060). */
     @Test
-    void isOverdue_whenEitherDeadlineMissed_isTrue() {
+    void isOverdue_whenEitherDeadlineMissedInNew_isTrue() {
         request.setFirstResponseOverdue(true);
         assertThat(request.isOverdue()).isTrue();
 
@@ -88,6 +90,33 @@ class RequestTest {
 
         request.setResolutionOverdue(false);
         assertThat(request.isOverdue()).isFalse();
+    }
+
+    /**
+     * Просрочка считается только по тем срокам, что ещё идут для статуса заявки (T-040, ревью
+     * #199): срок первого ответа — в NEW, срок решения — до завершения. Признаки при этом
+     * остаются: закрытая с нарушением заявка — не «просроченная», но и не «закрытая в срок».
+     */
+    @ParameterizedTest
+    @CsvSource({
+        "NEW, true, false, true",
+        "CONTACTED, true, false, false",
+        "CONTACTED, false, true, true",
+        "IN_PROGRESS, false, true, true",
+        "ON_HOLD, false, true, true",
+        "DONE, true, true, false",
+        "REJECTED, false, true, false",
+        "CANCELLED, true, true, false"
+    })
+    void isOverdue_countsOnlyDeadlinesStillRunningForStatus(RequestStatus status,
+            boolean firstResponseOverdue, boolean resolutionOverdue, boolean expected) {
+        request.setStatus(status);
+        request.setFirstResponseOverdue(firstResponseOverdue);
+        request.setResolutionOverdue(resolutionOverdue);
+
+        assertThat(request.isOverdue()).isEqualTo(expected);
+        assertThat(request.isFirstResponseOverdue()).isEqualTo(firstResponseOverdue);
+        assertThat(request.isResolutionOverdue()).isEqualTo(resolutionOverdue);
     }
 
     @Test
