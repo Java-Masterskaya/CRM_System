@@ -36,14 +36,16 @@ import ru.practicum.crm.tenant.api.TenantContext;
  *   <li>переход разрешён матрицей (T-043) — иначе 409.</li>
  * </ol>
  *
- * <p>Исходящее событие о смене статуса здесь не записывается: отправителя для него пока нет.
- * Письмо автору заявки добавит T-070 — в эту же транзакцию.
+ * <p>В той же транзакции записывается письмо автору заявки о смене статуса (T-070,
+ * {@link RequestStatusNotifier}): отклонённый или откатившийся перевод писем не порождает, а
+ * каждый состоявшийся — ровно одно.
  */
 @Service
 public class RequestStatusService {
 
     private final RequestRepository requests;
     private final RequestStatusHistoryRepository history;
+    private final RequestStatusNotifier notifier;
     private final CurrentUser currentUser;
 
     @SuppressFBWarnings(
@@ -53,9 +55,10 @@ public class RequestStatusService {
     private final TenantContext tenantContext;
 
     public RequestStatusService(RequestRepository requests, RequestStatusHistoryRepository history,
-            CurrentUser currentUser, TenantContext tenantContext) {
+            RequestStatusNotifier notifier, CurrentUser currentUser, TenantContext tenantContext) {
         this.requests = requests;
         this.history = history;
+        this.notifier = notifier;
         this.currentUser = currentUser;
         this.tenantContext = tenantContext;
     }
@@ -99,6 +102,7 @@ public class RequestStatusService {
         history.save(new RequestStatusChange(tenantId, requestId, from, target,
                 currentUser.id(), comment));
         Request saved = requests.saveAndFlush(request);
+        notifier.statusChanged(saved, from);
         return new RequestStatusResponse(saved.getId(), saved.getStatus(), saved.getVersion());
     }
 

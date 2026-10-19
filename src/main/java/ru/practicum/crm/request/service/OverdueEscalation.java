@@ -48,9 +48,6 @@ public class OverdueEscalation {
     /** Администраторы для эскалаций — те, кто управляет сроками. */
     static final String ADMIN_PERMISSION = "SLA_POLICY_MANAGE";
 
-    /** Вид объекта в ссылке события: по ней выбираются все письма одной заявки. */
-    static final String AGGREGATE_TYPE = "REQUEST";
-
     /** Пояс, если настроек арендатора нет: тот же, что у настроек по умолчанию (T-017). */
     static final ZoneId FALLBACK_ZONE = ZoneId.of("UTC");
 
@@ -136,14 +133,15 @@ public class OverdueEscalation {
         String dueAt = formatDueAt(dueAtOf(request, deadline), zone);
         for (UserContactDto recipient : recipients.values()) {
             Map<String, String> variables = Map.of(
-                    "recipientName", nameOf(recipient),
+                    "recipientName", recipient.displayName(),
                     "requestId", request.getId().toString(),
                     "requestSubject", request.getSubject(),
                     "deadlineName", deadline.title(),
                     "dueAt", dueAt);
-            outbox.publish(request.getTenantId(), EmailNotification.EVENT_TYPE, AGGREGATE_TYPE,
-                    request.getId(), new EmailNotification(recipient.email(),
-                            NotificationType.SLA_BREACHED, variables).toPayload());
+            EmailNotification letter = new EmailNotification(recipient.email(),
+                    NotificationType.SLA_BREACHED, variables);
+            outbox.publish(request.getTenantId(), EmailNotification.EVENT_TYPE,
+                    Request.AGGREGATE_TYPE, request.getId(), letter.toPayload());
         }
     }
 
@@ -157,11 +155,5 @@ public class OverdueEscalation {
     /** Срок по часам арендатора, с названием пояса: «15.10.2026 18:00 (Europe/Moscow)». */
     private static String formatDueAt(Instant dueAt, ZoneId zone) {
         return dueAt.atZone(zone).format(DUE_AT) + " (" + zone.getId() + ")";
-    }
-
-    /** Имя необязательно — без него письмо обращается по адресу. */
-    private static String nameOf(UserContactDto recipient) {
-        return recipient.name() == null || recipient.name().isBlank()
-                ? recipient.email() : recipient.name();
     }
 }

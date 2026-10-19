@@ -10,4 +10,9 @@ import java.util.UUID;
  * @param name имя; пусто, если пользователь его не указал
  */
 public record UserContactDto(UUID id, String email, String name) {
+
+    /** Как обратиться в письме: по имени, а если его нет — по адресу. */
+    public String displayName() {
+        return name == null || name.isBlank() ? email : name;
+    }
 }
