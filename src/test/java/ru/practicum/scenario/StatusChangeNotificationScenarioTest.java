@@ -20,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -28,6 +29,7 @@ import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import ru.practicum.crm.CrmApplication;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.outbox.service.OutboxProcessor;
 import ru.practicum.testsupport.AuthTestFixture;
@@ -40,7 +42,12 @@ import ru.practicum.testsupport.AuthTestFixture;
  * {@code ru.practicum.crm}: правила ArchUnit разрешают модулю обращаться к другому только через
  * его {@code api}, а здесь нужен сам обработчик очереди. Его расписание в тестах выключено, и
  * тест запускает проход сам.
+ *
+ * <p>Класс приложения указан явно: Spring Boot ищет его вверх по пакетам от пакета теста, а
+ * {@link CrmApplication} лежит в {@code ru.practicum.crm} — не на этом пути.
  */
+@SpringBootTest(classes = CrmApplication.class,
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @Import(AuthTestFixture.class)
 class StatusChangeNotificationScenarioTest extends BaseIntegrationTest {
