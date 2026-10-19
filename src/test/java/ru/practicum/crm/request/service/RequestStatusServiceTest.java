@@ -3,10 +3,12 @@ package ru.practicum.crm.request.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.Optional;
@@ -18,6 +20,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.util.ReflectionTestUtils;
 import ru.practicum.crm.common.error.ApiException;
@@ -48,10 +51,11 @@ class RequestStatusServiceTest {
     private final RequestRepository requests = mock(RequestRepository.class);
     private final RequestStatusHistoryRepository history =
             mock(RequestStatusHistoryRepository.class);
+    private final RequestStatusNotifier notifier = mock(RequestStatusNotifier.class);
     private final CurrentUser currentUser = mock(CurrentUser.class);
     private final TenantContext tenantContext = mock(TenantContext.class);
     private final RequestStatusService service =
-            new RequestStatusService(requests, history, currentUser, tenantContext);
+            new RequestStatusService(requests, history, notifier, currentUser, tenantContext);
 
     @BeforeEach
     void setUp() {
@@ -83,6 +87,23 @@ class RequestStatusServiceTest {
         assertThat(change.getToStatus()).isEqualTo(RequestStatus.DONE);
         assertThat(change.getAuthorId()).isEqualTo(OPERATOR_ID);
         assertThat(change.getComment()).isEqualTo("Отчёт отправлен клиенту");
+    }
+
+    /**
+     * T-070: состоявшийся переход — ровно одно письмо автору, о переходе из прежнего статуса в
+     * новый, и уже после записи заявки — в той же транзакции.
+     */
+    @Test
+    void changeStatus_allowedTransition_notifiesAuthorOnceAfterSaving() {
+        Request request = existing(RequestStatus.IN_PROGRESS);
+
+        service.changeStatus(REQUEST_ID, command(RequestStatus.ON_HOLD, null, VERSION));
+
+        InOrder order = inOrder(requests, notifier);
+        order.verify(requests).saveAndFlush(request);
+        order.verify(notifier).statusChanged(request, RequestStatus.IN_PROGRESS);
+        assertThat(request.getStatus()).isEqualTo(RequestStatus.ON_HOLD);
+        verifyNoMoreInteractions(notifier);
     }
 
     /** Комментарий необязателен; из одних пробелов — то же, что его нет. */
@@ -135,7 +156,7 @@ class RequestStatusServiceTest {
                             .containsExactly("#/comment");
                 });
 
-        verifyNoInteractions(requests, history);
+        verifyNoInteractions(requests, history, notifier);
     }
 
     @Test
@@ -196,8 +217,10 @@ class RequestStatusServiceTest {
         return change.getValue();
     }
 
+    /** Отклонённый перевод не меняет ни заявку, ни историю и письма не порождает. */
     private void verifyNothingSaved() {
         verify(history, never()).save(any());
         verify(requests, never()).saveAndFlush(any());
+        verifyNoInteractions(notifier);
     }
 }

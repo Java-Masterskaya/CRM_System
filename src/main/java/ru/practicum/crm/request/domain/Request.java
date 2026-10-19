@@ -32,6 +32,12 @@ import ru.practicum.crm.common.model.TenantScopedEntity;
 @Getter
 public class Request extends TenantScopedEntity {
 
+    /**
+     * Вид объекта в ссылке исходящего события о заявке: по ней выбираются все события одной
+     * заявки (письма об эскалации T-061, о смене статуса T-070).
+     */
+    public static final String AGGREGATE_TYPE = "REQUEST";
+
     @Setter
     @Column(name = "type_id")
     private UUID typeId;
