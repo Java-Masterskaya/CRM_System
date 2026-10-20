@@ -13,6 +13,7 @@ import ru.practicum.crm.notification.api.NotificationType;
 import ru.practicum.crm.outbox.api.OutboxPublisher;
 import ru.practicum.crm.request.api.RequestAssignmentService;
 import ru.practicum.crm.request.api.dto.RequestAssignmentDto;
+import ru.practicum.crm.request.api.dto.RequestAssignmentOutcome;
 import ru.practicum.crm.user.api.PermissionCode;
 import ru.practicum.crm.user.api.UserPermissionService;
 import ru.practicum.crm.user.api.UserService;
@@ -49,6 +50,20 @@ public class AssignmentService {
         }
 
         return result;
+    }
+
+    @Transactional
+    public RequestAssignmentDto take(UUID tenantId, UUID requestId, UUID actorId) {
+        ActiveUserDto candidate = requireCandidateEligible(tenantId, actorId);
+
+        RequestAssignmentOutcome outcome =
+                requestAssignmentService.takeUnassigned(tenantId, requestId, actorId);
+
+        if (outcome.changed()) {
+            notifyAuthor(tenantId, outcome.assignment(), candidate);
+        }
+
+        return outcome.assignment();
     }
 
     private ActiveUserDto requireCandidateEligible(UUID tenantId, UUID assigneeId) {
