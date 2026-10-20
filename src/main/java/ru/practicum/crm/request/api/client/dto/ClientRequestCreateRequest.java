@@ -6,7 +6,6 @@ import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
-import ru.practicum.crm.common.model.RequestPriority;
 import ru.practicum.crm.common.util.JsonDataParamsCopies;
 
 public record ClientRequestCreateRequest(
@@ -22,8 +21,6 @@ public record ClientRequestCreateRequest(
         String description,
 
         Map<String, Object> dataParams,
-
-        RequestPriority priority,
 
         Instant desiredDueAt
 ) {

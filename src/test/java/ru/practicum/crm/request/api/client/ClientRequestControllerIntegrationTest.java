@@ -90,6 +90,7 @@ class ClientRequestControllerIntegrationTest extends BaseIntegrationTest {
         request.put("authorId", UUID.randomUUID().toString());
         request.put("tenantId", UUID.randomUUID().toString());
         request.put("status", "DONE");
+        request.put("priority", "URGENT");
 
         MvcResult result = submit(
                 UUID.randomUUID().toString(),
@@ -330,6 +331,8 @@ class ClientRequestControllerIntegrationTest extends BaseIntegrationTest {
         assertThat(secondBody.path("id").asText())
                 .isEqualTo(firstBody.path("id").asText());
         assertThat(secondBody.path("status").asText()).isEqualTo("NEW");
+        assertThat(secondBody.path("createdAt").asText())
+                .isEqualTo(firstBody.path("createdAt").asText());
         assertThat(countRequests()).isEqualTo(1);
         assertThat(countIdempotencyRecords(key)).isEqualTo(1);
     }
@@ -418,6 +421,38 @@ class ClientRequestControllerIntegrationTest extends BaseIntegrationTest {
             start.countDown();
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    void create_whenIdempotencyKeyExceedsLimit_returnsValidationErrorWithoutSaving()
+            throws Exception {
+        String key = "k".repeat(129);
+
+        ObjectNode request = requestBody(
+                activeTypeId,
+                "Заявка с длинным ключом",
+                "Описание заявки.",
+                null,
+                null
+        );
+
+        MvcResult result = submit(
+                key,
+                objectMapper.writeValueAsString(request)
+        );
+
+        assertThat(result.getResponse().getStatus())
+                .isEqualTo(HttpStatus.BAD_REQUEST.value());
+
+        JsonNode response = readBody(result);
+
+        assertThat(response.path("code").asText())
+                .isEqualTo("VALIDATION_FAILED");
+        assertThat(response.path("errors").toString())
+                .contains("Idempotency-Key");
+
+        assertThat(countRequests()).isZero();
+        assertThat(countIdempotencyRecords(key)).isZero();
     }
 
     private MvcResult submit(String key, String payload) throws Exception {

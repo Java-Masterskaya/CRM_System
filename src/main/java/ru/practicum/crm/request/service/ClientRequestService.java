@@ -10,7 +10,6 @@ import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.idempotency.IdempotencyResult;
 import ru.practicum.crm.common.idempotency.IdempotencyService;
-import ru.practicum.crm.common.model.RequestPriority;
 import ru.practicum.crm.request.api.client.dto.ClientRequestCreateRequest;
 import ru.practicum.crm.request.api.client.dto.ClientRequestCreatedResponse;
 import ru.practicum.crm.request.domain.Request;
@@ -101,10 +100,9 @@ public class ClientRequestService {
 
         entity.setTypeId(type.getId());
         entity.setDataParams(request.dataParams());
-        entity.setPriority(RequestPriority.resolve(
-                request.priority(),
-                type.getDefaultPriority()
-        ));
+        entity.setPriority(type.getDefaultPriority() == null
+                ? ru.practicum.crm.common.model.RequestPriority.NORMAL
+                : type.getDefaultPriority());
         entity.setDesiredDueAt(request.desiredDueAt());
 
         Request saved = requestRepository.save(entity);
@@ -120,7 +118,7 @@ public class ClientRequestService {
                 saved.getPriority(),
                 saved.getStatus(),
                 saved.getDesiredDueAt(),
-                saved.getCreatedAt(),
+                saved.getCreatedAt().toInstant(),
                 saved.getFirstResponseDueAt(),
                 saved.getResolutionDueAt()
         );

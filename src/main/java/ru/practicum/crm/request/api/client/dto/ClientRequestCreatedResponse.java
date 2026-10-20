@@ -1,7 +1,6 @@
 package ru.practicum.crm.request.api.client.dto;
 
 import java.time.Instant;
-import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.UUID;
 import ru.practicum.crm.common.model.RequestPriority;
@@ -17,7 +16,7 @@ public record ClientRequestCreatedResponse(
         RequestPriority priority,
         RequestStatus status,
         Instant desiredDueAt,
-        OffsetDateTime createdAt,
+        Instant createdAt,
         Instant firstResponseDueAt,
         Instant resolutionDueAt
 ) {
