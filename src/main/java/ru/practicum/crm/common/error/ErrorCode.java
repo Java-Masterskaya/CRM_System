@@ -44,13 +44,18 @@ public enum ErrorCode {
     SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "Сервис временно недоступен",
             "Сервис временно не может обработать запрос. Повторите позже."),
     CLIENT_ERROR(HttpStatus.BAD_REQUEST, "Ошибка запроса",
-            "Запрос не может быть выполнен.");
+            "Запрос не может быть выполнен."),
+    IDEMPOTENCY_KEY_REUSED(
+            HttpStatus.CONFLICT,
+            "Ключ идемпотентности уже использован",
+            "Этот ключ уже использован с другим содержимым запроса."
+    );
 
     private static final String TYPE_BASE = "https://crm.example/problems/";
 
     private static final Set<ErrorCode> DOMAIN_SPECIFIC = EnumSet.of(VALIDATION_FAILED,
             INVALID_CREDENTIALS, INVALID_TRANSITION, STALE_VERSION, ALREADY_EXISTS,
-            REQUEST_CLOSED);
+            REQUEST_CLOSED, IDEMPOTENCY_KEY_REUSED);
 
     private static final Set<ErrorCode> FALLBACK_ONLY = EnumSet.of(CLIENT_ERROR);
 

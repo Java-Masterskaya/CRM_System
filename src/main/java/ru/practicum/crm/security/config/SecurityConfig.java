@@ -93,6 +93,11 @@ public class SecurityConfig {
                                 .requestMatchers("/analytics/**")
                                 .hasAuthority(PermissionCode.ANALYTICS_READ.name())
                                 .requestMatchers(
+                                        HttpMethod.POST,
+                                        "/client/requests"
+                                )
+                                .hasAuthority(PermissionCode.REQUEST_CREATE.name())
+                                .requestMatchers(
                                         "/admin/**",
                                         "/client/**"
                                 )
