@@ -42,6 +42,19 @@ public final class RequestSpecifications {
         return (root, query, cb) -> root.get("status").in(statuses);
     }
 
+    /** Не завершены: статус не терминальный. */
+    public static Specification<Request> notFinished() {
+        return inStatuses(NOT_FINISHED);
+    }
+
+    /**
+     * Назначены на этого пользователя (очередь оператора, T-052). Индекс —
+     * {@code idx_requests_tenant_assignee_queue}.
+     */
+    public static Specification<Request> assignedTo(UUID assigneeId) {
+        return (root, query, cb) -> cb.equal(root.get("assigneeId"), assigneeId);
+    }
+
     /**
      * Заданного типа. Индекс — {@code idx_requests_type_id}: тип принадлежит одному арендатору, и
      * индекс по типу уже сужает выборку до него — составной с {@code tenant_id} его бы дублировал.
