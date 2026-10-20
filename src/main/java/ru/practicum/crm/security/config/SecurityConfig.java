@@ -90,8 +90,15 @@ public class SecurityConfig {
                                 .hasAuthority(PermissionCode.REQUEST_ASSIGN.name())
                                 .requestMatchers(HttpMethod.GET, "/admin/requests")
                                 .authenticated()
+                                .requestMatchers(HttpMethod.GET, "/admin/queue")
+                                .authenticated()
                                 .requestMatchers("/analytics/**")
                                 .hasAuthority(PermissionCode.ANALYTICS_READ.name())
+                                .requestMatchers(
+                                        HttpMethod.POST,
+                                        "/client/requests"
+                                )
+                                .hasAuthority(PermissionCode.REQUEST_CREATE.name())
                                 .requestMatchers(
                                         "/admin/**",
                                         "/client/**"
