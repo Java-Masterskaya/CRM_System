@@ -171,7 +171,7 @@ class SecurityAuthorizationRulesTest {
     @Test
     void givenClientPermission_whenCallingUnmappedClientRoute_thenReturnsForbidden()
             throws Exception {
-        mockMvc.perform(get("/client/requests")
+        mockMvc.perform(get("/client/unmapped-check")
                         .with(jwtWithAuthority("REQUEST_READ_OWN")))
                 .andExpect(status().isForbidden());
     }

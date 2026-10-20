@@ -28,7 +28,7 @@ public final class PageRequests {
     }
 
     public static Pageable toPageable(Integer page, Integer size, List<String> sort,
-            Set<String> allowedSortFields) {
+                                      Set<String> allowedSortFields) {
         List<ValidationError> errors = new ArrayList<>();
 
         int resolvedPage = page == null ? DEFAULT_PAGE : page;
@@ -52,6 +52,31 @@ public final class PageRequests {
             throw new ApiException(ErrorCode.VALIDATION_FAILED, null, errors);
         }
         return PageRequest.of(resolvedPage, resolvedSize, resolvedSort);
+    }
+
+    /**
+     * Создаёт страницу по общему контракту, ограничивая слишком большой размер
+     * максимально допустимым. Остальные параметры проверяются как обычно.
+     *
+     * @param page              номер страницы, начиная с нуля
+     * @param size              запрошенный размер страницы
+     * @param sort              параметры сортировки
+     * @param allowedSortFields разрешённые поля сортировки
+     * @return страница с размером не больше MAX_SIZE
+     */
+    public static Pageable toPageableClampingSize(
+            Integer page,
+            Integer size,
+            List<String> sort,
+            Set<String> allowedSortFields
+    ) {
+        Integer boundedSize = size;
+
+        if (size != null && size > MAX_SIZE) {
+            boundedSize = MAX_SIZE;
+        }
+
+        return toPageable(page, boundedSize, sort, allowedSortFields);
     }
 
     /**
@@ -102,7 +127,7 @@ public final class PageRequests {
     }
 
     private static Sort parseSort(List<String> sort, Set<String> allowedSortFields,
-            List<ValidationError> errors) {
+                                  List<ValidationError> errors) {
         if (sort == null || sort.isEmpty()) {
             return Sort.unsorted();
         }
@@ -117,7 +142,7 @@ public final class PageRequests {
     }
 
     private static Sort.Order parseOrder(String expression, Set<String> allowedSortFields,
-            List<ValidationError> errors) {
+                                         List<ValidationError> errors) {
         if (expression == null || expression.isBlank()) {
             errors.add(ValidationError.ofParameter(SORT_PARAM, "не должно быть пустым"));
             return null;
