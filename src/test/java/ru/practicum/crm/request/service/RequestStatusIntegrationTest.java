@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +55,9 @@ class RequestStatusIntegrationTest extends BaseIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private MeterRegistry registry;
+
     private AuthTestFixture.TestTenant tenant;
     private UUID operatorId;
     private String operatorToken;
@@ -94,6 +98,29 @@ class RequestStatusIntegrationTest extends BaseIntegrationTest {
                 "to_status", "DONE",
                 "author_id", operatorId,
                 "comment", "Отчёт отправлен клиенту"));
+    }
+
+    /**
+     * Закрытия в срок и с нарушением увеличивает разные счетчики, оба с меткой арендатора.
+     * Перевод не в конечный статус закрытие не считает.
+     */
+    @Test
+    void changeStatus_whenClosedOnTimeAndLate_increasesDifferentCounters() throws Exception {
+        UUID onTime = insertRequest(tenant, "IN_PROGRESS");
+        UUID late = insertRequest(tenant, "IN_PROGRESS");
+        jdbcTemplate.update("UPDATE requests SET first_response_overdue = TRUE WHERE id = ?",
+                late);
+        UUID stillOpen = insertRequest(tenant, "NEW");
+
+        changeStatus(stillOpen, operatorToken, body("CONTACTED", null, 0))
+                .andExpect(status().isOk());
+        changeStatus(onTime, operatorToken, body("DONE", null, 0))
+                .andExpect(status().isOk());
+        changeStatus(late, operatorToken, body("DONE", null, 0))
+                .andExpect(status().isOk());
+
+        assertThat(closedCount(RequestSlaMetrics.ON_TIME)).isEqualTo(1);
+        assertThat(closedCount(RequestSlaMetrics.BREACHED)).isEqualTo(1);
     }
 
     /**
@@ -330,6 +357,14 @@ class RequestStatusIntegrationTest extends BaseIntegrationTest {
                 + " 'Нужен отчёт', ?, ?, now(), now())", id, tenantOfRequest.id(), status,
                 authorId);
         return id;
+    }
+
+    private double closedCount(String outcome) {
+        return registry.get(RequestSlaMetrics.CLOSED)
+                .tag(RequestSlaMetrics.OUTCOME, outcome)
+                .tag(RequestSlaMetrics.TENANT, tenant.id().toString())
+                .counter()
+                .count();
     }
 
     private Map<String, Object> request(UUID id) {

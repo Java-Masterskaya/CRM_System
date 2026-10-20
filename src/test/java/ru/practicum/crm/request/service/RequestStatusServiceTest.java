@@ -51,11 +51,13 @@ class RequestStatusServiceTest {
     private final RequestRepository requests = mock(RequestRepository.class);
     private final RequestStatusHistoryRepository history =
             mock(RequestStatusHistoryRepository.class);
+    private final RequestSlaMetrics slaMetrics = mock(RequestSlaMetrics.class);
     private final RequestStatusNotifier notifier = mock(RequestStatusNotifier.class);
     private final CurrentUser currentUser = mock(CurrentUser.class);
     private final TenantContext tenantContext = mock(TenantContext.class);
     private final RequestStatusService service =
-            new RequestStatusService(requests, history, notifier, currentUser, tenantContext);
+            new RequestStatusService(requests, history, slaMetrics,
+                    notifier, currentUser, tenantContext);
 
     @BeforeEach
     void setUp() {
@@ -156,7 +158,7 @@ class RequestStatusServiceTest {
                             .containsExactly("#/comment");
                 });
 
-        verifyNoInteractions(requests, history, notifier);
+        verifyNoInteractions(requests, slaMetrics, history);
     }
 
     @Test

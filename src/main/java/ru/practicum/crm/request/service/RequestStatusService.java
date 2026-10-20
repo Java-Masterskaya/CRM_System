@@ -47,6 +47,7 @@ public class RequestStatusService {
     private final RequestStatusHistoryRepository history;
     private final RequestStatusNotifier notifier;
     private final CurrentUser currentUser;
+    private final RequestSlaMetrics requestSlaMetrics;
 
     @SuppressFBWarnings(
             value = "EI_EXPOSE_REP2",
@@ -55,12 +56,15 @@ public class RequestStatusService {
     private final TenantContext tenantContext;
 
     public RequestStatusService(RequestRepository requests, RequestStatusHistoryRepository history,
-            RequestStatusNotifier notifier, CurrentUser currentUser, TenantContext tenantContext) {
+                                RequestSlaMetrics requestSlaMetrics, RequestStatusNotifier notifier,
+                                CurrentUser currentUser, TenantContext tenantContext
+    ) {
         this.requests = requests;
         this.history = history;
         this.notifier = notifier;
         this.currentUser = currentUser;
         this.tenantContext = tenantContext;
+        this.requestSlaMetrics = requestSlaMetrics;
     }
 
     /**
@@ -103,6 +107,9 @@ public class RequestStatusService {
                 currentUser.id(), comment));
         Request saved = requests.saveAndFlush(request);
         notifier.statusChanged(saved, from);
+        if (target.isTerminal()) {
+            requestSlaMetrics.closed(tenantId, request.metDeadlines());
+        }
         return new RequestStatusResponse(saved.getId(), saved.getStatus(), saved.getVersion());
     }
 
