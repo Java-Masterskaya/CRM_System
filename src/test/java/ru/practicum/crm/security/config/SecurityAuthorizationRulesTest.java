@@ -234,6 +234,26 @@ class SecurityAuthorizationRulesTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    /**
+     * Очередь оператора (T-052): маршрут пропускает любой запрос с токеном, право
+     * {@code REQUEST_READ_ALL} проверяет сервис. Открыто только чтение.
+     */
+    @Test
+    void givenAnyPermission_whenReadingOperatorQueue_thenUrlRulePassesOnlyGetToMethodCheck()
+            throws Exception {
+        mockMvc.perform(get("/admin/queue").with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/admin/queue").with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenNoCredentials_whenReadingOperatorQueue_thenReturnsUnauthorized()
+            throws Exception {
+        mockMvc.perform(get("/admin/queue").with(anonymous()))
+                .andExpect(status().isUnauthorized());
+    }
+
     private RequestPostProcessor jwtWithAuthority(String authority) {
         return jwt()
                 .jwt(token -> token
