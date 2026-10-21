@@ -28,7 +28,7 @@ public final class PageRequests {
     }
 
     public static Pageable toPageable(Integer page, Integer size, List<String> sort,
-                                      Set<String> allowedSortFields) {
+            Set<String> allowedSortFields) {
         List<ValidationError> errors = new ArrayList<>();
 
         int resolvedPage = page == null ? DEFAULT_PAGE : page;
