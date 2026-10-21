@@ -27,6 +27,9 @@ management:
       show-details: always
 
 app:
+  security:
+    authorization:
+      enabled: ${APP_SECURITY_AUTHORIZATION_ENABLED:true}
   database:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/crm_db}
     username: ${SPRING_DATASOURCE_USERNAME:crm_user}

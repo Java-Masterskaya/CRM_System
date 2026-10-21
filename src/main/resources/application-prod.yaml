@@ -34,6 +34,9 @@ management:
       env: prod
 
 app:
+  security:
+    authorization:
+      enabled: ${APP_SECURITY_AUTHORIZATION_ENABLED:true}
   database:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
