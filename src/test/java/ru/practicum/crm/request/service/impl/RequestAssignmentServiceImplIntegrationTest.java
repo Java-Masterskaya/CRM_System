@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.byLessThan;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +15,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -58,6 +62,14 @@ class RequestAssignmentServiceImplIntegrationTest extends BaseIntegrationTest {
         tenantA = insertTenant();
         tenantB = insertTenant();
         adminId = UUID.randomUUID();
+        SecurityContextHolder.getContext().setAuthentication(
+                new TestingAuthenticationToken(adminId.toString(), null,
+                        AuthorityUtils.createAuthorityList("REQUEST_AUDIT_READ")));
+    }
+
+    @AfterEach
+    void signOut() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test

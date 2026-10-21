@@ -171,4 +171,16 @@ class PageRequestsTest {
         assertThatThrownBy(() -> PageRequests.requireBounded(Pageable.unpaged()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void toPageableClampingSize_whenSizeExceedsMaximum_clampsToMaximum() {
+        Pageable pageable = PageRequests.toPageableClampingSize(
+                0,
+                PageRequests.MAX_SIZE + 1,
+                List.of(),
+                Set.of()
+        );
+
+        assertThat(pageable.getPageSize()).isEqualTo(PageRequests.MAX_SIZE);
+    }
 }

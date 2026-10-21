@@ -171,7 +171,7 @@ class SecurityAuthorizationRulesTest {
     @Test
     void givenClientPermission_whenCallingUnmappedClientRoute_thenReturnsForbidden()
             throws Exception {
-        mockMvc.perform(get("/client/requests")
+        mockMvc.perform(get("/client/unmapped-check")
                         .with(jwtWithAuthority("REQUEST_READ_OWN")))
                 .andExpect(status().isForbidden());
     }
@@ -231,6 +231,92 @@ class SecurityAuthorizationRulesTest {
     void givenNoCredentials_whenReadingRequestRegistry_thenReturnsUnauthorized()
             throws Exception {
         mockMvc.perform(get("/admin/requests").with(anonymous()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * Карточка заявки (T-041): маршрут пропускает любой запрос с токеном, право
+     * {@code REQUEST_READ_ALL} проверяет сервис. Открыто только чтение: другой метод на том же
+     * пути по-прежнему закрыт.
+     */
+    @Test
+    void givenAnyPermission_whenReadingRequestCard_thenUrlRulePassesOnlyGetToMethodCheck()
+            throws Exception {
+        String route = "/admin/requests/" + UUID.randomUUID();
+
+        mockMvc.perform(get(route).with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(put(route).with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenNoCredentials_whenReadingRequestCard_thenReturnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/admin/requests/" + UUID.randomUUID()).with(anonymous()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * История переходов заявки (T-041): тот же принцип, что у карточки — маршрут открыт любому
+     * токену, право {@code REQUEST_READ_ALL} проверяет сервис.
+     */
+    @Test
+    void givenAnyPermission_whenReadingStatusHistory_thenUrlRulePassesOnlyGetToMethodCheck()
+            throws Exception {
+        String route = "/admin/requests/" + UUID.randomUUID() + "/status-history";
+
+        mockMvc.perform(get(route).with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(put(route).with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenNoCredentials_whenReadingStatusHistory_thenReturnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/admin/requests/" + UUID.randomUUID() + "/status-history")
+                        .with(anonymous()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * Журнал аудита заявки (T-041): маршрут открыт любому токену, право
+     * {@code REQUEST_AUDIT_READ} проверяет сервис — отдельное от {@code REQUEST_READ_ALL}.
+     */
+    @Test
+    void givenAnyPermission_whenReadingAuditLog_thenUrlRulePassesOnlyGetToMethodCheck()
+            throws Exception {
+        String route = "/admin/requests/" + UUID.randomUUID() + "/audit-log";
+
+        mockMvc.perform(get(route).with(jwtWithAuthority("REQUEST_AUDIT_READ")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(put(route).with(jwtWithAuthority("REQUEST_AUDIT_READ")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenNoCredentials_whenReadingAuditLog_thenReturnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/admin/requests/" + UUID.randomUUID() + "/audit-log")
+                        .with(anonymous()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * Очередь оператора (T-052): маршрут пропускает любой запрос с токеном, право
+     * {@code REQUEST_READ_ALL} проверяет сервис. Открыто только чтение.
+     */
+    @Test
+    void givenAnyPermission_whenReadingOperatorQueue_thenUrlRulePassesOnlyGetToMethodCheck()
+            throws Exception {
+        mockMvc.perform(get("/admin/queue").with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/admin/queue").with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenNoCredentials_whenReadingOperatorQueue_thenReturnsUnauthorized()
+            throws Exception {
+        mockMvc.perform(get("/admin/queue").with(anonymous()))
                 .andExpect(status().isUnauthorized());
     }
 

@@ -79,7 +79,7 @@ public class RequestRegistryService {
         }
         Page<Request> page = requests.findAll(specificationOf(filter),
                 withEntityFields(PageRequests.requireBounded(pageable)));
-        return PageResponse.of(page.map(RequestRegistryService::toItem));
+        return PageResponse.of(page.map(RequestListItems::of));
     }
 
     /** Арендатор — всегда; остальные условия — только заданные. */
@@ -116,12 +116,5 @@ public class RequestRegistryService {
                         SORT_FIELDS.getOrDefault(order.getProperty(), order.getProperty())))
                 .toList());
         return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
-    }
-
-    private static RequestRegistryItem toItem(Request request) {
-        return new RequestRegistryItem(request.getId(), request.getSubject(), request.getStatus(),
-                request.getPriority(), request.getTypeId(), request.getAuthorId(),
-                request.getAssigneeId(), request.getCreatedAt(), request.getFirstResponseDueAt(),
-                request.getResolutionDueAt(), request.isOverdue(), request.getVersion());
     }
 }

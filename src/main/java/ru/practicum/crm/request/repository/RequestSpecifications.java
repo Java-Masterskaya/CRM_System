@@ -37,9 +37,33 @@ public final class RequestSpecifications {
                 cb.isFalse(root.get("deleted")));
     }
 
+    /**
+     * Только заявки указанного автора.
+     *
+     * <p>Применяется вместе с {@link #ofTenant(UUID)}: фильтр арендатора
+     * задаёт границу данных, а фильтр автора ограничивает их собственными заявками.
+     */
+    public static Specification<Request> ofAuthor(UUID authorId) {
+        return (root, query, cb) ->
+                cb.equal(root.get("authorId"), authorId);
+    }
+
     /** В одном из статусов. Индекс — {@code idx_requests_tenant_status}. */
     public static Specification<Request> inStatuses(Collection<RequestStatus> statuses) {
         return (root, query, cb) -> root.get("status").in(statuses);
+    }
+
+    /** Не завершены: статус не терминальный. */
+    public static Specification<Request> notFinished() {
+        return inStatuses(NOT_FINISHED);
+    }
+
+    /**
+     * Назначены на этого пользователя (очередь оператора, T-052). Индекс —
+     * {@code idx_requests_tenant_assignee_queue}.
+     */
+    public static Specification<Request> assignedTo(UUID assigneeId) {
+        return (root, query, cb) -> cb.equal(root.get("assigneeId"), assigneeId);
     }
 
     /**
