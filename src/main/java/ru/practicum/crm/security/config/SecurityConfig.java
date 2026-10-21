@@ -90,6 +90,13 @@ public class SecurityConfig {
                                 .hasAuthority(PermissionCode.REQUEST_ASSIGN.name())
                                 .requestMatchers(HttpMethod.GET, "/admin/requests")
                                 .authenticated()
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/admin/requests/*",
+                                        "/admin/requests/*/status-history",
+                                        "/admin/requests/*/audit-log"
+                                )
+                                .authenticated()
                                 .requestMatchers(HttpMethod.GET, "/admin/queue")
                                 .authenticated()
                                 .requestMatchers("/analytics/**")
