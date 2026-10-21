@@ -5,6 +5,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -124,5 +125,33 @@ class AssignmentControllerTest {
                         .content("{\"assigneeId\":\"" + ASSIGNEE_ID + "\",\"version\":0}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void take_whenAuthenticated_delegatesToServiceWithTenantAndActorFromContext()
+            throws Exception {
+        when(tenantContext.getCurrentTenantId()).thenReturn(TENANT_ID);
+        when(userContext.getCurrentUserId()).thenReturn(ACTOR_ID);
+
+        RequestAssignmentDto assignment = new RequestAssignmentDto(
+                REQUEST_ID,
+                UUID.randomUUID(),
+                "Выгрузка отчёта",
+                ACTOR_ID,
+                Instant.parse("2026-10-21T10:00:00Z"),
+                1
+        );
+
+        when(assignmentService.take(TENANT_ID, REQUEST_ID, ACTOR_ID))
+                .thenReturn(assignment);
+
+        mockMvc.perform(post("/admin/requests/{requestId}/take", REQUEST_ID)
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requestId").value(REQUEST_ID.toString()))
+                .andExpect(jsonPath("$.assigneeId").value(ACTOR_ID.toString()))
+                .andExpect(jsonPath("$.version").value(1));
+
+        verify(assignmentService).take(TENANT_ID, REQUEST_ID, ACTOR_ID);
     }
 }

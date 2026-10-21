@@ -39,8 +39,9 @@ public class AssignmentService {
     @Transactional
     public RequestAssignmentDto assign(UUID tenantId, UUID requestId, UUID assigneeId,
                                        long expectedVersion, UUID actorId) {
+        String message = "У кандидата нет права вести заявку";
         ActiveUserDto candidate = assigneeId == null ? null
-                : requireCandidateEligible(tenantId, assigneeId);
+                : requireCandidateEligible(tenantId, assigneeId, message);
 
         RequestAssignmentDto result = requestAssignmentService.changeAssignee(tenantId, requestId,
                 assigneeId, expectedVersion, actorId);
@@ -54,7 +55,8 @@ public class AssignmentService {
 
     @Transactional
     public RequestAssignmentDto take(UUID tenantId, UUID requestId, UUID actorId) {
-        ActiveUserDto candidate = requireCandidateEligible(tenantId, actorId);
+        String message = "У вас нет права назначать себя исполнителем заявки";
+        ActiveUserDto candidate = requireCandidateEligible(tenantId, actorId, message);
 
         RequestAssignmentOutcome outcome =
                 requestAssignmentService.takeUnassigned(tenantId, requestId, actorId);
@@ -66,15 +68,18 @@ public class AssignmentService {
         return outcome.assignment();
     }
 
-    private ActiveUserDto requireCandidateEligible(UUID tenantId, UUID assigneeId) {
+    private ActiveUserDto requireCandidateEligible(
+            UUID tenantId,
+            UUID assigneeId,
+            String accessDeniedMessage) {
         ActiveUserDto candidate = userService.findActiveInTenant(assigneeId, tenantId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.NOT_FOUND,
-                        "Кандидат в исполнители не найден: id = " + assigneeId));
+                        "Пользователь не найден: id = " + assigneeId));
 
         if (!userPermissionService.hasPermission(assigneeId,
                 PermissionCode.REQUEST_STATUS_CHANGE)) {
             throw new ApiException(ErrorCode.ACCESS_DENIED,
-                    "У кандидата нет права вести заявку");
+                    accessDeniedMessage);
         }
         return candidate;
     }
