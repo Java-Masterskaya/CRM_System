@@ -8,6 +8,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
+import ru.practicum.crm.common.error.NotFoundException;
 import ru.practicum.crm.common.error.ValidationError;
 import ru.practicum.crm.common.model.RequestPriority;
 import ru.practicum.crm.common.pagination.PageRequests;
@@ -26,8 +28,12 @@ import ru.practicum.crm.request.domain.RequestAuditEntry;
 import ru.practicum.crm.request.domain.RequestSnapshot;
 import ru.practicum.crm.request.domain.RequestStatus;
 import ru.practicum.crm.request.repository.RequestAuditLogRepository;
+import ru.practicum.crm.request.repository.RequestRepository;
 
-/** Сервис без базы: репозиторий — заглушка, транзакции проверяет интеграционный тест. */
+/**
+ * Сервис без базы: репозитории - заглушки, транзакции и @PreAuthorize проверяет интеграционный
+ * тест.
+ */
 class RequestAuditServiceTest {
 
     private static final UUID TENANT_ID = UUID.randomUUID();
@@ -35,7 +41,8 @@ class RequestAuditServiceTest {
     private static final UUID ADMIN_ID = UUID.randomUUID();
 
     private final RequestAuditLogRepository repository = mock(RequestAuditLogRepository.class);
-    private final RequestAuditService service = new RequestAuditService(repository);
+    private final RequestRepository requests = mock(RequestRepository.class);
+    private final RequestAuditService service = new RequestAuditService(repository, requests);
     private final Request request = savedRequest();
 
     @Test
@@ -79,11 +86,26 @@ class RequestAuditServiceTest {
     @Test
     void journal_readsGivenPageOfGivenTenantsRequest() {
         PageRequest largestPage = PageRequest.of(1, PageRequests.MAX_SIZE);
+        when(requests.existsByIdAndTenantIdAndDeletedFalse(REQUEST_ID, TENANT_ID))
+                .thenReturn(true);
 
         service.journal(TENANT_ID, REQUEST_ID, largestPage);
 
         verify(repository).findByTenantIdAndRequestIdOrderByCreatedAtAscIdAsc(TENANT_ID,
                 REQUEST_ID, largestPage);
+    }
+
+    @Test
+    void journal_whenRequestMissing_isNotFound() {
+        when(requests.existsByIdAndTenantIdAndDeletedFalse(REQUEST_ID, TENANT_ID))
+                .thenReturn(false);
+
+        NotFoundException thrown = catchThrowableOfType(
+                () -> service.journal(TENANT_ID, REQUEST_ID, PageRequest.of(0, 20)),
+                NotFoundException.class);
+
+        assertThat(thrown).isNotNull();
+        verifyNoInteractions(repository);
     }
 
     @Test
@@ -97,6 +119,7 @@ class RequestAuditServiceTest {
         assertThat(thrown.getErrors()).singleElement()
                 .extracting(ValidationError::parameter).isEqualTo("size");
         verifyNoInteractions(repository);
+        verifyNoInteractions(requests);
     }
 
     @Test
@@ -104,6 +127,7 @@ class RequestAuditServiceTest {
         assertThatThrownBy(() -> service.journal(TENANT_ID, REQUEST_ID, Pageable.unpaged()))
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(repository);
+        verifyNoInteractions(requests);
     }
 
     private static Request savedRequest() {
