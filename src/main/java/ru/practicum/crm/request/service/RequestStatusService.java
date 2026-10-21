@@ -1,6 +1,8 @@
 package ru.practicum.crm.request.service;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -48,6 +50,7 @@ public class RequestStatusService {
     private final RequestStatusNotifier notifier;
     private final CurrentUser currentUser;
     private final RequestSlaMetrics requestSlaMetrics;
+    private final Clock clock;
 
     @SuppressFBWarnings(
             value = "EI_EXPOSE_REP2",
@@ -57,7 +60,7 @@ public class RequestStatusService {
 
     public RequestStatusService(RequestRepository requests, RequestStatusHistoryRepository history,
                                 RequestSlaMetrics requestSlaMetrics, RequestStatusNotifier notifier,
-                                CurrentUser currentUser, TenantContext tenantContext
+                                CurrentUser currentUser, TenantContext tenantContext, Clock clock
     ) {
         this.requests = requests;
         this.history = history;
@@ -65,6 +68,7 @@ public class RequestStatusService {
         this.currentUser = currentUser;
         this.tenantContext = tenantContext;
         this.requestSlaMetrics = requestSlaMetrics;
+        this.clock = clock;
     }
 
     /**
@@ -103,14 +107,46 @@ public class RequestStatusService {
         }
 
         request.setStatus(target);
+        notePassedDeadlines(request, from, clock.instant(), tenantId);
         history.save(new RequestStatusChange(tenantId, requestId, from, target,
                 currentUser.id(), comment));
         Request saved = requests.saveAndFlush(request);
         notifier.statusChanged(saved, from);
-        if (target.isTerminal()) {
+        if (target == RequestStatus.DONE) {
             requestSlaMetrics.closed(tenantId, request.metDeadlines());
         }
         return new RequestStatusResponse(saved.getId(), saved.getStatus(), saved.getVersion());
+    }
+
+    /**
+     * Детектор помечает просрочку раз в минтут. Срок который этого статуса перестает идти,
+     * сверяется сразу. Первый ответ - пока заявка в {@code NEW}, решение - пока в работе.
+     * */
+    private void notePassedDeadlines(
+            Request request, RequestStatus from, Instant now, UUID tenantId) {
+
+        if (from == RequestStatus.NEW && passed(request.getFirstResponseDueAt(), now)
+                && !request.isFirstResponseOverdue()) {
+            request.setFirstResponseOverdue(true);
+            requestSlaMetrics.firstResponseBreached(tenantId);
+        }
+
+        if (request.getStatus().isTerminal() && resolutionClockRunning(from)
+                && passed(request.getResolutionDueAt(), now)
+                && !request.isResolutionOverdue()) {
+            request.setResolutionOverdue(true);
+            requestSlaMetrics.resolutionBreached(tenantId);
+        }
+    }
+
+    private boolean resolutionClockRunning(RequestStatus status) {
+        return status == RequestStatus.NEW
+                || status == RequestStatus.CONTACTED
+                || status == RequestStatus.IN_PROGRESS;
+    }
+
+    private boolean passed(Instant dueAt, Instant now) {
+        return dueAt != null && !now.isBefore(dueAt);
     }
 
     /** Комментарий из одних пробелов — то же, что его отсутствие. */

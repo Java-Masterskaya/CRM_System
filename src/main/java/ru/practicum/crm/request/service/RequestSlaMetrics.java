@@ -46,7 +46,8 @@ public class RequestSlaMetrics {
     }
 
     /**
-     * Заявка переведенна в конечный статус.
+     * Заявка переведенна в {@code DONE}. Отмена и отклонение сюда не входят: иначе они попадают
+     * в 'закрытые в срок' и завышают цель.
      *
      * @param onTime {@code true}, если не один срок не был нарушен.*/
     public void closed(UUID tenantId, boolean onTime) {
