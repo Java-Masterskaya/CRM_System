@@ -2,8 +2,10 @@ package ru.practicum.crm.request.api.client;
 
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -15,7 +17,9 @@ import ru.practicum.crm.common.error.ValidationError;
 import ru.practicum.crm.common.idempotency.IdempotencyResult;
 import ru.practicum.crm.request.api.client.dto.ClientRequestCreateRequest;
 import ru.practicum.crm.request.api.client.dto.ClientRequestCreatedResponse;
+import ru.practicum.crm.request.api.dto.RequestStatusResponse;
 import ru.practicum.crm.request.service.ClientRequestService;
+import ru.practicum.crm.request.service.RequestStatusService;
 
 @RestController
 @RequestMapping("/client/requests")
@@ -23,6 +27,7 @@ import ru.practicum.crm.request.service.ClientRequestService;
 public class ClientRequestController {
 
     private final ClientRequestService clientRequestService;
+    private final RequestStatusService requestStatusService;
 
     @PostMapping
     public ResponseEntity<ClientRequestCreatedResponse> create(
@@ -37,6 +42,11 @@ public class ClientRequestController {
 
         return ResponseEntity.status(result.status())
                 .body(result.body());
+    }
+
+    @PostMapping("/{requestId}/cancel")
+    public RequestStatusResponse cancel(@PathVariable UUID requestId) {
+        return requestStatusService.cancelOwnRequest(requestId);
     }
 
     private static void validateIdempotencyKey(String key) {

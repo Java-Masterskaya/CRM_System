@@ -40,6 +40,9 @@ public interface RequestRepository extends Repository<Request, UUID> {
 
     Optional<Request> findByIdAndTenantIdAndDeletedFalse(UUID id, UUID tenantId);
 
+    Optional<Request> findByIdAndTenantIdAndAuthorIdAndDeletedFalse(
+            UUID id, UUID tenantId, UUID authorId);
+
     Page<Request> findByTenantIdAndDeletedFalse(UUID tenantId, Pageable pageable);
 
     Page<Request> findByTenantIdAndStatusAndDeletedFalse(UUID tenantId, RequestStatus status,
