@@ -1,5 +1,6 @@
 package ru.practicum.crm.request.repository;
 
+import java.util.List;
 import java.util.UUID;
 import org.springframework.data.repository.Repository;
 import ru.practicum.crm.request.domain.RequestStatusChange;
@@ -11,4 +12,8 @@ import ru.practicum.crm.request.domain.RequestStatusChange;
 public interface RequestStatusHistoryRepository extends Repository<RequestStatusChange, UUID> {
 
     <S extends RequestStatusChange> S save(S change);
+
+    List<RequestStatusChange> findByTenantIdAndRequestIdOrderByCreatedAtAsc(
+            UUID tenantId,
+            UUID requestId);
 }
