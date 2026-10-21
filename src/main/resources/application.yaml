@@ -44,7 +44,7 @@ spring:
 app:
   security:
     authorization:
-      # Включить после появления входа и пользователей с назначенными правами.
+      # Базовое значение; профили local и prod явно включают авторизацию.
       enabled: ${APP_SECURITY_AUTHORIZATION_ENABLED:false}
   outbox:
     scheduler-enabled: ${OUTBOX_SCHEDULER_ENABLED:true}
