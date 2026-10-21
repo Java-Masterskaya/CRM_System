@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,10 +15,14 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
+import ru.practicum.crm.common.error.NotFoundException;
 import ru.practicum.crm.common.model.RequestPriority;
 import ru.practicum.crm.common.pagination.PageRequests;
 import ru.practicum.crm.request.domain.AuditedField;
@@ -29,7 +34,8 @@ import ru.practicum.crm.request.repository.RequestRepository;
 
 /**
  * Журнал аудита на реальной базе: запись в одной транзакции с изменением, постраничное чтение с
- * арендатором и запрет изменять журнал в самой базе.
+ * арендатором, запрет изменять журнал в самой базе и право {@code REQUEST_AUDIT_READ}
+ * на чтение.
  */
 class RequestAuditLogIntegrationTest extends BaseIntegrationTest {
 
@@ -59,6 +65,14 @@ class RequestAuditLogIntegrationTest extends BaseIntegrationTest {
         tenantA = insertTenant();
         tenantB = insertTenant();
         adminId = UUID.randomUUID();
+        SecurityContextHolder.getContext().setAuthentication(
+                new TestingAuthenticationToken(adminId.toString(), null,
+                        AuthorityUtils.createAuthorityList("REQUEST_AUDIT_READ")));
+    }
+
+    @AfterEach
+    void signOut() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -123,11 +137,13 @@ class RequestAuditLogIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void journal_ofAnotherTenantsRequest_isEmpty() {
+    void journal_ofAnotherTenantsRequest_isNotFound() {
         UUID requestId = saveRequest(tenantA);
         changePriority(tenantA, requestId);
 
-        assertThat(journal(tenantB, requestId)).isEmpty();
+        assertThatThrownBy(() -> audit.journal(tenantB, requestId,
+                PageRequest.of(0, PageRequests.MAX_SIZE)))
+                .isInstanceOf(NotFoundException.class);
         assertThat(journal(tenantA, requestId)).hasSize(1);
     }
 
@@ -209,7 +225,7 @@ class RequestAuditLogIntegrationTest extends BaseIntegrationTest {
     private UUID insertTenant() {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update("INSERT INTO tenants (id, name, slug, active, created_at, updated_at)"
-                            + " VALUES (?, 'Арендатор', ?, true, now(), now())",
+                        + " VALUES (?, 'Арендатор', ?, true, now(), now())",
                 id, "test-" + id);
         return id;
     }

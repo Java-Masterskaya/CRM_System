@@ -71,6 +71,7 @@ public class SecurityConfig {
                             // Право на профиль проверяет @PreAuthorize на методе сервиса
                             // (T-030); здесь маршрут только требует токен.
                             .requestMatchers("/client/profile").authenticated()
+                            .requestMatchers(HttpMethod.GET, "/client/requests").authenticated()
                             .requestMatchers("/health", "/actuator/**", "/v3/api-docs/**",
                                     "/swagger-ui/**", "/swagger-ui.html").permitAll()
                             .requestMatchers("/system/**").permitAll();
@@ -89,6 +90,13 @@ public class SecurityConfig {
                                 )
                                 .hasAuthority(PermissionCode.REQUEST_ASSIGN.name())
                                 .requestMatchers(HttpMethod.GET, "/admin/requests")
+                                .authenticated()
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/admin/requests/*",
+                                        "/admin/requests/*/status-history",
+                                        "/admin/requests/*/audit-log"
+                                )
                                 .authenticated()
                                 .requestMatchers(HttpMethod.GET, "/admin/queue")
                                 .authenticated()
