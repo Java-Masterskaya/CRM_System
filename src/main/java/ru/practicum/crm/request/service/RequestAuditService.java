@@ -4,15 +4,19 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import ru.practicum.crm.common.error.ErrorCode;
+import ru.practicum.crm.common.error.NotFoundException;
 import ru.practicum.crm.common.pagination.PageRequests;
 import ru.practicum.crm.request.domain.FieldChange;
 import ru.practicum.crm.request.domain.Request;
 import ru.practicum.crm.request.domain.RequestAuditEntry;
 import ru.practicum.crm.request.domain.RequestSnapshot;
 import ru.practicum.crm.request.repository.RequestAuditLogRepository;
+import ru.practicum.crm.request.repository.RequestRepository;
 
 /**
  * Журнал аудита изменений заявки (T-046, ТЗ §6.7).
@@ -24,20 +28,21 @@ import ru.practicum.crm.request.repository.RequestAuditLogRepository;
  * request.setPriority(RequestPriority.HIGH);
  * audit.record(request, before, actorId);
  * }</pre>
- * Если транзакция откатится, пропадут и изменение, и записи о нём. {@code final} у снимка —
- * подсказка читателю, что это состояние до правки; checkstyle без него не пропустит снимок,
- * объявленный далеко от вызова {@code record}.
+ * Если транзакция откатится, пропадут и изменение, и записи о нём.
  *
- * <p>Автор приходит параметром: его источником станет пользователь из токена, когда появится
- * проверка токена (T-026). Кому показывать журнал, решает вызывающий код — права (T-030).
+ * <p>Право {@code REQUEST_AUDIT_READ} на чтение журнала (T-041) проверяет
+ * {@code @PreAuthorize} - оно отдельное от {@code REQUEST_READ_ALL}: сегодня у OPERATOR и ADMIN
+ * оба права выданы вместе, но проверяться они должны по отдельности.
  */
 @Service
 public class RequestAuditService {
 
     private final RequestAuditLogRepository repository;
+    private final RequestRepository requests;
 
-    public RequestAuditService(RequestAuditLogRepository repository) {
+    public RequestAuditService(RequestAuditLogRepository repository, RequestRepository requests) {
         this.repository = repository;
+        this.requests = requests;
     }
 
     /**
@@ -61,16 +66,25 @@ public class RequestAuditService {
     }
 
     /**
-     * Страница журнала заявки арендатора в порядке изменений (#161). Журнал часто правимой
-     * заявки растёт без ограничения, поэтому целиком он не читается.
+     * Страница журнала заявки арендатора в порядке изменений (#161, T-041).
      *
      * @param pageable номер и размер страницы; ограничения — в
      *     {@link PageRequests#requireBounded}: без страниц читать нельзя, размер — не больше
      *     {@link PageRequests#MAX_SIZE}
+     * @throws org.springframework.security.access.AccessDeniedException без права
+     *     {@code REQUEST_AUDIT_READ} - 403
+     * @throws NotFoundException если заявки нет у арендатора - проверяется после валидации
+     *     страницы, но до чтения журнала, иначе чужой {@code requestId} вернул бы пустую
+     *     страницу вместо 404
      */
+    @PreAuthorize("hasAuthority('REQUEST_AUDIT_READ')")
     @Transactional(readOnly = true)
     public Page<RequestAuditEntry> journal(UUID tenantId, UUID requestId, Pageable pageable) {
+        Pageable bounded = PageRequests.requireBounded(pageable);
+        if (!requests.existsByIdAndTenantIdAndDeletedFalse(requestId, tenantId)) {
+            throw new NotFoundException(ErrorCode.NOT_FOUND, "Заявка не найдена.");
+        }
         return repository.findByTenantIdAndRequestIdOrderByCreatedAtAscIdAsc(tenantId, requestId,
-                PageRequests.requireBounded(pageable));
+                bounded);
     }
 }
