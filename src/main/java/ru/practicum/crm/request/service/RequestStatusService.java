@@ -1,6 +1,8 @@
 package ru.practicum.crm.request.service;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -47,6 +49,8 @@ public class RequestStatusService {
     private final RequestStatusHistoryRepository history;
     private final RequestStatusNotifier notifier;
     private final CurrentUser currentUser;
+    private final RequestSlaMetrics requestSlaMetrics;
+    private final Clock clock;
 
     @SuppressFBWarnings(
             value = "EI_EXPOSE_REP2",
@@ -55,12 +59,16 @@ public class RequestStatusService {
     private final TenantContext tenantContext;
 
     public RequestStatusService(RequestRepository requests, RequestStatusHistoryRepository history,
-            RequestStatusNotifier notifier, CurrentUser currentUser, TenantContext tenantContext) {
+                                RequestSlaMetrics requestSlaMetrics, RequestStatusNotifier notifier,
+                                CurrentUser currentUser, TenantContext tenantContext, Clock clock
+    ) {
         this.requests = requests;
         this.history = history;
         this.notifier = notifier;
         this.currentUser = currentUser;
         this.tenantContext = tenantContext;
+        this.requestSlaMetrics = requestSlaMetrics;
+        this.clock = clock;
     }
 
     /**
@@ -99,15 +107,67 @@ public class RequestStatusService {
         }
 
         request.setStatus(target);
+        DeadlineNotes notes = notePassedDeadlines(request, from, clock.instant());
         history.save(new RequestStatusChange(tenantId, requestId, from, target,
                 currentUser.id(), comment));
         Request saved = requests.saveAndFlush(request);
         notifier.statusChanged(saved, from);
+
+        if (notes.firstResponse()) {
+            requestSlaMetrics.firstResponseBreached(tenantId);
+        }
+
+        if (notes.resolution()) {
+            requestSlaMetrics.resolutionBreached(tenantId);
+        }
+
+        if (target == RequestStatus.DONE) {
+            requestSlaMetrics.closed(tenantId, request.metDeadlines());
+        }
         return new RequestStatusResponse(saved.getId(), saved.getStatus(), saved.getVersion());
+    }
+
+    /**
+     * Детектор помечает просрочку раз в минтут. Срок который этого статуса перестает идти,
+     * сверяется сразу. Первый ответ - пока заявка в {@code NEW}, решение - пока в работе.
+     * */
+    private static DeadlineNotes notePassedDeadlines(
+            Request request, RequestStatus from, Instant now) {
+
+        boolean firstResponse = false;
+        boolean resolution = false;
+
+        if (from == RequestStatus.NEW && passed(request.getFirstResponseDueAt(), now)
+                && !request.isFirstResponseOverdue()) {
+            request.setFirstResponseOverdue(true);
+            firstResponse = true;
+        }
+
+        if (request.getStatus().isTerminal() && resolutionClockRunning(from)
+                && passed(request.getResolutionDueAt(), now)
+                && !request.isResolutionOverdue()) {
+            request.setResolutionOverdue(true);
+            resolution = true;
+        }
+
+        return new DeadlineNotes(firstResponse, resolution);
+    }
+
+    private static boolean resolutionClockRunning(RequestStatus status) {
+        return status == RequestStatus.NEW
+                || status == RequestStatus.CONTACTED
+                || status == RequestStatus.IN_PROGRESS;
+    }
+
+    private static boolean passed(Instant dueAt, Instant now) {
+        return dueAt != null && !now.isBefore(dueAt);
     }
 
     /** Комментарий из одних пробелов — то же, что его отсутствие. */
     private static String normalized(String comment) {
         return comment == null || comment.isBlank() ? null : comment.strip();
+    }
+
+    private record DeadlineNotes(boolean firstResponse, boolean resolution) {
     }
 }

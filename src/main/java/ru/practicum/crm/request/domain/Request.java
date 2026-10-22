@@ -197,6 +197,12 @@ public class Request extends TenantScopedEntity {
                 || resolutionOverdue && !status.isTerminal();
     }
 
+    /**
+     * Ни один срок не  нарушен. Признаки остаються и после закрытия.*/
+    public boolean metDeadlines() {
+        return !firstResponseOverdue && !resolutionOverdue;
+    }
+
     @Override
     public boolean equals(Object other) {
         if (this == other) {

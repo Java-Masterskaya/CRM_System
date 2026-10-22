@@ -8,6 +8,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +57,9 @@ class RequestStatusIntegrationTest extends BaseIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private MeterRegistry registry;
+
     private AuthTestFixture.TestTenant tenant;
     private UUID operatorId;
     private String operatorToken;
@@ -94,6 +100,81 @@ class RequestStatusIntegrationTest extends BaseIntegrationTest {
                 "to_status", "DONE",
                 "author_id", operatorId,
                 "comment", "Отчёт отправлен клиенту"));
+    }
+
+    /**
+     * Закрытия в срок и с нарушением увеличивает разные счетчики, оба с меткой арендатора.
+     * Перевод не в конечный статус закрытие не считает.
+     */
+    @Test
+    void changeStatus_whenClosedOnTimeAndLate_increasesDifferentCounters() throws Exception {
+        UUID onTime = insertRequest(tenant, "IN_PROGRESS");
+        UUID late = insertRequest(tenant, "IN_PROGRESS");
+        jdbcTemplate.update("UPDATE requests SET first_response_overdue = TRUE WHERE id = ?",
+                late);
+        UUID stillOpen = insertRequest(tenant, "NEW");
+
+        changeStatus(stillOpen, operatorToken, body("CONTACTED", null, 0))
+                .andExpect(status().isOk());
+        changeStatus(onTime, operatorToken, body("DONE", null, 0))
+                .andExpect(status().isOk());
+        changeStatus(late, operatorToken, body("DONE", null, 0))
+                .andExpect(status().isOk());
+
+        assertThat(closedCount(RequestSlaMetrics.ON_TIME)).isEqualTo(1);
+        assertThat(closedCount(RequestSlaMetrics.BREACHED)).isEqualTo(1);
+    }
+
+    /**
+     * Признаки детектора еще пустые но срок решения уже прошел: закрытие считается с нарушением.
+     * Срок первого ответа в прошлом не мешает, если из {@code NEW} уже вышли вовремя.
+     */
+    @Test
+    void changeStatus_whenDoneBeforeDetector_countsDueInstantAndSkipsCancel() throws Exception {
+        Instant past = Instant.now().minus(Duration.ofHours(1));
+        Instant future = Instant.now().plus(Duration.ofHours(1));
+        UUID late = insertRequest(tenant, "IN_PROGRESS");
+        dueAt(late, null, past);
+        UUID answerOnTime = insertRequest(tenant, "IN_PROGRESS");
+        dueAt(answerOnTime, past, future);
+        UUID cancelled = insertRequest(tenant, "NEW");
+
+        changeStatus(late, operatorToken, body("DONE", null, 0))
+                .andExpect(status().isOk());
+        changeStatus(answerOnTime, operatorToken, body("DONE", null, 0))
+                .andExpect(status().isOk());
+        changeStatus(cancelled, operatorToken, body("CANCELLED", null, 0))
+                .andExpect(status().isOk());
+
+        assertThat(closedCount(RequestSlaMetrics.ON_TIME)).isEqualTo(1);
+        assertThat(closedCount(RequestSlaMetrics.BREACHED)).isEqualTo(1);
+    }
+
+    /**
+     * Первый ответ после срока, до прохода детектора: признак ставиться сразу, закрытие с
+     * нарушением.
+     */
+    @Test
+    void changeStatus_whenContactedAfterFirstResponseDue_countsBreachAtClose() throws Exception {
+        Instant past = Instant.now().minus(Duration.ofMinutes(1));
+        Instant future = Instant.now().plus(Duration.ofHours(1));
+        UUID id = insertRequest(tenant, "NEW");
+        dueAt(id, past, future);
+
+        changeStatus(id, operatorToken, body("CONTACTED", null, 0))
+                .andExpect(status().isOk());
+        assertThat(requestFlags(id)).containsEntry("first_response_overdue", true);
+
+        changeStatus(id, operatorToken, body("IN_PROGRESS", null, 1))
+                .andExpect(status().isOk());
+        changeStatus(id, operatorToken, body("DONE", null, 2))
+                .andExpect(status().isOk());
+
+        assertThat(closedCount(RequestSlaMetrics.BREACHED)).isEqualTo(1);
+        assertThat(registry.find(RequestSlaMetrics.CLOSED)
+                .tag(RequestSlaMetrics.OUTCOME, RequestSlaMetrics.ON_TIME)
+                .tag(RequestSlaMetrics.TENANT, tenant.id().toString())
+                .counter()).isNull();
     }
 
     /**
@@ -332,6 +413,14 @@ class RequestStatusIntegrationTest extends BaseIntegrationTest {
         return id;
     }
 
+    private double closedCount(String outcome) {
+        return registry.get(RequestSlaMetrics.CLOSED)
+                .tag(RequestSlaMetrics.OUTCOME, outcome)
+                .tag(RequestSlaMetrics.TENANT, tenant.id().toString())
+                .counter()
+                .count();
+    }
+
     private Map<String, Object> request(UUID id) {
         return jdbcTemplate.queryForMap("SELECT status, version FROM requests WHERE id = ?", id);
     }
@@ -340,5 +429,21 @@ class RequestStatusIntegrationTest extends BaseIntegrationTest {
         return jdbcTemplate.queryForList("SELECT tenant_id, from_status, to_status, author_id,"
                 + " comment FROM request_status_history WHERE request_id = ?"
                 + " ORDER BY created_at, id", requestId);
+    }
+
+    private Map<String, Object> requestFlags(UUID id) {
+        return jdbcTemplate.queryForMap(
+                "SELECT first_response_overdue, resolution_overdue FROM requests WHERE id = ?",
+                id
+        );
+    }
+
+    private void dueAt(UUID requestId, Instant past, Instant future) {
+        jdbcTemplate.update(
+                "UPDATE requests SET first_response_due_at = ?::TIMESTAMPTZ, "
+                       + "resolution_due_at = ?::TIMESTAMPTZ WHERE id = ?",
+                past == null ? null : past.toString(),
+                future == null ? null : future.toString(), requestId
+        );
     }
 }

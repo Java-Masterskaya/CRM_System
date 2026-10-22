@@ -74,17 +74,21 @@ public interface RequestRepository extends Repository<Request, UUID> {
     @Modifying
     @Query(nativeQuery = true, value =
             """
-            UPDATE requests
-            SET first_response_overdue = TRUE, version = version + 1, updated_at = now()
-            WHERE id IN (
-                SELECT id FROM requests
-                WHERE status = 'NEW' AND NOT deleted AND NOT first_response_overdue
-                  AND first_response_due_at <= :now
-                ORDER BY first_response_due_at
-                LIMIT :limit
-                FOR UPDATE SKIP LOCKED)
+            WITH marked AS (
+                UPDATE requests
+                SET first_response_overdue = TRUE, version = version + 1, updated_at = now()
+                WHERE id IN (
+                    SELECT id FROM requests
+                    WHERE status = 'NEW' AND NOT deleted AND NOT first_response_overdue
+                      AND first_response_due_at <= :now
+                    ORDER BY first_response_due_at
+                    LIMIT :limit
+                    FOR UPDATE SKIP LOCKED)
+                    RETURNING tenant_id
+            )
+            SELECT tenant_id from marked
             """)
-    int markFirstResponseOverdue(@Param("now") Instant now, @Param("limit") int limit);
+    List<UUID> markFirstResponseOverdue(@Param("now") Instant now, @Param("limit") int limit);
 
     /**
      * Помечает порцию заявок, у которых истёк срок решения, а они не завершены и не ждут ответа
@@ -100,17 +104,21 @@ public interface RequestRepository extends Repository<Request, UUID> {
     @Modifying
     @Query(nativeQuery = true, value =
             """
-            UPDATE requests
-            SET resolution_overdue = TRUE, version = version + 1, updated_at = now()
-            WHERE id IN (
-                SELECT id FROM requests
-                WHERE status IN ('NEW', 'CONTACTED', 'IN_PROGRESS') AND NOT deleted
-                  AND NOT resolution_overdue AND resolution_due_at <= :now
-                ORDER BY resolution_due_at
-                LIMIT :limit
-                FOR UPDATE SKIP LOCKED)
+            WITH marked AS (
+                UPDATE requests
+                SET resolution_overdue = TRUE, version = version + 1, updated_at = now()
+                WHERE id IN (
+                    SELECT id FROM requests
+                    WHERE status IN ('NEW', 'CONTACTED', 'IN_PROGRESS') AND NOT deleted
+                      AND NOT resolution_overdue AND resolution_due_at <= :now
+                    ORDER BY resolution_due_at
+                    LIMIT :limit
+                    FOR UPDATE SKIP LOCKED)
+                RETURNING tenant_id
+            )
+            SELECT tenant_id FROM marked
             """)
-    int markResolutionOverdue(@Param("now") Instant now, @Param("limit") int limit);
+    List<UUID> markResolutionOverdue(@Param("now") Instant now, @Param("limit") int limit);
 
     /**
      * Блокирует порцию заявок, у которых просрочен срок первого ответа, а эскалация по нему ещё
