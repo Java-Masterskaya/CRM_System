@@ -76,39 +76,68 @@ public class AuthTestFixture {
             TestUser user,
             String permissionCode
     ) {
-        UUID roleId = UUID.randomUUID();
-        UUID permissionId = UUID.randomUUID();
-
-        jdbcTemplate.update(
+        UUID roleId = jdbcTemplate.query(
                 """
-                        INSERT INTO roles (
-                            id, tenant_id, code, name, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, NOW(), NOW())
+                        SELECT id
+                        FROM roles
+                        WHERE tenant_id = ? AND code = ?
                 """,
-                roleId, tenant.id(), "AUTH_TEST_ROLE", "Authentication test role"
+                rs -> rs.next() ? rs.getObject("id", UUID.class) : null,
+                tenant.id(), "AUTH_TEST_ROLE"
         );
 
-        jdbcTemplate.update(
+        if (roleId == null) {
+            roleId = UUID.randomUUID();
+
+            jdbcTemplate.update(
+                    """
+                            INSERT INTO roles (
+                                id, tenant_id, code, name, created_at, updated_at
+                            ) VALUES (?, ?, ?, ?, NOW(), NOW())
+                    """,
+                    roleId, tenant.id(),
+                    "AUTH_TEST_ROLE", "Authentication test role"
+            );
+        }
+
+        UUID permissionId = jdbcTemplate.query(
                 """
-                        INSERT INTO permissions (
-                            id, tenant_id, code, created_at, updated_at
-                        ) VALUES (?, ?, ?, NOW(), NOW())
+                        SELECT id
+                        FROM permissions
+                        WHERE tenant_id = ? AND code = ?
                 """,
-                permissionId, tenant.id(), permissionCode
+                rs -> rs.next() ? rs.getObject("id", UUID.class) : null,
+                tenant.id(), permissionCode
         );
+
+        if (permissionId == null) {
+            permissionId = UUID.randomUUID();
+
+            jdbcTemplate.update(
+                    """
+                            INSERT INTO permissions (
+                                id, tenant_id, code, created_at, updated_at
+                            ) VALUES (?, ?, ?, NOW(), NOW())
+                    """,
+                    permissionId, tenant.id(), permissionCode
+            );
+        }
 
         jdbcTemplate.update(
                 """
                         INSERT INTO user_roles (tenant_id, user_id, role_id)
                         VALUES (?, ?, ?)
+                        ON CONFLICT DO NOTHING
                 """,
                 tenant.id(), user.id(), roleId
         );
 
         jdbcTemplate.update(
                 """
-                        INSERT INTO role_permissions (tenant_id, role_id, permission_id)
-                        VALUES (?, ?, ?)
+                        INSERT INTO role_permissions (
+                            tenant_id, role_id, permission_id
+                        ) VALUES (?, ?, ?)
+                        ON CONFLICT DO NOTHING
                 """,
                 tenant.id(), roleId, permissionId
         );

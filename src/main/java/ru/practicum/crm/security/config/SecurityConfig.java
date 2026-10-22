@@ -91,15 +91,26 @@ public class SecurityConfig {
                                 .hasAuthority(PermissionCode.REQUEST_ASSIGN.name())
                                 .requestMatchers(HttpMethod.GET, "/admin/requests")
                                 .authenticated()
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/admin/requests/*",
+                                        "/admin/requests/*/status-history",
+                                        "/admin/requests/*/audit-log"
+                                )
+                                .authenticated()
                                 .requestMatchers(HttpMethod.GET, "/admin/queue")
                                 .authenticated()
                                 .requestMatchers("/analytics/**")
                                 .hasAuthority(PermissionCode.ANALYTICS_READ.name())
+                                .requestMatchers(HttpMethod.GET, "/client/requests/*")
+                                .hasAuthority(PermissionCode.REQUEST_READ_OWN.name())
                                 .requestMatchers(
                                         HttpMethod.POST,
                                         "/client/requests"
                                 )
                                 .hasAuthority(PermissionCode.REQUEST_CREATE.name())
+                                .requestMatchers(HttpMethod.POST, "/admin/requests/*/take")
+                                .authenticated()
                                 .requestMatchers(
                                         HttpMethod.POST,
                                         "/client/requests/*/cancel"

@@ -4,6 +4,7 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -15,7 +16,7 @@ import ru.practicum.crm.tenant.api.TenantContext;
 import ru.practicum.crm.user.api.UserContext;
 
 @RestController
-@RequestMapping("/admin/requests/{requestId}/assignee")
+@RequestMapping("/admin/requests/{requestId}")
 public class AssignmentController {
 
     private final AssignmentService assignmentService;
@@ -37,10 +38,19 @@ public class AssignmentController {
         this.userContext = userContext;
     }
 
-    @PutMapping
+    @PutMapping("/assignee")
     public RequestAssignmentDto assign(@PathVariable UUID requestId,
                                        @Valid @RequestBody AssignExecutorRequest request) {
         return assignmentService.assign(tenantContext.getCurrentTenantId(), requestId,
                 request.assigneeId(), request.version(), userContext.getCurrentUserId());
+    }
+
+    @PostMapping("/take")
+    public RequestAssignmentDto take(@PathVariable UUID requestId) {
+        return assignmentService.take(
+                tenantContext.getCurrentTenantId(),
+                requestId,
+                userContext.getCurrentUserId()
+        );
     }
 }

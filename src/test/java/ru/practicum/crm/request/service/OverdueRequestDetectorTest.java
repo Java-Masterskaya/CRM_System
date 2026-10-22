@@ -15,6 +15,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
@@ -35,14 +38,16 @@ class OverdueRequestDetectorTest {
 
     private final RequestRepository repository = mock(RequestRepository.class);
     private final OverdueEscalation escalation = mock(OverdueEscalation.class);
+    private final RequestSlaMetrics slaMetrics = mock(RequestSlaMetrics.class);
     private final OverdueRequestDetector detector = new OverdueRequestDetector(repository,
-            escalation, mock(PlatformTransactionManager.class),
+            escalation, slaMetrics, mock(PlatformTransactionManager.class),
             new OverdueDetectionProperties(BATCH, Duration.ofMinutes(1)));
 
     @Test
     void detect_marksBatchAfterBatchWhileBatchesAreFull() {
-        when(repository.markFirstResponseOverdue(any(), eq(BATCH))).thenReturn(2, 2, 1);
-        when(repository.markResolutionOverdue(any(), eq(BATCH))).thenReturn(0);
+        when(repository.markFirstResponseOverdue(any(), eq(BATCH))).thenReturn(
+                tenants(2), tenants(2), tenants(1));
+        when(repository.markResolutionOverdue(any(), eq(BATCH))).thenReturn(List.of());
 
         assertThat(detector.detect(() -> false)).isEqualTo(5);
 
@@ -57,10 +62,11 @@ class OverdueRequestDetectorTest {
      */
     @Test
     void detect_checksAllBatchesAgainstOneMoment() {
-        when(repository.markFirstResponseOverdue(any(), eq(BATCH))).thenReturn(2, 0);
-        when(repository.markResolutionOverdue(any(), eq(BATCH))).thenReturn(1);
+        when(repository.markFirstResponseOverdue(any(), eq(BATCH)))
+                .thenReturn(tenants(2), List.of());
+        when(repository.markResolutionOverdue(any(), eq(BATCH))).thenReturn(tenants(1));
         OverdueRequestDetector withTickingClock = new OverdueRequestDetector(repository,
-                escalation, mock(PlatformTransactionManager.class),
+                escalation, slaMetrics, mock(PlatformTransactionManager.class),
                 new OverdueDetectionProperties(BATCH, Duration.ofMinutes(1)), tickingClock());
 
         withTickingClock.detect(() -> false);
@@ -75,7 +81,7 @@ class OverdueRequestDetectorTest {
     /** Остановка приложения: начатая порция дописана, следующие не начинаются. */
     @Test
     void detect_whenStopRequestedAfterFirstBatch_startsNoMoreBatches() {
-        when(repository.markFirstResponseOverdue(any(), eq(BATCH))).thenReturn(2);
+        when(repository.markFirstResponseOverdue(any(), eq(BATCH))).thenReturn(tenants(2));
         AtomicInteger checks = new AtomicInteger();
 
         assertThat(detector.detect(() -> checks.incrementAndGet() > 1)).isEqualTo(2);
@@ -99,8 +105,8 @@ class OverdueRequestDetectorTest {
      */
     @Test
     void detect_afterMarking_escalatesEachDeadlineBatchAfterBatch() {
-        when(repository.markFirstResponseOverdue(any(), eq(BATCH))).thenReturn(1);
-        when(repository.markResolutionOverdue(any(), eq(BATCH))).thenReturn(0);
+        when(repository.markFirstResponseOverdue(any(), eq(BATCH))).thenReturn(tenants(1));
+        when(repository.markResolutionOverdue(any(), eq(BATCH))).thenReturn(List.of());
         when(escalation.escalateBatch(Deadline.FIRST_RESPONSE, BATCH)).thenReturn(2, 1);
         when(escalation.escalateBatch(Deadline.RESOLUTION, BATCH)).thenReturn(0);
 
@@ -153,6 +159,33 @@ class OverdueRequestDetectorTest {
 
         assertThat(detector.detect()).isZero();
 
-        verifyNoInteractions(repository, escalation);
+        verifyNoInteractions(repository, escalation, slaMetrics);
+    }
+
+    /** Каждое нарушение увеличивает счетчик своего срока и своего арендатора. */
+    @Test
+    void detect_whenDeadlinesMissed_countsEachBreachForItsTenant() {
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+
+        when(repository.markFirstResponseOverdue(any(), eq(BATCH))).thenReturn(List.of(first));
+        when(repository.markResolutionOverdue(any(), eq(BATCH)))
+                .thenReturn(List.of(first, second), List.of());
+
+        assertThat(detector.detect(() -> false)).isEqualTo(3);
+
+        verify(slaMetrics).firstResponseBreached(first);
+        verify(slaMetrics).resolutionBreached(first);
+        verify(slaMetrics).resolutionBreached(second);
+        verify(slaMetrics, times(1)).firstResponseBreached(any());
+        verify(slaMetrics, times(2)).resolutionBreached(any());
+    }
+
+    private static List<UUID> tenants(int count) {
+        List<UUID> ids = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            ids.add(UUID.randomUUID());
+        }
+        return ids;
     }
 }

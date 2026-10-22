@@ -3,6 +3,8 @@ package ru.practicum.crm.request.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -11,6 +13,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,15 +52,19 @@ class RequestStatusServiceTest {
     private static final UUID REQUEST_ID = UUID.randomUUID();
     private static final UUID OPERATOR_ID = UUID.randomUUID();
     private static final long VERSION = 3;
+    private static final Instant NOW = Instant.parse("2026-10-21T12:00:00Z");
 
     private final RequestRepository requests = mock(RequestRepository.class);
     private final RequestStatusHistoryRepository history =
             mock(RequestStatusHistoryRepository.class);
+    private final RequestSlaMetrics slaMetrics = mock(RequestSlaMetrics.class);
     private final RequestStatusNotifier notifier = mock(RequestStatusNotifier.class);
     private final CurrentUser currentUser = mock(CurrentUser.class);
     private final TenantContext tenantContext = mock(TenantContext.class);
+    private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     private final RequestStatusService service =
-            new RequestStatusService(requests, history, notifier, currentUser, tenantContext);
+            new RequestStatusService(requests, history, slaMetrics,
+                    notifier, currentUser, tenantContext, clock);
 
     @BeforeEach
     void setUp() {
@@ -156,7 +165,86 @@ class RequestStatusServiceTest {
                             .containsExactly("#/comment");
                 });
 
-        verifyNoInteractions(requests, history, notifier);
+        verifyNoInteractions(requests, slaMetrics, history);
+    }
+
+    /**
+     * Детектор еще не поставил признаки, но оба срока уже час как прошли: закрытие с нарушением.*/
+    @Test
+    void changeStatus_whenDone_countsDueInstantNotOnlyOverdueFlags() {
+        Request late = existing(RequestStatus.IN_PROGRESS);
+        late.setResolutionDueAt(NOW.minusSeconds(3600));
+        service.changeStatus(REQUEST_ID, command(RequestStatus.DONE, null, VERSION));
+
+        Request answerOnTime = existing(RequestStatus.IN_PROGRESS);
+        answerOnTime.setFirstResponseDueAt(NOW.minusSeconds(3600));
+        answerOnTime.setResolutionDueAt(NOW.plusSeconds(3600));
+        service.changeStatus(REQUEST_ID, command(RequestStatus.DONE, null, VERSION));
+
+        verify(slaMetrics).resolutionBreached(TENANT_ID);
+        verify(slaMetrics).closed(TENANT_ID, false);
+        verify(slaMetrics).closed(TENANT_ID, true);
+        verify(slaMetrics, never()).firstResponseBreached(any());
+        assertThat(late.isResolutionOverdue()).isTrue();
+        assertThat(answerOnTime.isFirstResponseOverdue()).isFalse();
+    }
+
+    /**
+     * New ушел в CONTACTED после срока первого ответа: признак и счетчик не ждут детектор.*/
+    @Test
+    void changeStatus_whenFirstResponseLeavesNewLate_countsBreachBeforeDetector() {
+        Request request = existing(RequestStatus.NEW);
+        request.setFirstResponseDueAt(NOW.minusSeconds(60));
+        request.setResolutionDueAt(NOW.plusSeconds(3600));
+
+        service.changeStatus(REQUEST_ID, command(RequestStatus.CONTACTED, null, VERSION));
+
+        assertThat(request.isFirstResponseOverdue()).isTrue();
+        verify(slaMetrics).firstResponseBreached(TENANT_ID);
+        verify(slaMetrics, never()).closed(any(), anyBoolean());
+
+        service.changeStatus(REQUEST_ID, command(RequestStatus.IN_PROGRESS, null, VERSION + 1));
+        service.changeStatus(REQUEST_ID, command(RequestStatus.DONE, null, VERSION + 2));
+
+        verify(slaMetrics).closed(TENANT_ID, false);
+        verify(slaMetrics, never()).resolutionBreached(any());
+        verifyNoMoreInteractions(slaMetrics);
+    }
+
+    /**
+     * Отмена и отклонение в долю закрытых в срок не входят.*/
+    @Test
+    void changeStatus_whenCancelledOrRejected_doesNotCountsAsClosed() {
+        Request cancelled = existing(RequestStatus.NEW);
+        cancelled.setResolutionDueAt(NOW.plusSeconds(3600));
+
+        service.changeStatus(REQUEST_ID, command(RequestStatus.CANCELLED, null, VERSION));
+
+        Request rejected = existing(RequestStatus.IN_PROGRESS);
+        rejected.setResolutionDueAt(NOW.minusSeconds(3600));
+
+        service.changeStatus(REQUEST_ID,
+                command(RequestStatus.REJECTED, "Не наш профиль", VERSION));
+
+        verify(slaMetrics).resolutionBreached(TENANT_ID);
+        verify(slaMetrics, never()).closed(any(), anyBoolean());
+    }
+
+    /**
+     * Flush упал на версии: транзакция откатиться, счетчик не должен вырасти -
+     * иначе детектор посчитает нарушение еще раз.*/
+    @Test
+    void changeStatus_whenFlushFailsOnVersion_doesNotCountBreach() {
+        Request request = existing(RequestStatus.IN_PROGRESS);
+        request.setResolutionDueAt(NOW.minusSeconds(3600));
+        doThrow(new ObjectOptimisticLockingFailureException(Request.class, REQUEST_ID))
+                .when(requests).saveAndFlush(any());
+
+        assertThatThrownBy(() -> service.changeStatus(REQUEST_ID,
+                command(RequestStatus.DONE, null, VERSION)))
+                .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+
+        verifyNoInteractions(slaMetrics);
     }
 
     @Test

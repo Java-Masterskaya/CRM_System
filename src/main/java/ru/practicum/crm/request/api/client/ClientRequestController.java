@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -15,9 +16,11 @@ import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ValidationError;
 import ru.practicum.crm.common.idempotency.IdempotencyResult;
+import ru.practicum.crm.request.api.client.dto.ClientRequestCardResponse;
 import ru.practicum.crm.request.api.client.dto.ClientRequestCreateRequest;
 import ru.practicum.crm.request.api.client.dto.ClientRequestCreatedResponse;
 import ru.practicum.crm.request.api.dto.RequestStatusResponse;
+import ru.practicum.crm.request.service.ClientRequestCardService;
 import ru.practicum.crm.request.service.ClientRequestService;
 import ru.practicum.crm.request.service.RequestStatusService;
 
@@ -28,6 +31,8 @@ public class ClientRequestController {
 
     private final ClientRequestService clientRequestService;
     private final RequestStatusService requestStatusService;
+
+    private final ClientRequestCardService clientRequestCardService;
 
     @PostMapping
     public ResponseEntity<ClientRequestCreatedResponse> create(
@@ -71,5 +76,12 @@ public class ClientRequestController {
                     ))
             );
         }
+    }
+
+    @GetMapping("/{requestId}")
+    public ResponseEntity<ClientRequestCardResponse> getCard(
+            @PathVariable UUID requestId
+    ) {
+        return ResponseEntity.ok(clientRequestCardService.getCard(requestId));
     }
 }

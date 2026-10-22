@@ -34,6 +34,9 @@ management:
       show-details: never
 
 app:
+  security:
+    authorization:
+      enabled: false
   outbox:
     scheduler-enabled: false
   # Так же и проверку просроченных заявок: по расписанию она помечала бы тестовые заявки.

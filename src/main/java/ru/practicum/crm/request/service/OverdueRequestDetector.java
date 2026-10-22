@@ -4,7 +4,10 @@ import static net.logstash.logback.argument.StructuredArguments.value;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.IntUnaryOperator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +52,7 @@ public class OverdueRequestDetector {
 
     private final RequestRepository repository;
     private final OverdueEscalation escalation;
+    private final RequestSlaMetrics requestSlaMetrics;
     private final TransactionTemplate transactionTemplate;
     private final OverdueDetectionProperties properties;
     private final Clock clock;
@@ -57,20 +61,25 @@ public class OverdueRequestDetector {
 
     @Autowired
     public OverdueRequestDetector(RequestRepository repository, OverdueEscalation escalation,
-            PlatformTransactionManager transactionManager,
-            OverdueDetectionProperties properties) {
-        this(repository, escalation, transactionManager, properties, Clock.systemUTC());
+                                  RequestSlaMetrics requestSlaMetrics,
+                                  PlatformTransactionManager transactionManager,
+                                  OverdueDetectionProperties properties) {
+        this(repository, escalation, requestSlaMetrics, transactionManager, properties,
+                Clock.systemUTC());
     }
 
     /** Для тестов: часы, по которым берётся момент проверки. */
     OverdueRequestDetector(RequestRepository repository, OverdueEscalation escalation,
-            PlatformTransactionManager transactionManager, OverdueDetectionProperties properties,
-            Clock clock) {
+                           RequestSlaMetrics requestSlaMetrics,
+                           PlatformTransactionManager transactionManager,
+                           OverdueDetectionProperties properties,
+                           Clock clock) {
         this.repository = repository;
         this.escalation = escalation;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.properties = properties;
         this.clock = clock;
+        this.requestSlaMetrics = requestSlaMetrics;
     }
 
     /**
@@ -93,10 +102,12 @@ public class OverdueRequestDetector {
 
     int detect(BooleanSupplier stopRequested) {
         Instant now = clock.instant();
-        int firstResponse = inBatches(
-                limit -> repository.markFirstResponseOverdue(now, limit), stopRequested);
-        int resolution = inBatches(
-                limit -> repository.markResolutionOverdue(now, limit), stopRequested);
+        int firstResponse = inBatches(limit -> record(
+                repository.markFirstResponseOverdue(now, limit),
+                requestSlaMetrics::firstResponseBreached), stopRequested);
+        int resolution = inBatches(limit -> record(
+                repository.markResolutionOverdue(now, limit),
+                requestSlaMetrics::resolutionBreached), stopRequested);
         if (firstResponse + resolution > 0) {
             LOG.info("Просроченные заявки помечены: по первому ответу {}, по решению {}",
                     value("firstResponseOverdue", firstResponse),
@@ -112,6 +123,13 @@ public class OverdueRequestDetector {
                     value("resolutionEscalated", resolutionEscalated));
         }
         return firstResponse + resolution;
+    }
+
+    /**
+     * Увеличивает счетчик по арендатору каждой помеченной заявки и возвращает их число.*/
+    private static int record(List<UUID> tenantIds, Consumer<UUID> counter) {
+        tenantIds.forEach(counter);
+        return tenantIds.size();
     }
 
     /**

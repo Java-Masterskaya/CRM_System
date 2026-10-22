@@ -2,6 +2,7 @@ package ru.practicum.crm.request.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -57,6 +58,12 @@ class OverdueRequestDetectorIntegrationTest extends BaseIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private MeterRegistry registry;
+
+    @Autowired
+    private RequestSlaMetrics slaMetrics;
+
     private UUID tenantA;
     private Instant hourAgo;
     private Instant tomorrow;
@@ -91,6 +98,27 @@ class OverdueRequestDetectorIntegrationTest extends BaseIntegrationTest {
                 .containsEntry("resolution_overdue", true)
                 .containsEntry("status", "NEW")
                 .containsEntry("version", 2L);
+    }
+
+    /**
+     * DoD: Нарушение срока увеличивает счетчик этого срока, и ряд отделён меткой арендатора.
+     * У второго арендатора истек только срок решения - его счетчик первого ответа не растёт.
+     */
+    @Test
+    void detect_whenDeadlineMissed_increasesBreachCounterOfThatTenant() {
+        UUID otherUid = insertTenant();
+        insertRequest(tenantA, "NEW", hourAgo, hourAgo);
+        insertRequest(otherUid, "CONTACTED", hourAgo, hourAgo);
+
+        detector.detect();
+
+        assertThat(breachCount(tenantA, RequestSlaMetrics.FIRST_RESPONSE)).isEqualTo(1);
+        assertThat(breachCount(tenantA, RequestSlaMetrics.RESOLUTION)).isEqualTo(1);
+        assertThat(registry.find(RequestSlaMetrics.BREACHES)
+                .tag(RequestSlaMetrics.DEADLINE, RequestSlaMetrics.FIRST_RESPONSE)
+                .tag(RequestSlaMetrics.TENANT, otherUid.toString())
+                .counter()).isNull();
+        assertThat(breachCount(otherUid, RequestSlaMetrics.RESOLUTION)).isEqualTo(1);
     }
 
     /** Первый ответ — переход из NEW в CONTACTED: после него этот срок уже не просрочивается. */
@@ -169,7 +197,8 @@ class OverdueRequestDetectorIntegrationTest extends BaseIntegrationTest {
             insertRequest(tenantA, "NEW", hourAgo.minus(Duration.ofMinutes(minutes)), null);
         }
         OverdueRequestDetector batchesOfTwo = new OverdueRequestDetector(requests, escalation,
-                transactionManager, new OverdueDetectionProperties(2, Duration.ofMinutes(1)));
+                slaMetrics, transactionManager,
+                new OverdueDetectionProperties(2, Duration.ofMinutes(1)));
         AtomicInteger checks = new AtomicInteger();
 
         assertThat(batchesOfTwo.detect(() -> checks.incrementAndGet() > 1)).isEqualTo(2);
@@ -282,6 +311,14 @@ class OverdueRequestDetectorIntegrationTest extends BaseIntegrationTest {
         } finally {
             jdbcTemplate.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
         }
+    }
+
+    private double breachCount(UUID tenantId, String deadline) {
+        return registry.get(RequestSlaMetrics.BREACHES)
+                .tag(RequestSlaMetrics.DEADLINE, deadline)
+                .tag(RequestSlaMetrics.TENANT, tenantId.toString())
+                .counter()
+                .count();
     }
 
     private String plan(String sql) {
