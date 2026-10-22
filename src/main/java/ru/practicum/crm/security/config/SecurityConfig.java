@@ -109,6 +109,8 @@ public class SecurityConfig {
                                 .hasAuthority(PermissionCode.REQUEST_CREATE.name())
                                 .requestMatchers(HttpMethod.PUT, "/admin/requests/*")
                                 .hasAuthority(PermissionCode.REQUEST_EDIT.name())
+                                .requestMatchers(HttpMethod.POST, "/admin/requests/*/take")
+                                .authenticated()
                                 .requestMatchers(
                                         "/admin/**",
                                         "/client/**"

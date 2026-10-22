@@ -13,6 +13,7 @@ import ru.practicum.crm.notification.api.NotificationType;
 import ru.practicum.crm.outbox.api.OutboxPublisher;
 import ru.practicum.crm.request.api.RequestAssignmentService;
 import ru.practicum.crm.request.api.dto.RequestAssignmentDto;
+import ru.practicum.crm.request.api.dto.RequestAssignmentOutcome;
 import ru.practicum.crm.user.api.PermissionCode;
 import ru.practicum.crm.user.api.UserPermissionService;
 import ru.practicum.crm.user.api.UserService;
@@ -38,8 +39,9 @@ public class AssignmentService {
     @Transactional
     public RequestAssignmentDto assign(UUID tenantId, UUID requestId, UUID assigneeId,
                                        long expectedVersion, UUID actorId) {
+        String message = "У кандидата нет права вести заявку";
         ActiveUserDto candidate = assigneeId == null ? null
-                : requireCandidateEligible(tenantId, assigneeId);
+                : requireCandidateEligible(tenantId, assigneeId, message);
 
         RequestAssignmentDto result = requestAssignmentService.changeAssignee(tenantId, requestId,
                 assigneeId, expectedVersion, actorId);
@@ -51,15 +53,33 @@ public class AssignmentService {
         return result;
     }
 
-    private ActiveUserDto requireCandidateEligible(UUID tenantId, UUID assigneeId) {
+    @Transactional
+    public RequestAssignmentDto take(UUID tenantId, UUID requestId, UUID actorId) {
+        String message = "У вас нет права назначать себя исполнителем заявки";
+        ActiveUserDto candidate = requireCandidateEligible(tenantId, actorId, message);
+
+        RequestAssignmentOutcome outcome =
+                requestAssignmentService.takeUnassigned(tenantId, requestId, actorId);
+
+        if (outcome.changed()) {
+            notifyAuthor(tenantId, outcome.assignment(), candidate);
+        }
+
+        return outcome.assignment();
+    }
+
+    private ActiveUserDto requireCandidateEligible(
+            UUID tenantId,
+            UUID assigneeId,
+            String accessDeniedMessage) {
         ActiveUserDto candidate = userService.findActiveInTenant(assigneeId, tenantId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.NOT_FOUND,
-                        "Кандидат в исполнители не найден: id = " + assigneeId));
+                        "Пользователь не найден: id = " + assigneeId));
 
         if (!userPermissionService.hasPermission(assigneeId,
                 PermissionCode.REQUEST_STATUS_CHANGE)) {
             throw new ApiException(ErrorCode.ACCESS_DENIED,
-                    "У кандидата нет права вести заявку");
+                    accessDeniedMessage);
         }
         return candidate;
     }

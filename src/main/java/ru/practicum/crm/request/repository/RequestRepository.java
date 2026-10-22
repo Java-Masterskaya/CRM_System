@@ -167,4 +167,32 @@ public interface RequestRepository extends Repository<Request, UUID> {
     @Query(nativeQuery = true,
             value = "UPDATE requests SET resolution_escalated = TRUE WHERE id IN (:ids)")
     int markResolutionEscalated(@Param("ids") Collection<UUID> ids);
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    @Modifying(
+            flushAutomatically = true,
+            clearAutomatically = true
+    )
+    @Query(
+            nativeQuery = true,
+            value =
+                """
+                UPDATE requests
+                SET assignee_id = :actorId,
+                    assigned_at = :assignedAt,
+                    updated_at = CURRENT_TIMESTAMP,
+                    version = version + 1
+                WHERE id = :requestId
+                  AND tenant_id = :tenantId
+                  AND deleted = FALSE
+                  AND assignee_id IS NULL
+                  AND status NOT IN ('DONE', 'REJECTED', 'CANCELLED')
+                """
+    )
+    int takeIfUnassigned(
+            @Param("tenantId") UUID tenantId,
+            @Param("requestId") UUID requestId,
+            @Param("actorId") UUID actorId,
+            @Param("assignedAt") Instant assignedAt
+    );
 }

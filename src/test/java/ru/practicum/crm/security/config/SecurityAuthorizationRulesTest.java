@@ -214,6 +214,30 @@ class SecurityAuthorizationRulesTest {
     }
 
     /**
+     * Взятие заявки в работу: POST пропускает любой аутентифицированный
+     * запрос, бизнес-права проверяет сервис. Другие HTTP-методы закрыты.
+     */
+    @Test
+    void givenAnyPermission_whenTakingRequest_thenUrlRulePassesOnlyPostToMethodCheck()
+            throws Exception {
+        String route = "/admin/requests/" + UUID.randomUUID() + "/take";
+
+        mockMvc.perform(post(route).with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get(route).with(jwtWithAuthority("REQUEST_STATUS_CHANGE")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenNoCredentials_whenTakingRequest_thenReturnsUnauthorized()
+            throws Exception {
+        mockMvc.perform(post("/admin/requests/" + UUID.randomUUID() + "/take")
+                        .with(anonymous()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /**
      * Реестр заявок (T-040): маршрут пропускает любой запрос с токеном, право
      * {@code REQUEST_READ_ALL} проверяет сервис. Открыто только чтение: другой метод на том же
      * пути по-прежнему закрыт.
