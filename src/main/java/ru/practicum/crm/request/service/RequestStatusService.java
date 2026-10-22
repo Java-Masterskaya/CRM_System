@@ -107,11 +107,20 @@ public class RequestStatusService {
         }
 
         request.setStatus(target);
-        notePassedDeadlines(request, from, clock.instant(), tenantId);
+        DeadlineNotes notes = notePassedDeadlines(request, from, clock.instant());
         history.save(new RequestStatusChange(tenantId, requestId, from, target,
                 currentUser.id(), comment));
         Request saved = requests.saveAndFlush(request);
         notifier.statusChanged(saved, from);
+
+        if (notes.firstResponse()) {
+            requestSlaMetrics.firstResponseBreached(tenantId);
+        }
+
+        if (notes.resolution()) {
+            requestSlaMetrics.resolutionBreached(tenantId);
+        }
+
         if (target == RequestStatus.DONE) {
             requestSlaMetrics.closed(tenantId, request.metDeadlines());
         }
@@ -122,35 +131,43 @@ public class RequestStatusService {
      * Детектор помечает просрочку раз в минтут. Срок который этого статуса перестает идти,
      * сверяется сразу. Первый ответ - пока заявка в {@code NEW}, решение - пока в работе.
      * */
-    private void notePassedDeadlines(
-            Request request, RequestStatus from, Instant now, UUID tenantId) {
+    private static DeadlineNotes notePassedDeadlines(
+            Request request, RequestStatus from, Instant now) {
+
+        boolean firstResponse = false;
+        boolean resolution = false;
 
         if (from == RequestStatus.NEW && passed(request.getFirstResponseDueAt(), now)
                 && !request.isFirstResponseOverdue()) {
             request.setFirstResponseOverdue(true);
-            requestSlaMetrics.firstResponseBreached(tenantId);
+            firstResponse = true;
         }
 
         if (request.getStatus().isTerminal() && resolutionClockRunning(from)
                 && passed(request.getResolutionDueAt(), now)
                 && !request.isResolutionOverdue()) {
             request.setResolutionOverdue(true);
-            requestSlaMetrics.resolutionBreached(tenantId);
+            resolution = true;
         }
+
+        return new DeadlineNotes(firstResponse, resolution);
     }
 
-    private boolean resolutionClockRunning(RequestStatus status) {
+    private static boolean resolutionClockRunning(RequestStatus status) {
         return status == RequestStatus.NEW
                 || status == RequestStatus.CONTACTED
                 || status == RequestStatus.IN_PROGRESS;
     }
 
-    private boolean passed(Instant dueAt, Instant now) {
+    private static boolean passed(Instant dueAt, Instant now) {
         return dueAt != null && !now.isBefore(dueAt);
     }
 
     /** Комментарий из одних пробелов — то же, что его отсутствие. */
     private static String normalized(String comment) {
         return comment == null || comment.isBlank() ? null : comment.strip();
+    }
+
+    private record DeadlineNotes(boolean firstResponse, boolean resolution) {
     }
 }

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -227,6 +228,23 @@ class RequestStatusServiceTest {
 
         verify(slaMetrics).resolutionBreached(TENANT_ID);
         verify(slaMetrics, never()).closed(any(), anyBoolean());
+    }
+
+    /**
+     * Flush упал на версии: транзакция откатиться, счетчик не должен вырасти -
+     * иначе детектор посчитает нарушение еще раз.*/
+    @Test
+    void changeStatus_whenFlushFailsOnVersion_doesNotCountBreach() {
+        Request request = existing(RequestStatus.IN_PROGRESS);
+        request.setResolutionDueAt(NOW.minusSeconds(3600));
+        doThrow(new ObjectOptimisticLockingFailureException(Request.class, REQUEST_ID))
+                .when(requests).saveAndFlush(any());
+
+        assertThatThrownBy(() -> service.changeStatus(REQUEST_ID,
+                command(RequestStatus.DONE, null, VERSION)))
+                .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+
+        verifyNoInteractions(slaMetrics);
     }
 
     @Test
