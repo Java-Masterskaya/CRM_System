@@ -17,7 +17,10 @@ import org.testcontainers.containers.PostgreSQLContainer;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureObservability
-@TestPropertySource(properties = "management.health.mail.enabled=false")
+@TestPropertySource(properties = {
+        "management.health.mail.enabled=false",
+        "app.security.authorization.enabled=true"
+})
 class ActuatorHealthIT {
 
     static final PostgreSQLContainer<?> postgres =
