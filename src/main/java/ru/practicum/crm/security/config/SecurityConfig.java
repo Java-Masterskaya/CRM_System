@@ -102,6 +102,8 @@ public class SecurityConfig {
                                 .authenticated()
                                 .requestMatchers("/analytics/**")
                                 .hasAuthority(PermissionCode.ANALYTICS_READ.name())
+                                .requestMatchers(HttpMethod.GET, "/client/requests/*")
+                                .hasAuthority(PermissionCode.REQUEST_READ_OWN.name())
                                 .requestMatchers(
                                         HttpMethod.POST,
                                         "/client/requests"

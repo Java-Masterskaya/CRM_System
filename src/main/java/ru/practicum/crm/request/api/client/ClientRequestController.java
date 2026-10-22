@@ -2,8 +2,11 @@ package ru.practicum.crm.request.api.client;
 
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -13,8 +16,10 @@ import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.ValidationError;
 import ru.practicum.crm.common.idempotency.IdempotencyResult;
+import ru.practicum.crm.request.api.client.dto.ClientRequestCardResponse;
 import ru.practicum.crm.request.api.client.dto.ClientRequestCreateRequest;
 import ru.practicum.crm.request.api.client.dto.ClientRequestCreatedResponse;
+import ru.practicum.crm.request.service.ClientRequestCardService;
 import ru.practicum.crm.request.service.ClientRequestService;
 
 @RestController
@@ -23,6 +28,8 @@ import ru.practicum.crm.request.service.ClientRequestService;
 public class ClientRequestController {
 
     private final ClientRequestService clientRequestService;
+
+    private final ClientRequestCardService clientRequestCardService;
 
     @PostMapping
     public ResponseEntity<ClientRequestCreatedResponse> create(
@@ -61,5 +68,12 @@ public class ClientRequestController {
                     ))
             );
         }
+    }
+
+    @GetMapping("/{requestId}")
+    public ResponseEntity<ClientRequestCardResponse> getCard(
+            @PathVariable UUID requestId
+    ) {
+        return ResponseEntity.ok(clientRequestCardService.getCard(requestId));
     }
 }
