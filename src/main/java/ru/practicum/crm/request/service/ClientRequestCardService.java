@@ -59,7 +59,7 @@ public class ClientRequestCardService {
                 .orElseThrow(ClientRequestCardService::notFound);
 
         List<ClientRequestStatusHistoryItem> history = historyRepository
-                .findByTenantIdAndRequestIdOrderByCreatedAtAsc(tenantId, requestId)
+                .findByTenantIdAndRequestIdOrderByCreatedAtAscIdAsc(tenantId, requestId)
                 .stream()
                 .map(ClientRequestCardService::toHistoryItem)
                 .toList();

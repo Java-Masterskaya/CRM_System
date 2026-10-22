@@ -15,7 +15,7 @@ public interface RequestStatusHistoryRepository extends Repository<RequestStatus
 
     <S extends RequestStatusChange> S save(S change);
 
-    List<RequestStatusChange> findByTenantIdAndRequestIdOrderByCreatedAtAsc(
+    List<RequestStatusChange> findByTenantIdAndRequestIdOrderByCreatedAtAscIdAsc(
             UUID tenantId,
             UUID requestId);
 
