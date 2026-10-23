@@ -259,19 +259,30 @@ class SecurityAuthorizationRulesTest {
     }
 
     /**
-     * Карточка заявки (T-041): маршрут пропускает любой запрос с токеном, право
-     * {@code REQUEST_READ_ALL} проверяет сервис. Открыто только чтение: другой метод на том же
-     * пути по-прежнему закрыт.
+     * Карточка заявки (T-041) и редактирование заявки (T-042):
+     * GET и PUT требуют разные права доступа.
      */
     @Test
-    void givenAnyPermission_whenReadingRequestCard_thenUrlRulePassesOnlyGetToMethodCheck()
+    void givenPermissions_whenAccessingRequestCard_thenUrlRulesCheckRequiredPermission()
             throws Exception {
         String route = "/admin/requests/" + UUID.randomUUID();
 
         mockMvc.perform(get(route).with(jwtWithAuthority("REQUEST_READ_OWN")))
                 .andExpect(status().isNotFound());
+
         mockMvc.perform(put(route).with(jwtWithAuthority("REQUEST_READ_ALL")))
                 .andExpect(status().isForbidden());
+
+        mockMvc.perform(put(route).with(jwtWithAuthority("REQUEST_EDIT")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void givenNoCredentials_whenEditingRequest_thenReturnsUnauthorized()
+            throws Exception {
+        mockMvc.perform(put("/admin/requests/" + UUID.randomUUID())
+                        .with(anonymous()))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

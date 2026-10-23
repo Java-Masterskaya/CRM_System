@@ -178,6 +178,62 @@ class RequestEditServiceTest {
     }
 
     @Test
+    void edit_whenDesiredDueAtIsOmitted_preservesExistingDeadline() {
+        EditRequestRequest command = new EditRequestRequest();
+        command.setVersion(VERSION);
+        command.setPriority(request.getPriority());
+        command.setTypeId(NEW_TYPE_ID);
+        command.setDescription("Новое описание");
+        // setDesiredDueAt намеренно не вызываем.
+
+        Instant originalDueAt = request.getDesiredDueAt();
+
+        service.edit(REQUEST_ID, command);
+
+        assertThat(request.getDesiredDueAt()).isEqualTo(originalDueAt);
+        verify(requests).saveAndFlush(request);
+    }
+
+    @Test
+    void edit_whenDesiredDueAtIsExplicitlyNull_clearsDeadline() {
+        EditRequestRequest command = command(
+                request.getPriority(),
+                NEW_TYPE_ID,
+                null,
+                "Новое описание",
+                VERSION);
+
+        service.edit(REQUEST_ID, command);
+
+        assertThat(request.getDesiredDueAt()).isNull();
+        verify(requests).saveAndFlush(request);
+    }
+
+    @Test
+    void edit_whenRequestIsTerminal_throwsRequestClosedAndDoesNotSave() {
+        ReflectionTestUtils.setField(request, "status", RequestStatus.DONE);
+
+        EditRequestRequest command = command(
+                differentPriority(request.getPriority()),
+                NEW_TYPE_ID,
+                Instant.parse("2026-12-01T12:00:00Z"),
+                "Не должно сохраниться",
+                VERSION);
+
+        assertThatThrownBy(() -> service.edit(REQUEST_ID, command))
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(ErrorCode.REQUEST_CLOSED));
+
+        assertThat(request.getPriority()).isEqualTo(RequestPriority.values()[0]);
+        assertThat(request.getTypeId()).isEqualTo(OLD_TYPE_ID);
+        assertThat(request.getDescription()).isEqualTo("Старое описание");
+
+        verify(requests, never()).saveAndFlush(any());
+        verifyNoInteractions(audit);
+    }
+
+    @Test
     void edit_recordsSnapshotBeforeChangingFields() {
         EditRequestRequest command = command(
                 differentPriority(request.getPriority()),

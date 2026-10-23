@@ -61,6 +61,12 @@ public class RequestEditService {
 
         request.requireVersion(command.getVersion());
 
+        if (request.getStatus().isTerminal()) {
+            throw new ApiException(
+                    ErrorCode.REQUEST_CLOSED,
+                    "Заявка в статусе " + request.getStatus()
+                            + " закрыта для редактирования.");
+        }
 
         requestTypes.requireActive(tenantId, command.getTypeId());
 
@@ -68,7 +74,11 @@ public class RequestEditService {
 
         request.setPriority(command.getPriority());
         request.setTypeId(command.getTypeId());
-        request.setDesiredDueAt(command.getDesiredDueAt());
+
+        if (command.isDesiredDueAtProvided()) {
+            request.setDesiredDueAt(command.getDesiredDueAt());
+        }
+
         request.setDescription(command.getDescription());
 
         Request saved = requests.saveAndFlush(request);

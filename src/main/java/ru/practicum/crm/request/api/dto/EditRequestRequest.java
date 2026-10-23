@@ -1,6 +1,7 @@
 package ru.practicum.crm.request.api.dto;
 
 import com.fasterxml.jackson.annotation.JsonAnySetter;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
@@ -25,8 +26,10 @@ public class EditRequestRequest {
     private UUID typeId;
 
     private Instant desiredDueAt;
+    private boolean desiredDueAtProvided;
 
-    @Size(max = 4000)
+    @NotBlank
+    @Size(max = 10_000)
     private String description;
 
     private final Set<String> unknownProperties = new LinkedHashSet<>();
@@ -61,6 +64,11 @@ public class EditRequestRequest {
 
     public void setDesiredDueAt(Instant desiredDueAt) {
         this.desiredDueAt = desiredDueAt;
+        this.desiredDueAtProvided = true;
+    }
+
+    public boolean isDesiredDueAtProvided() {
+        return desiredDueAtProvided;
     }
 
     public String getDescription() {
