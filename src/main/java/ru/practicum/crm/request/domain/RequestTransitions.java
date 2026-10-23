@@ -44,6 +44,11 @@ public final class RequestTransitions {
         };
     }
 
+    public static boolean isAllowedByClient(RequestStatus from, RequestStatus to) {
+        return isAllowed(from, to)
+                && (from == RequestStatus.NEW || from == RequestStatus.CONTACTED);
+    }
+
     public static boolean requiresReason(RequestStatus to) {
         return to == RequestStatus.REJECTED;
     }

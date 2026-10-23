@@ -19,8 +19,10 @@ import ru.practicum.crm.common.idempotency.IdempotencyResult;
 import ru.practicum.crm.request.api.client.dto.ClientRequestCardResponse;
 import ru.practicum.crm.request.api.client.dto.ClientRequestCreateRequest;
 import ru.practicum.crm.request.api.client.dto.ClientRequestCreatedResponse;
+import ru.practicum.crm.request.api.dto.RequestStatusResponse;
 import ru.practicum.crm.request.service.ClientRequestCardService;
 import ru.practicum.crm.request.service.ClientRequestService;
+import ru.practicum.crm.request.service.RequestStatusService;
 
 @RestController
 @RequestMapping("/client/requests")
@@ -28,6 +30,7 @@ import ru.practicum.crm.request.service.ClientRequestService;
 public class ClientRequestController {
 
     private final ClientRequestService clientRequestService;
+    private final RequestStatusService requestStatusService;
 
     private final ClientRequestCardService clientRequestCardService;
 
@@ -44,6 +47,11 @@ public class ClientRequestController {
 
         return ResponseEntity.status(result.status())
                 .body(result.body());
+    }
+
+    @PostMapping("/{requestId}/cancel")
+    public RequestStatusResponse cancel(@PathVariable UUID requestId) {
+        return requestStatusService.cancelOwnRequest(requestId);
     }
 
     private static void validateIdempotencyKey(String key) {
