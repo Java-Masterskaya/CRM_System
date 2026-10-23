@@ -351,6 +351,119 @@ class RequestStatusIntegrationTest extends BaseIntegrationTest {
         assertThat(history(id)).hasSize(1);
     }
 
+    @Test
+    void cancelOwnRequest_whenStatusNew_cancelsAndWritesHistory() throws Exception {
+        assertClientCanCancelFrom("NEW", "client-cancel-new@example.com");
+    }
+
+    @Test
+    void cancelOwnRequest_whenStatusContacted_cancelsAndWritesHistory() throws Exception {
+        assertClientCanCancelFrom("CONTACTED", "client-cancel-contacted@example.com");
+    }
+
+    @Test
+    void cancelOwnRequest_whenStatusDoesNotAllowCancellation_returnsConflict()
+            throws Exception {
+        UUID clientId = insertUser(tenant, "client-cancel-conflict@example.com", "CLIENT");
+        String clientToken = login(tenant, "client-cancel-conflict@example.com");
+
+        for (String initialStatus : List.of(
+                "IN_PROGRESS", "ON_HOLD", "DONE", "REJECTED", "CANCELLED")) {
+
+            UUID requestId = insertRequest(tenant, initialStatus, clientId);
+            Map<String, Object> before = request(requestId);
+
+            cancelRequestT039(requestId, clientToken)
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("INVALID_TRANSITION"));
+
+            assertThat(request(requestId)).isEqualTo(before);
+            assertThat(history(requestId)).isEmpty();
+        }
+    }
+
+    @Test
+    void cancelOwnRequest_whenAlreadyCancelled_returnsConflictWithoutSecondHistoryEntry()
+            throws Exception {
+        UUID clientId = insertUser(tenant, "client-cancel-twice@example.com", "CLIENT");
+        String clientToken = login(tenant, "client-cancel-twice@example.com");
+        UUID requestId = insertRequest(tenant, "NEW", clientId);
+
+        cancelRequestT039(requestId, clientToken)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        List<Map<String, Object>> historyAfterFirstCancellation = history(requestId);
+        assertThat(historyAfterFirstCancellation).hasSize(1);
+
+        Map<String, Object> stateAfterFirstCancellation = request(requestId);
+
+        cancelRequestT039(requestId, clientToken)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INVALID_TRANSITION"));
+
+        assertThat(request(requestId)).isEqualTo(stateAfterFirstCancellation);
+        assertThat(history(requestId)).hasSize(1);
+    }
+
+    @Test
+    void cancelOwnRequest_whenRequestBelongsToAnotherClient_returnsNotFound()
+            throws Exception {
+        UUID anotherClientId = insertUser(
+                tenant, "client-cancel-owner@example.com", "CLIENT");
+        insertUser(tenant, "client-cancel-stranger@example.com", "CLIENT");
+
+        String strangerToken = login(tenant, "client-cancel-stranger@example.com");
+
+        UUID requestId = insertRequest(tenant, "NEW", anotherClientId);
+        Map<String, Object> before = request(requestId);
+
+        cancelRequestT039(requestId, strangerToken)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+
+        assertThat(request(requestId)).isEqualTo(before);
+        assertThat(history(requestId)).isEmpty();
+    }
+
+    private void assertClientCanCancelFrom(String initialStatus, String email)
+            throws Exception {
+        UUID clientId = insertUser(tenant, email, "CLIENT");
+        String clientToken = login(tenant, email);
+        UUID requestId = insertRequest(tenant, initialStatus, clientId);
+
+        cancelRequestT039(requestId, clientToken)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(requestId.toString()))
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.version").value(1));
+
+        assertThat(request(requestId)).containsEntry("status", "CANCELLED");
+
+        List<Map<String, Object>> historyEntries = history(requestId);
+        assertThat(historyEntries).hasSize(1);
+
+        Map<String, Object> entry = historyEntries.get(0);
+        assertThat(entry)
+                .containsEntry("from_status", initialStatus)
+                .containsEntry("to_status", "CANCELLED")
+                .containsEntry("author_id", clientId);
+
+        Boolean hasTimestamp = jdbcTemplate.queryForObject(
+                "SELECT created_at IS NOT NULL FROM request_status_history "
+                        + "WHERE request_id = ?",
+                Boolean.class,
+                requestId);
+
+        assertThat(hasTimestamp).isTrue();
+    }
+
+    private ResultActions cancelRequestT039(UUID requestId, String accessToken)
+            throws Exception {
+        return mockMvc.perform(post("/client/requests/{id}/cancel", requestId)
+                .header("Authorization", "Bearer " + accessToken));
+    }
+
     private ResultActions changeStatus(UUID requestId, String accessToken, String json)
             throws Exception {
         return mockMvc.perform(put("/admin/requests/{id}/status", requestId)

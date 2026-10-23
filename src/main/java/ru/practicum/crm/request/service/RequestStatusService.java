@@ -70,7 +70,6 @@ public class RequestStatusService {
         this.requestSlaMetrics = requestSlaMetrics;
         this.clock = clock;
     }
-
     /**
      * Переводит заявку текущего арендатора в другой статус и записывает переход в историю.
      *
@@ -83,11 +82,13 @@ public class RequestStatusService {
      * @throws org.springframework.orm.ObjectOptimisticLockingFailureException если заявку уже
      *     изменили после того, как пользователь её открыл, — ответ 409
      */
+
     @PreAuthorize("hasAuthority('REQUEST_STATUS_CHANGE')")
     @Transactional
     public RequestStatusResponse changeStatus(UUID requestId, ChangeRequestStatusRequest command) {
         RequestStatus target = command.status();
         String comment = normalized(command.comment());
+
         if (RequestTransitions.requiresReason(target) && comment == null) {
             throw new ApiException(ErrorCode.VALIDATION_FAILED,
                     "Чтобы отклонить заявку, укажите причину.",
@@ -99,17 +100,54 @@ public class RequestStatusService {
         Request request = requests.findByIdAndTenantIdAndDeletedFalse(requestId, tenantId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.NOT_FOUND,
                         "Заявка не найдена."));
+
         request.requireVersion(command.version());
+
+        return transition(request, tenantId, target, comment, false);
+    }
+    /**
+     * Отменяет собственную заявку клиента, пока работа по ней не началась.
+     */
+
+    @PreAuthorize("hasAuthority('REQUEST_CANCEL_OWN')")
+    @Transactional
+    public RequestStatusResponse cancelOwnRequest(UUID requestId) {
+        UUID tenantId = tenantContext.getCurrentTenantId();
+        UUID authorId = currentUser.id();
+
+        Request request = requests
+                .findByIdAndTenantIdAndAuthorIdAndDeletedFalse(requestId, tenantId, authorId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.NOT_FOUND,
+                        "Заявка не найдена."));
+
+        return transition(request, tenantId, RequestStatus.CANCELLED, null, true);
+    }
+
+    /**
+     * Общая транзакционная операция смены статуса: матрица, история, сохранение и уведомление.
+     */
+    private RequestStatusResponse transition(Request request,
+                                             UUID tenantId,
+                                             RequestStatus target,
+                                             String comment,
+                                             boolean clientCancellation) {
         RequestStatus from = request.getStatus();
-        if (!RequestTransitions.isAllowed(from, target)) {
+
+        boolean allowed = clientCancellation
+                ? RequestTransitions.isAllowedByClient(from, target)
+                : RequestTransitions.isAllowed(from, target);
+
+        if (!allowed) {
             throw new ApiException(ErrorCode.INVALID_TRANSITION,
                     "Заявку нельзя перевести из статуса " + from + " в " + target + ".");
         }
 
         request.setStatus(target);
         DeadlineNotes notes = notePassedDeadlines(request, from, clock.instant());
-        history.save(new RequestStatusChange(tenantId, requestId, from, target,
-                currentUser.id(), comment));
+
+        history.save(new RequestStatusChange(
+                tenantId, request.getId(), from, target, currentUser.id(), comment));
+
         Request saved = requests.saveAndFlush(request);
         notifier.statusChanged(saved, from);
 

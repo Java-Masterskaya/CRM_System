@@ -39,11 +39,14 @@ public interface RequestRepository extends Repository<Request, UUID> {
     <S extends Request> S saveAndFlush(S request);
 
     Optional<Request> findByIdAndTenantIdAndDeletedFalse(UUID id, UUID tenantId);
+  
+    Optional<Request> findByIdAndTenantId(UUID id, UUID tenantId);
 
     /**
      * Заявка арендатора без отсечения удаленных - для мягкого восстоновления.
      */
-    Optional<Request> findByIdAndTenantId(UUID id, UUID tenantId);
+    Optional<Request> findByIdAndTenantIdAndAuthorIdAndDeletedFalse(
+            UUID id, UUID tenantId, UUID authorId);
 
     Page<Request> findByTenantIdAndDeletedFalse(UUID tenantId, Pageable pageable);
 

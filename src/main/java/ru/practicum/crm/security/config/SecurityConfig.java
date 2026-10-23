@@ -117,6 +117,11 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.POST, "/admin/requests/*/take")
                                 .authenticated()
                                 .requestMatchers(
+                                        HttpMethod.POST,
+                                        "/client/requests/*/cancel"
+                                )
+                                .hasAuthority(PermissionCode.REQUEST_CANCEL_OWN.name())
+                                .requestMatchers(
                                         "/admin/**",
                                         "/client/**"
                                 )
