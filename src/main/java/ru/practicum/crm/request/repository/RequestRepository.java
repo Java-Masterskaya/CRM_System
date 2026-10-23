@@ -39,7 +39,7 @@ public interface RequestRepository extends Repository<Request, UUID> {
     <S extends Request> S saveAndFlush(S request);
 
     Optional<Request> findByIdAndTenantIdAndDeletedFalse(UUID id, UUID tenantId);
-  
+
     Optional<Request> findByIdAndTenantId(UUID id, UUID tenantId);
 
     /**
@@ -54,7 +54,7 @@ public interface RequestRepository extends Repository<Request, UUID> {
                                                            Pageable pageable);
 
     Page<Request> findByTenantIdAndStatusAndDeletedFalse(UUID tenantId, RequestStatus status,
-            Pageable pageable);
+                                                         Pageable pageable);
 
     boolean existsByIdAndTenantIdAndDeletedFalse(UUID id, UUID tenantId);
 
@@ -195,18 +195,18 @@ public interface RequestRepository extends Repository<Request, UUID> {
     @Query(
             nativeQuery = true,
             value =
-                """
-                UPDATE requests
-                SET assignee_id = :actorId,
-                    assigned_at = :assignedAt,
-                    updated_at = CURRENT_TIMESTAMP,
-                    version = version + 1
-                WHERE id = :requestId
-                  AND tenant_id = :tenantId
-                  AND deleted = FALSE
-                  AND assignee_id IS NULL
-                  AND status NOT IN ('DONE', 'REJECTED', 'CANCELLED')
-                """
+                    """
+                    UPDATE requests
+                    SET assignee_id = :actorId,
+                        assigned_at = :assignedAt,
+                        updated_at = CURRENT_TIMESTAMP,
+                        version = version + 1
+                    WHERE id = :requestId
+                      AND tenant_id = :tenantId
+                      AND deleted = FALSE
+                      AND assignee_id IS NULL
+                      AND status NOT IN ('DONE', 'REJECTED', 'CANCELLED')
+                    """
     )
     int takeIfUnassigned(
             @Param("tenantId") UUID tenantId,
