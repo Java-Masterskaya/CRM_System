@@ -40,7 +40,15 @@ public interface RequestRepository extends Repository<Request, UUID> {
 
     Optional<Request> findByIdAndTenantIdAndDeletedFalse(UUID id, UUID tenantId);
 
+    /**
+     * Заявка арендатора без отсечения удаленных - для мягкого восстоновления.
+     */
+    Optional<Request> findByIdAndTenantId(UUID id, UUID tenantId);
+
     Page<Request> findByTenantIdAndDeletedFalse(UUID tenantId, Pageable pageable);
+
+    Page<Request> findByTenantIdAndAuthorIdAndDeletedFalse(UUID tenantId, UUID authorId,
+                                                           Pageable pageable);
 
     Page<Request> findByTenantIdAndStatusAndDeletedFalse(UUID tenantId, RequestStatus status,
             Pageable pageable);

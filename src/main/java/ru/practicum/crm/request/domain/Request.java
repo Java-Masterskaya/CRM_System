@@ -13,9 +13,13 @@ import java.util.Objects;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.ToString;
+import org.hibernate.annotations.Filter;
+import org.hibernate.annotations.FilterDef;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import ru.practicum.crm.common.model.NotDeletedFilter;
 import ru.practicum.crm.common.model.RequestPriority;
 import ru.practicum.crm.common.model.TenantScopedEntity;
 
@@ -26,10 +30,16 @@ import ru.practicum.crm.common.model.TenantScopedEntity;
  * выбор приоритета новой заявки ({@link RequestPriority#resolve}) и расчёт сроков по SLA (T-058,
  * {@code RequestDeadlineAssigner}) находятся за пределами сущности: здесь только хранение
  * состояния.
+ * Мягкое удаление (T-047); Запись не стираеться - ставится {@code #deleted} и {@code #deletedAt}.
+ * Hibernate filter {@code NotDeleteFilter} скрывает такие заявки из обычных
+ * чтений рядом с фильтрами арендатора
  */
 @Entity
 @Table(name = "requests")
 @Getter
+@FilterDef(name = NotDeletedFilter.NAME)
+@Filter(name = NotDeletedFilter.NAME, condition = "deleted = false")
+@ToString
 public class Request extends TenantScopedEntity {
 
     /**
@@ -112,6 +122,12 @@ public class Request extends TenantScopedEntity {
     @Column(name = "deleted", nullable = false)
     private boolean deleted;
 
+    /**
+     * Переменная для обозначения момента мягкого удаления, {@code null} пока заявка не удалена.
+     * */
+    @Column(name = "deleted_at", nullable = false)
+    private Instant deletedAt;
+
     @Version
     @Column(name = "version", nullable = false)
     private long version;
@@ -154,6 +170,33 @@ public class Request extends TenantScopedEntity {
         }
         assigneeId = newAssigneeId;
         assignedAt = newAssigneeId == null ? null : occurredAt;
+        return true;
+    }
+
+    public boolean softDelete(Instant occurredAt) {
+        if (occurredAt == null) {
+            throw new IllegalArgumentException("Момент удаление обязателен");
+        }
+
+        if (deleted) {
+            return false;
+        }
+
+        deleted = true;
+        deletedAt = occurredAt;
+        return true;
+    }
+
+    /**
+     * Снимает мягкое удаление. Статус и остальные поля остаються как были на момент удаления.
+     * */
+    public boolean restore() {
+        if (!deleted) {
+            return false;
+        }
+
+        deleted = false;
+        deletedAt = null;
         return true;
     }
 

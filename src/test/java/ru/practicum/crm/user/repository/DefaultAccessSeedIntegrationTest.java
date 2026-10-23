@@ -30,9 +30,9 @@ class DefaultAccessSeedIntegrationTest extends BaseIntegrationTest {
         assertThat(codes("SELECT code FROM roles WHERE tenant_id = ?", tenantId))
                 .containsExactlyInAnyOrder("CLIENT", "OPERATOR", "ADMIN");
         assertThat(codes("SELECT code FROM permissions WHERE tenant_id = ?", tenantId))
-                .hasSize(25)
+                .hasSize(26)
                 .contains("REQUEST_READ_OWN", "REQUEST_READ_ALL", "REQUEST_STATUS_CHANGE",
-                        "USER_MANAGE", "TENANT_SETTINGS_MANAGE", "ANALYTICS_READ")
+                        "REQUEST_DELETE", "USER_MANAGE", "TENANT_SETTINGS_MANAGE", "ANALYTICS_READ")
                 .containsExactlyInAnyOrderElementsOf(Arrays.stream(PermissionCode.values())
                         .map(Enum::name)
                         .collect(Collectors.toSet()));
@@ -45,13 +45,14 @@ class DefaultAccessSeedIntegrationTest extends BaseIntegrationTest {
 
         assertThat(grants.get("CLIENT"))
                 .contains("REQUEST_READ_OWN", "REQUEST_CREATE")
-                .doesNotContain("REQUEST_READ_ALL", "REQUEST_STATUS_CHANGE", "USER_MANAGE");
+                .doesNotContain("REQUEST_READ_ALL", "REQUEST_STATUS_CHANGE", "USER_MANAGE",
+                        "REQUEST_DELETE");
         assertThat(grants.get("OPERATOR"))
                 .contains("REQUEST_READ_ALL", "REQUEST_STATUS_CHANGE")
-                .doesNotContain("USER_MANAGE", "TENANT_SETTINGS_MANAGE");
+                .doesNotContain("USER_MANAGE", "TENANT_SETTINGS_MANAGE", "REQUEST_DELETE");
         assertThat(grants.get("ADMIN"))
                 .contains("USER_MANAGE", "TENANT_SETTINGS_MANAGE", "REQUEST_STATUS_CHANGE",
-                        "ANALYTICS_READ")
+                        "REQUEST_DELETE", "ANALYTICS_READ")
                 .doesNotContain("REQUEST_CREATE", "REQUEST_READ_OWN", "REQUEST_CANCEL_OWN");
     }
 

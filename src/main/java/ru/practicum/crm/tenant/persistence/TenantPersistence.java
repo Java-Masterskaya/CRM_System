@@ -7,6 +7,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.UUID;
 import org.hibernate.Session;
+import ru.practicum.crm.common.model.NotDeletedFilter;
 import ru.practicum.crm.common.model.TenantIds;
 
 public class TenantPersistence {
@@ -17,12 +18,12 @@ public class TenantPersistence {
     public static void bind(EntityManager entityManager, UUID tenantId) {
         Session session = entityManager.unwrap(Session.class);
         if (tenantId == null) {
-            if (session.getEnabledFilter(TenantIds.FILTER_NAME) != null) {
-                session.disableFilter(TenantIds.FILTER_NAME);
-            }
+            disableIfEnabled(session, TenantIds.FILTER_NAME);
+            disableIfEnabled(session, NotDeletedFilter.NAME);
         } else {
             session.enableFilter(TenantIds.FILTER_NAME)
                     .setParameter(TenantIds.PARAM, tenantId);
+            session.enableFilter(NotDeletedFilter.NAME);
         }
         session.doWork(connection -> writeTenantSettings(connection, tenantId));
     }
@@ -40,6 +41,12 @@ public class TenantPersistence {
     private static void assumeAppRole(Connection connection) throws SQLException {
         try (Statement statement = connection.createStatement()) {
             statement.execute("SET LOCAL ROLE crm_app");
+        }
+    }
+
+    private static void disableIfEnabled(Session session, String filterName) {
+        if (session.getEnabledFilter(filterName) != null) {
+            session.disableFilter(filterName);
         }
     }
 }
