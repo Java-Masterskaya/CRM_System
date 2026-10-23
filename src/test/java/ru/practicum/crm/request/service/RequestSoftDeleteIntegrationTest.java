@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -258,16 +259,20 @@ public class RequestSoftDeleteIntegrationTest extends BaseIntegrationTest {
     }
 
     private int historyCount(UUID id) {
-        return jdbcTemplate.queryForObject(
+        Integer count = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM request_status_history WHERE request_id = ?",
                 Integer.class, id
         );
+
+        return Objects.requireNonNull(count, "historyCount вернул null");
     }
 
     private int auditCount(UUID id) {
-        return jdbcTemplate.queryForObject(
+        Integer count = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM request_audit_log WHERE request_id = ?",
                 Integer.class, id
         );
+
+        return Objects.requireNonNull(count, "auditCount вернул null");
     }
 }
