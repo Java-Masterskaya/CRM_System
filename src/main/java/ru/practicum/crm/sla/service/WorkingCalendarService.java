@@ -15,6 +15,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.crm.common.error.ApiException;
@@ -35,8 +36,10 @@ import ru.practicum.crm.tenant.api.seeding.TenantCalendarSeeder;
  * Рабочий календарь арендатора (T-056): календарь по умолчанию для нового арендатора, просмотр
  * и замена рабочих часов, календарь для расчёта сроков.
  *
- * <p>Кто вправе менять календарь, решает вызывающий код: по ТЗ §6.3 это администратор
- * арендатора — права (T-030). Все операции работают в пределах арендатора.
+ * <p>Смотреть и менять календарь может только носитель права {@code SLA_POLICY_MANAGE} — по
+ * ТЗ §6.3 это администратор арендатора; без права — 403. Календарь для расчёта сроков и
+ * календарь по умолчанию права не проверяют: их вызывают создание заявки и подключение
+ * арендатора. Все операции работают в пределах арендатора.
  *
  * <p>Календарь по умолчанию записывается при создании арендатора: {@code TenantService} явно
  * вызывает {@link #seedDefaults} в той же транзакции — так же, как наполняет роли и права
@@ -89,6 +92,7 @@ public class WorkingCalendarService implements TenantCalendarSeeder {
     }
 
     /** Рабочие дни арендатора по порядку, с понедельника; дня нет в списке — день выходной. */
+    @PreAuthorize("hasAuthority('SLA_POLICY_MANAGE')")
     @Transactional(readOnly = true)
     public List<WorkingDay> workingDays(UUID tenantId) {
         return repository.findByTenantId(tenantId).stream()
@@ -106,6 +110,7 @@ public class WorkingCalendarService implements TenantCalendarSeeder {
      *     день недели повторяется или начало дня не раньше его конца; {@code STALE_VERSION},
      *     если календарь в это же время заменил другой запрос
      */
+    @PreAuthorize("hasAuthority('SLA_POLICY_MANAGE')")
     @Transactional
     public List<WorkingDay> changeWorkingDays(UUID tenantId, List<WorkingDay> days) {
         validate(days);
