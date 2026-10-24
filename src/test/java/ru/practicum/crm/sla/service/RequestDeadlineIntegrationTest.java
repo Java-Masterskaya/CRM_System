@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.transaction.support.TransactionTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.common.model.RequestPriority;
@@ -24,7 +25,11 @@ import ru.practicum.crm.sla.domain.SlaTerms;
  * нерабочих дней вместе — и случаи, когда сроков нет.
  *
  * <p>Календарь арендатора по умолчанию — понедельник–пятница, 09:00–18:00 по Москве.
+ *
+ * <p>Операции настройки сроков проверяют право {@code SLA_POLICY_MANAGE}; тест вызывает
+ * сервисы напрямую, поэтому выполняется от имени пользователя с этим правом.
  */
+@WithMockUser(authorities = "SLA_POLICY_MANAGE")
 class RequestDeadlineIntegrationTest extends BaseIntegrationTest {
 
     private static final ZoneId MOSCOW = ZoneId.of("Europe/Moscow");

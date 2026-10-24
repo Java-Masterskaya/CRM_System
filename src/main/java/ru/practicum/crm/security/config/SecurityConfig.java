@@ -100,6 +100,20 @@ public class SecurityConfig {
                                 .authenticated()
                                 .requestMatchers(HttpMethod.GET, "/admin/queue")
                                 .authenticated()
+                                // Настройки сроков (T-055–T-057): политики, рабочие часы и
+                                // нерабочие дни арендатора.
+                                .requestMatchers(HttpMethod.GET, "/admin/sla-policies",
+                                        "/admin/calendar/working-hours",
+                                        "/admin/calendar/holidays")
+                                .authenticated()
+                                .requestMatchers(HttpMethod.POST, "/admin/sla-policies",
+                                        "/admin/calendar/holidays")
+                                .authenticated()
+                                .requestMatchers(HttpMethod.PUT, "/admin/sla-policies/*",
+                                        "/admin/calendar/working-hours")
+                                .authenticated()
+                                .requestMatchers(HttpMethod.DELETE, "/admin/calendar/holidays/*")
+                                .authenticated()
                                 .requestMatchers("/analytics/**")
                                 .hasAuthority(PermissionCode.ANALYTICS_READ.name())
                                 .requestMatchers(HttpMethod.GET, "/client/requests/*")
