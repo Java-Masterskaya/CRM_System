@@ -82,6 +82,18 @@ public class SecurityConfig {
                         // которого нет в этом списке, по-прежнему закрыт (T-022).
                         authorize.requestMatchers("/admin/tenant/settings")
                                 .authenticated()
+                                // Справочник типов заявок (T-034): просмотр, создание, изменение,
+                                // отключение и включение; клиенту — список действующих типов.
+                                .requestMatchers(HttpMethod.GET, "/admin/request-types")
+                                .authenticated()
+                                .requestMatchers(HttpMethod.POST, "/admin/request-types",
+                                        "/admin/request-types/*/deactivate",
+                                        "/admin/request-types/*/activate")
+                                .authenticated()
+                                .requestMatchers(HttpMethod.PUT, "/admin/request-types/*")
+                                .authenticated()
+                                .requestMatchers(HttpMethod.GET, "/client/request-types")
+                                .authenticated()
                                 .requestMatchers(HttpMethod.PUT, "/admin/requests/*/status")
                                 .authenticated()
                                 .requestMatchers(
