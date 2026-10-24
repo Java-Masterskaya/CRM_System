@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -133,6 +134,51 @@ class SecurityAuthorizationRulesTest {
     void givenNoCredentials_whenCallingTenantSettings_thenReturnsUnauthorized()
             throws Exception {
         mockMvc.perform(get("/admin/tenant/settings").with(anonymous()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * Справочник типов заявок (T-034): маршруты пропускают любой запрос с токеном, право
+     * проверяет сервис. Открыты только операции справочника: удаления у него нет, и
+     * {@code DELETE} по-прежнему закрыт.
+     */
+    @Test
+    void givenAnyPermission_whenManagingRequestTypes_thenUrlRulesPassOnlyDirectoryOperations()
+            throws Exception {
+        UUID id = UUID.randomUUID();
+        mockMvc.perform(get("/admin/request-types").with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/admin/request-types").with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(put("/admin/request-types/{id}", id)
+                        .with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/admin/request-types/{id}/deactivate", id)
+                        .with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/admin/request-types/{id}/activate", id)
+                        .with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/admin/request-types/{id}", id)
+                        .with(jwtWithAuthority("REQUEST_TYPE_MANAGE")))
+                .andExpect(status().isForbidden());
+    }
+
+    /** Клиентский список типов (T-034): открыто только чтение, право проверяет сервис. */
+    @Test
+    void givenAnyPermission_whenListingRequestTypesAsClient_thenUrlRulePassesOnlyGet()
+            throws Exception {
+        mockMvc.perform(get("/client/request-types").with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/client/request-types").with(jwtWithAuthority("REQUEST_CREATE")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenNoCredentials_whenCallingRequestTypes_thenReturnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/admin/request-types").with(anonymous()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/client/request-types").with(anonymous()))
                 .andExpect(status().isUnauthorized());
     }
 
