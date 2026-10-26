@@ -121,7 +121,10 @@ public class RequestSoftDeleteIntegrationTest extends BaseIntegrationTest {
         assertThat(row.get("deleted_at")).isNotNull();
         assertThat(row.get("status")).isEqualTo("IN_PROGRESS");
         assertThat(historyCount(requestId)).isEqualTo(1);
-        assertThat(auditCount(requestId)).isEqualTo(1);
+        assertThat(auditCount(requestId)).isEqualTo(2);
+        assertThat(lastAudit(requestId)).containsEntry("field", "DELETED")
+                .containsEntry("old_value", "false")
+                .containsEntry("new_value", "true");
     }
 
     /** DoD: Восстановление возвращает заявку в реестр и список автора в прежнем статусе.*/
@@ -132,11 +135,17 @@ public class RequestSoftDeleteIntegrationTest extends BaseIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(post("/admin/requests/{id}/restore", requestId)
+        String restoreBody = mockMvc.perform(post("/admin/requests/{id}/restore", requestId)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(requestId.toString()))
-                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andReturn().getResponse().getContentAsString();
+
+        long responseVersion = objectMapper.readTree(restoreBody).get("version").asLong();
+        long dbVersion = Objects.requireNonNull(jdbcTemplate.queryForObject(
+                "SELECT version FROM requests WHERE id = ?", Long.class, requestId));
+        assertThat(responseVersion).isEqualTo(dbVersion);
 
         mockMvc.perform(get("/admin/requests")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
@@ -162,7 +171,11 @@ public class RequestSoftDeleteIntegrationTest extends BaseIntegrationTest {
         assertThat(row.get("deleted")).isEqualTo(false);
         assertThat(row.get("deleted_at")).isNull();
         assertThat(historyCount(requestId)).isEqualTo(1);
-        assertThat(auditCount(requestId)).isEqualTo(1);
+        assertThat(auditCount(requestId)).isEqualTo(3);
+        assertThat(lastAudit(requestId))
+                .containsEntry("field", "DELETED")
+                .containsEntry("old_value", "true")
+                .containsEntry("new_value", "false");
     }
 
     /** DoD: Оператор без прав администратора получает 403 при удалении и восстановлении.*/
@@ -182,6 +195,20 @@ public class RequestSoftDeleteIntegrationTest extends BaseIntegrationTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT deleted FROM requests WHERE id = ?", Boolean.class, requestId
         )).isTrue();
+    }
+
+    /** Восстановлении живой заявки - конфликт, а не успех изменений.*/
+    @Test
+    void restore_whenRequestIsNotDeleted_isConflict() throws Exception {
+        mockMvc.perform(post("/admin/requests/{id}/restore", requestId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("REQUEST_NOT_DELETED"));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT deleted FROM requests WHERE id = ?", Boolean.class, requestId
+        )).isFalse();
+        assertThat(auditCount(requestId)).isEqualTo(1);
     }
 
     @Test
@@ -274,5 +301,11 @@ public class RequestSoftDeleteIntegrationTest extends BaseIntegrationTest {
         );
 
         return Objects.requireNonNull(count, "auditCount вернул null");
+    }
+
+    private Map<String, Object> lastAudit(UUID id) {
+        return jdbcTemplate.queryForMap(
+                "SELECT field, old_value, new_value FROM request_audit_log "
+                        + "WHERE request_id = ? ORDER BY created_at DESC, id DESC LIMIT 1", id);
     }
 }

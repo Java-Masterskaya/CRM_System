@@ -125,7 +125,7 @@ public class Request extends TenantScopedEntity {
     /**
      * Переменная для обозначения момента мягкого удаления, {@code null} пока заявка не удалена.
      * */
-    @Column(name = "deleted_at", nullable = false)
+    @Column(name = "deleted_at")
     private Instant deletedAt;
 
     @Version

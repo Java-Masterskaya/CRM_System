@@ -9,7 +9,7 @@ COMMENT ON COLUMN requests.deleted_at IS 'Момент мягкого удале
 UPDATE requests SET deleted_at = updated_at WHERE deleted AND deleted_at IS NULL;
 
 INSERT INTO permissions (id, tenant_id, code, description)
-SELECT gen_random_uuid(), t.id, 'REQUEST_DELETE', 'Мфгкое удаление и востановление заявки'
+SELECT gen_random_uuid(), t.id, 'REQUEST_DELETE', 'Мягкое удаление и востановление заявки'
 FROM tenants AS t
 WHERE t.id <> '00000000-0000-0000-0000-000000000000'
 ON CONFLICT (tenant_id, code) DO NOTHING;
