@@ -8,6 +8,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.common.model.RequestPriority;
@@ -18,6 +22,7 @@ import ru.practicum.crm.request.domain.RequestType;
 class RequestTypeRepositoryIntegrationTest extends BaseIntegrationTest {
 
     private static final String MIGRATION_VERSION = "202609211034";
+    private static final Pageable BY_NAME = PageRequest.of(0, 20, Sort.by("name"));
 
     @Autowired
     private RequestTypeRepository repository;
@@ -77,7 +82,7 @@ class RequestTypeRepositoryIntegrationTest extends BaseIntegrationTest {
         repository.save(new RequestType(tenantA, "Выгрузка"));
         repository.save(new RequestType(tenantB, "Чужой тип"));
 
-        assertThat(repository.findByTenantIdOrderByNameAsc(tenantA))
+        assertThat(repository.findByTenantId(tenantA, BY_NAME))
                 .extracting(RequestType::getName)
                 .containsExactly("Выгрузка", "Импорт");
     }
@@ -89,12 +94,27 @@ class RequestTypeRepositoryIntegrationTest extends BaseIntegrationTest {
         repository.save(disabled);
         repository.save(new RequestType(tenantA, "Действующий тип"));
 
-        assertThat(repository.findByTenantIdAndActiveTrueOrderByNameAsc(tenantA))
+        assertThat(repository.findByTenantIdAndActiveTrue(tenantA, BY_NAME))
                 .extracting(RequestType::getName)
                 .containsExactly("Действующий тип");
-        assertThat(repository.findByTenantIdOrderByNameAsc(tenantA))
+        assertThat(repository.findByTenantId(tenantA, BY_NAME))
                 .extracting(RequestType::getName)
                 .containsExactly("Действующий тип", "Старый тип");
+    }
+
+    /** Страница несёт общее количество: по нему клиент API строит переход по страницам. */
+    @Test
+    void list_whenPageSmallerThanTypes_returnsPageAndTotal() {
+        repository.save(new RequestType(tenantA, "Выгрузка"));
+        repository.save(new RequestType(tenantA, "Импорт"));
+        repository.save(new RequestType(tenantA, "Сверка"));
+
+        Page<RequestType> second = repository.findByTenantId(tenantA,
+                PageRequest.of(1, 2, Sort.by("name")));
+
+        assertThat(second.getContent()).extracting(RequestType::getName)
+                .containsExactly("Сверка");
+        assertThat(second.getTotalElements()).isEqualTo(3);
     }
 
     @Test

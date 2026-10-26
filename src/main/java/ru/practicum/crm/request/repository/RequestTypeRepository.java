@@ -1,8 +1,9 @@
 package ru.practicum.crm.request.repository;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.Repository;
 import ru.practicum.crm.request.domain.RequestType;
 
@@ -18,11 +19,13 @@ public interface RequestTypeRepository extends Repository<RequestType, UUID> {
 
     <S extends RequestType> S save(S requestType);
 
+    <S extends RequestType> S saveAndFlush(S requestType);
+
     Optional<RequestType> findByIdAndTenantId(UUID id, UUID tenantId);
 
-    List<RequestType> findByTenantIdOrderByNameAsc(UUID tenantId);
+    Page<RequestType> findByTenantId(UUID tenantId, Pageable pageable);
 
-    List<RequestType> findByTenantIdAndActiveTrueOrderByNameAsc(UUID tenantId);
+    Page<RequestType> findByTenantIdAndActiveTrue(UUID tenantId, Pageable pageable);
 
     boolean existsByTenantIdAndNameIgnoreCase(UUID tenantId, String name);
 }
