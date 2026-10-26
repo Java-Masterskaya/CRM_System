@@ -244,6 +244,56 @@ class SecurityAuthorizationRulesTest {
                 .andExpect(status().isForbidden());
     }
 
+    /**
+     * Настройки сроков (T-055–T-057): маршруты пропускают любой запрос с токеном, право
+     * {@code SLA_POLICY_MANAGE} проверяет сервис. Открыты только операции настроек: удалить
+     * политику или календарь нельзя, изменить запись справочника — тоже.
+     */
+    @Test
+    void givenAnyPermission_whenManagingSlaSettings_thenUrlRulesPassOnlySettingsOperations()
+            throws Exception {
+        UUID id = UUID.randomUUID();
+        for (String path : List.of("/admin/sla-policies", "/admin/calendar/working-hours",
+                "/admin/calendar/holidays")) {
+            mockMvc.perform(get(path).with(jwtWithAuthority("REQUEST_READ_ALL")))
+                    .andExpect(status().isNotFound());
+        }
+        mockMvc.perform(post("/admin/sla-policies").with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(put("/admin/sla-policies/{id}", id)
+                        .with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(put("/admin/calendar/working-hours")
+                        .with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/admin/calendar/holidays")
+                        .with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/admin/calendar/holidays/{id}", id)
+                        .with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(delete("/admin/sla-policies/{id}", id)
+                        .with(jwtWithAuthority("SLA_POLICY_MANAGE")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(delete("/admin/calendar/working-hours")
+                        .with(jwtWithAuthority("SLA_POLICY_MANAGE")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/admin/calendar/holidays/{id}", id)
+                        .with(jwtWithAuthority("SLA_POLICY_MANAGE")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenNoCredentials_whenCallingSlaSettings_thenReturnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/admin/sla-policies").with(anonymous()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/admin/calendar/working-hours").with(anonymous()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/admin/calendar/holidays").with(anonymous()))
+                .andExpect(status().isUnauthorized());
+    }
+
     @Test
     void givenStatusChangePermission_whenAssigningExecutor_thenReturnsForbidden()
             throws Exception {

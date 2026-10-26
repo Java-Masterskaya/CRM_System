@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.test.context.support.WithMockUser;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
@@ -28,7 +29,11 @@ import ru.practicum.crm.sla.domain.WorkingCalendar;
  * выходной, повтор даты, изоляция арендаторов и ограничения самой базы.
  *
  * <p>У обоих арендаторов календарь по умолчанию — понедельник–пятница, 09:00–18:00 по Москве.
+ *
+ * <p>Операции настройки сроков проверяют право {@code SLA_POLICY_MANAGE}; тест вызывает
+ * сервисы напрямую, поэтому выполняется от имени пользователя с этим правом.
  */
+@WithMockUser(authorities = "SLA_POLICY_MANAGE")
 class HolidayIntegrationTest extends BaseIntegrationTest {
 
     private static final String MIGRATION_VERSION = "202610061050";
