@@ -203,6 +203,36 @@ public class Request extends TenantScopedEntity {
         return !firstResponseOverdue && !resolutionOverdue;
     }
 
+    /**
+     * Переносит сроки, пересчитанные по новой политике (T-062), и снимает признак просрочки срока,
+     * который после переноса ещё не наступил (#200): иначе заявка осталась бы «просроченной» по
+     * сроку, который ещё впереди, а его настоящее нарушение не эскалировалось бы.
+     *
+     * <p>Срок переносится, только пока он ещё считается — по тому же правилу, что в
+     * {@link #isOverdue()}: срок первого ответа — пока заявка в {@link RequestStatus#NEW}, срок
+     * решения — пока она не завершена. Сыгравший срок остаётся как был: его признак — факт о
+     * том, как на заявку ответили.
+     *
+     * @param now момент переноса: срок позже него ещё не наступил
+     * @return по каким срокам снят признак просрочки — у них надо снять и отметку эскалации
+     */
+    public ReopenedDeadlines moveDeadlines(Instant firstResponse, Instant resolution,
+            Instant now) {
+        boolean firstResponseReopened = false;
+        if (status == RequestStatus.NEW) {
+            firstResponseDueAt = firstResponse;
+            firstResponseReopened = firstResponseOverdue && firstResponse.isAfter(now);
+            firstResponseOverdue = firstResponseOverdue && !firstResponseReopened;
+        }
+        boolean resolutionReopened = false;
+        if (!status.isTerminal()) {
+            resolutionDueAt = resolution;
+            resolutionReopened = resolutionOverdue && resolution.isAfter(now);
+            resolutionOverdue = resolutionOverdue && !resolutionReopened;
+        }
+        return new ReopenedDeadlines(firstResponseReopened, resolutionReopened);
+    }
+
     @Override
     public boolean equals(Object other) {
         if (this == other) {

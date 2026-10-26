@@ -14,6 +14,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import ru.practicum.crm.common.model.RequestPriority;
+import ru.practicum.crm.request.domain.ReopenedDeadlines;
 import ru.practicum.crm.request.domain.Request;
 import ru.practicum.crm.request.domain.RequestStatus;
 import ru.practicum.crm.sla.api.RequestDeadlineCalculator;
@@ -63,6 +64,46 @@ class RequestDeadlineAssignerTest {
         assertThatThrownBy(() -> assigner.assignDeadlines(unsaved))
                 .isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(calculator);
+    }
+
+    /**
+     * T-062: пересчёт идёт от момента создания, а не от момента правки, — иначе каждая правка
+     * отодвигала бы срок. Новые сроки ещё впереди, и признаки просрочки сняты.
+     */
+    @Test
+    void reassignDeadlines_countsFromCreationAndReopensPassedDeadlines() {
+        Request request = savedRequest();
+        request.setFirstResponseOverdue(true);
+        when(calculator.calculate(TENANT_ID, TYPE_ID, RequestPriority.HIGH,
+                CREATED_AT.toInstant())).thenReturn(Optional.of(DEADLINES));
+
+        ReopenedDeadlines reopened = assigner.reassignDeadlines(request,
+                Instant.parse("2026-10-05T14:30:00Z"));
+
+        assertThat(reopened).isEqualTo(new ReopenedDeadlines(true, false));
+        assertThat(request.getFirstResponseDueAt()).isEqualTo(DEADLINES.firstResponseDueAt());
+        assertThat(request.getResolutionDueAt()).isEqualTo(DEADLINES.resolutionDueAt());
+        assertThat(request.isFirstResponseOverdue()).isFalse();
+    }
+
+    /** DoD #84: политики под новую пару нет — сроки остаются прежними, признаки тоже. */
+    @Test
+    void reassignDeadlines_whenDeadlinesCannotBeCalculated_keepsPreviousDeadlines() {
+        Request request = savedRequest();
+        Instant previous = Instant.parse("2026-10-05T16:00:00Z");
+        request.setFirstResponseDueAt(previous);
+        request.setResolutionDueAt(previous);
+        request.setFirstResponseOverdue(true);
+        when(calculator.calculate(TENANT_ID, TYPE_ID, RequestPriority.HIGH,
+                CREATED_AT.toInstant())).thenReturn(Optional.empty());
+
+        ReopenedDeadlines reopened = assigner.reassignDeadlines(request,
+                Instant.parse("2026-10-05T14:30:00Z"));
+
+        assertThat(reopened).isEqualTo(ReopenedDeadlines.NONE);
+        assertThat(request.getFirstResponseDueAt()).isEqualTo(previous);
+        assertThat(request.getResolutionDueAt()).isEqualTo(previous);
+        assertThat(request.isFirstResponseOverdue()).isTrue();
     }
 
     /** Заявка, как после сохранения: момент создания проставлен. */

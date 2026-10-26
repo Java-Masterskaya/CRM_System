@@ -179,6 +179,24 @@ public interface RequestRepository extends Repository<Request, UUID> {
             value = "UPDATE requests SET resolution_escalated = TRUE WHERE id IN (:ids)")
     int markResolutionEscalated(@Param("ids") Collection<UUID> ids);
 
+    /**
+     * Снимает отметку об эскалации у сроков, которые после переноса снова не нарушены (#200):
+     * когда перенесённый срок истечёт, фоновая проверка эскалирует заявку заново, ровно одним
+     * письмом. Отметки другого срока не меняются. Версия не растёт — как и при постановке
+     * отметки, сущность её не видит.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    @Modifying
+    @Query(nativeQuery = true, value =
+            """
+            UPDATE requests
+            SET first_response_escalated = first_response_escalated AND NOT :firstResponse,
+                resolution_escalated = resolution_escalated AND NOT :resolution
+            WHERE id = :id
+            """)
+    int reopenEscalations(@Param("id") UUID id, @Param("firstResponse") boolean firstResponse,
+            @Param("resolution") boolean resolution);
+
     @Transactional(propagation = Propagation.MANDATORY)
     @Modifying(
             flushAutomatically = true,

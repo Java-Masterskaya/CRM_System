@@ -1,8 +1,10 @@
 package ru.practicum.crm.request.service;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
@@ -14,6 +16,7 @@ import ru.practicum.crm.common.error.ValidationError;
 import ru.practicum.crm.common.security.CurrentUser;
 import ru.practicum.crm.request.api.dto.EditRequestRequest;
 import ru.practicum.crm.request.api.dto.RequestCardResponse;
+import ru.practicum.crm.request.domain.ReopenedDeadlines;
 import ru.practicum.crm.request.domain.Request;
 import ru.practicum.crm.request.domain.RequestSnapshot;
 import ru.practicum.crm.request.repository.RequestRepository;
@@ -32,18 +35,25 @@ public class RequestEditService {
             justification = "Контекст арендатора внедряется как зависимость Spring.")
     private final TenantContext tenantContext;
 
+    private final RequestDeadlineAssigner deadlines;
+    private final Clock clock;
+
     public RequestEditService(
             RequestRepository requests,
             RequestTypeService requestTypes,
             RequestAuditService audit,
             CurrentUser currentUser,
-            TenantContext tenantContext
+            TenantContext tenantContext,
+            RequestDeadlineAssigner deadlines,
+            Clock clock
     ) {
         this.requests = requests;
         this.requestTypes = requestTypes;
         this.audit = audit;
         this.currentUser = currentUser;
         this.tenantContext = tenantContext;
+        this.deadlines = deadlines;
+        this.clock = clock;
     }
 
     @PreAuthorize("hasAuthority('REQUEST_EDIT')")
@@ -71,6 +81,9 @@ public class RequestEditService {
         requestTypes.requireActive(tenantId, command.getTypeId());
 
         final RequestSnapshot before = RequestSnapshot.of(request);
+        // Сроки зависят от приоритета и типа: сменился хоть один — их политика другая (T-062).
+        final boolean policyPairChanged = request.getPriority() != command.getPriority()
+                || !Objects.equals(request.getTypeId(), command.getTypeId());
 
         request.setPriority(command.getPriority());
         request.setTypeId(command.getTypeId());
@@ -81,8 +94,15 @@ public class RequestEditService {
 
         request.setDescription(command.getDescription());
 
-        Request saved = requests.saveAndFlush(request);
+        ReopenedDeadlines reopened = policyPairChanged
+                ? deadlines.reassignDeadlines(request, clock.instant())
+                : ReopenedDeadlines.NONE;
 
+        Request saved = requests.saveAndFlush(request);
+        if (reopened.any()) {
+            requests.reopenEscalations(saved.getId(), reopened.firstResponse(),
+                    reopened.resolution());
+        }
 
         audit.record(saved, before, currentUser.id());
 
