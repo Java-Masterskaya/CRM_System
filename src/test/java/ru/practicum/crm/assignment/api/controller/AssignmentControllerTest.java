@@ -1,6 +1,7 @@
 package ru.practicum.crm.assignment.api.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -153,5 +154,76 @@ class AssignmentControllerTest {
                 .andExpect(jsonPath("$.version").value(1));
 
         verify(assignmentService).take(TENANT_ID, REQUEST_ID, ACTOR_ID);
+    }
+
+    @Test
+    void autoAssign_whenVersionPassed_delegatesWithTenantAndActorFromContext() throws Exception {
+        when(tenantContext.getCurrentTenantId()).thenReturn(TENANT_ID);
+        when(userContext.getCurrentUserId()).thenReturn(ACTOR_ID);
+        RequestAssignmentDto assignment = new RequestAssignmentDto(
+                REQUEST_ID,
+                UUID.randomUUID(),
+                "Выгрузка отчёта",
+                ASSIGNEE_ID,
+                Instant.parse("2026-10-21T10:00:00Z"),
+                3
+        );
+        when(assignmentService.autoAssign(TENANT_ID, REQUEST_ID, 2, ACTOR_ID))
+                .thenReturn(assignment);
+
+        mockMvc.perform(post("/admin/requests/{requestId}/auto-assign", REQUEST_ID)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":2}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requestId").value(REQUEST_ID.toString()))
+                .andExpect(jsonPath("$.assigneeId").value(ASSIGNEE_ID.toString()))
+                .andExpect(jsonPath("$.version").value(3));
+
+        verify(assignmentService).autoAssign(TENANT_ID, REQUEST_ID, 2, ACTOR_ID);
+    }
+
+    @Test
+    void autoAssign_whenVersionMissing_isRejectedAsValidationErrorWithoutCallingService()
+            throws Exception {
+        mockMvc.perform(post("/admin/requests/{requestId}/auto-assign", REQUEST_ID)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+
+        verify(assignmentService, never()).autoAssign(any(), any(), anyLong(), any());
+    }
+
+    @Test
+    void autoAssign_whenRequestAlreadyAssigned_propagatesAsConflictProblemDetail()
+            throws Exception {
+        when(tenantContext.getCurrentTenantId()).thenReturn(TENANT_ID);
+        when(userContext.getCurrentUserId()).thenReturn(ACTOR_ID);
+        when(assignmentService.autoAssign(TENANT_ID, REQUEST_ID, 0, ACTOR_ID))
+                .thenThrow(new ApiException(ErrorCode.REQUEST_ALREADY_ASSIGNED,
+                        "Заявка уже назначена исполнителю: используйте ручное назначение"));
+
+        mockMvc.perform(post("/admin/requests/{requestId}/auto-assign", REQUEST_ID)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":0}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("REQUEST_ALREADY_ASSIGNED"))
+                .andExpect(jsonPath("$.detail")
+                        .value("Заявка уже назначена исполнителю: используйте ручное назначение"));
+    }
+
+    @Test
+    void autoAssign_whenNoEligibleAssignee_propagatesAsConflictProblemDetail() throws Exception {
+        when(tenantContext.getCurrentTenantId()).thenReturn(TENANT_ID);
+        when(userContext.getCurrentUserId()).thenReturn(ACTOR_ID);
+        when(assignmentService.autoAssign(TENANT_ID, REQUEST_ID, 0, ACTOR_ID))
+                .thenThrow(new ApiException(ErrorCode.NO_ELIGIBLE_ASSIGNEE,
+                        "Нет подходящего исполнителя"));
+
+        mockMvc.perform(post("/admin/requests/{requestId}/auto-assign", REQUEST_ID)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":0}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("NO_ELIGIBLE_ASSIGNEE"));
     }
 }

@@ -101,6 +101,13 @@ public class SecurityConfig {
                                         "/admin/requests/*/assignee"
                                 )
                                 .hasAuthority(PermissionCode.REQUEST_ASSIGN.name())
+                                // Автоподбор исполнителя по нагрузке (T-051) — та же операция
+                                // назначения, поэтому и право то же.
+                                .requestMatchers(
+                                        HttpMethod.POST,
+                                        "/admin/requests/*/auto-assign"
+                                )
+                                .hasAuthority(PermissionCode.REQUEST_ASSIGN.name())
                                 .requestMatchers(HttpMethod.GET, "/admin/requests")
                                 .authenticated()
                                 .requestMatchers(

@@ -310,6 +310,25 @@ class SecurityAuthorizationRulesTest {
     }
 
     /**
+     * Автоподбор исполнителя (T-051) — та же операция назначения, поэтому и право то же:
+     * {@code REQUEST_STATUS_CHANGE} для неё недостаточно.
+     */
+    @Test
+    void givenStatusChangePermission_whenAutoAssigningExecutor_thenReturnsForbidden()
+            throws Exception {
+        mockMvc.perform(post("/admin/requests/{id}/auto-assign", UUID.randomUUID())
+                        .with(jwtWithAuthority("REQUEST_STATUS_CHANGE")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenAssignPermission_whenAutoAssigningExecutor_thenReachesMvcLookup() throws Exception {
+        mockMvc.perform(post("/admin/requests/{id}/auto-assign", UUID.randomUUID())
+                        .with(jwtWithAuthority("REQUEST_ASSIGN")))
+                .andExpect(status().isNotFound());
+    }
+
+    /**
      * Взятие заявки в работу: POST пропускает любой аутентифицированный
      * запрос, бизнес-права проверяет сервис. Другие HTTP-методы закрыты.
      */

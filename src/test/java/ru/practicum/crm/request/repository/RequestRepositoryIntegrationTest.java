@@ -2,9 +2,11 @@ package ru.practicum.crm.request.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.entry;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatCode;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -14,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +34,11 @@ import ru.practicum.crm.request.domain.RequestStatus;
 class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
 
     private static final String MIGRATION_VERSION = "202609182038";
+
+    /** Незавершённые статусы: по ним считается нагрузка исполнителя (T-051). */
+    private static final List<RequestStatus> OPEN_STATUSES = Arrays.stream(RequestStatus.values())
+            .filter(status -> !status.isTerminal())
+            .toList();
 
     @Autowired
     private RequestRepository repository;
@@ -248,6 +256,38 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    void findWorkloadByAssignee_whenRequestsDiffer_countsOnlyUnfinishedOfThisTenant() {
+        UUID assigneeA = UUID.randomUUID();
+        UUID assigneeB = UUID.randomUUID();
+        repository.save(assignedRequest(tenantA, assigneeA, RequestStatus.NEW));
+        repository.save(assignedRequest(tenantA, assigneeA, RequestStatus.IN_PROGRESS));
+        repository.save(assignedRequest(tenantA, assigneeA, RequestStatus.DONE));
+        repository.save(assignedRequest(tenantA, assigneeB, RequestStatus.ON_HOLD));
+        repository.save(assignedRequest(tenantB, assigneeA, RequestStatus.NEW));
+        repository.save(newRequest(tenantA, "Без исполнителя"));
+        Request deleted = assignedRequest(tenantA, assigneeA, RequestStatus.NEW);
+        deleted.setDeleted(true);
+        repository.save(deleted);
+
+        List<AssigneeWorkload> workload = repository.findWorkloadByAssignee(tenantA,
+                OPEN_STATUSES);
+
+        Map<UUID, Long> loadByAssignee = workload.stream()
+                .collect(Collectors.toMap(AssigneeWorkload::getAssigneeId,
+                        AssigneeWorkload::getActiveRequests));
+        assertThat(loadByAssignee).containsOnly(entry(assigneeA, 2L), entry(assigneeB, 1L));
+    }
+
+    @Test
+    void findWorkloadByAssignee_whenOnlyFinishedRequests_returnsNoRowForAssignee() {
+        UUID assigneeId = UUID.randomUUID();
+        repository.save(assignedRequest(tenantA, assigneeId, RequestStatus.DONE));
+        repository.save(assignedRequest(tenantA, assigneeId, RequestStatus.CANCELLED));
+
+        assertThat(repository.findWorkloadByAssignee(tenantA, OPEN_STATUSES)).isEmpty();
+    }
+
+    @Test
     void requireVersion_whenVersionMatches_doesNotThrow() {
         Request saved = repository.save(newRequest(tenantA, "Проверка версии"));
 
@@ -377,5 +417,12 @@ class RequestRepositoryIntegrationTest extends BaseIntegrationTest {
     private Request newRequest(UUID tenantId, String subject) {
         return new Request(tenantId, authorId, subject, "Нужен отчёт за квартал",
                 RequestStatus.NEW);
+    }
+
+    private Request assignedRequest(UUID tenantId, UUID assigneeId, RequestStatus status) {
+        Request request = newRequest(tenantId, "Заявка исполнителя");
+        request.setStatus(status);
+        request.changeAssignee(assigneeId, Instant.parse("2026-10-13T10:00:00Z"));
+        return request;
     }
 }
