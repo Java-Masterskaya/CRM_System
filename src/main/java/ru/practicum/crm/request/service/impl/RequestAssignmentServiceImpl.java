@@ -2,7 +2,11 @@ package ru.practicum.crm.request.service.impl;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,11 +18,18 @@ import ru.practicum.crm.request.api.dto.RequestAssignmentDto;
 import ru.practicum.crm.request.api.dto.RequestAssignmentOutcome;
 import ru.practicum.crm.request.domain.Request;
 import ru.practicum.crm.request.domain.RequestSnapshot;
+import ru.practicum.crm.request.domain.RequestStatus;
+import ru.practicum.crm.request.repository.AssigneeWorkload;
 import ru.practicum.crm.request.repository.RequestRepository;
 import ru.practicum.crm.request.service.RequestAuditService;
 
 @Service
 public class RequestAssignmentServiceImpl implements RequestAssignmentService {
+
+    /** Статусы, в которых заявка ещё не завершена и потому считается нагрузкой исполнителя. */
+    private static final List<RequestStatus> OPEN_STATUSES = Arrays.stream(RequestStatus.values())
+            .filter(status -> !status.isTerminal())
+            .toList();
 
     private final RequestRepository repository;
     private final RequestAuditService auditService;
@@ -107,6 +118,14 @@ public class RequestAssignmentServiceImpl implements RequestAssignmentService {
                 "Не удалось захватить заявку: её состояние изменилось. "
                 + "Обновите данные и повторите попытку."
         );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, Long> activeWorkloadByAssignee(UUID tenantId) {
+        return repository.findWorkloadByAssignee(tenantId, OPEN_STATUSES).stream()
+                .collect(Collectors.toMap(AssigneeWorkload::getAssigneeId,
+                        AssigneeWorkload::getActiveRequests));
     }
 
     private static RequestAssignmentDto toDto(Request request) {

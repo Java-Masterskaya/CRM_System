@@ -52,7 +52,8 @@ class ErrorCodeTest {
     void byStatus_whenDomainCodeSharesStatus_neverReturnsDomainCode(int status) {
         assertThat(ErrorCode.byStatus(status)).isNotIn(ErrorCode.VALIDATION_FAILED,
                 ErrorCode.INVALID_CREDENTIALS, ErrorCode.INVALID_TRANSITION,
-                ErrorCode.STALE_VERSION, ErrorCode.ALREADY_EXISTS, ErrorCode.REQUEST_CLOSED);
+                ErrorCode.STALE_VERSION, ErrorCode.ALREADY_EXISTS, ErrorCode.REQUEST_CLOSED,
+                ErrorCode.NO_ELIGIBLE_ASSIGNEE);
     }
 
     @Test
@@ -66,5 +67,10 @@ class ErrorCodeTest {
     @Test
     void requestClosed_whenUsedForTerminalRequest_isConflict() {
         assertThat(ErrorCode.REQUEST_CLOSED.getStatus().value()).isEqualTo(409);
+    }
+
+    @Test
+    void noEligibleAssignee_whenAutoAssignmentHasNoCandidates_isConflict() {
+        assertThat(ErrorCode.NO_ELIGIBLE_ASSIGNEE.getStatus().value()).isEqualTo(409);
     }
 }

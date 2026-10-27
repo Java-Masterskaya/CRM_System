@@ -1,6 +1,7 @@
 package ru.practicum.crm.assignment.service;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ import ru.practicum.crm.user.api.PermissionCode;
 import ru.practicum.crm.user.api.UserPermissionService;
 import ru.practicum.crm.user.api.UserService;
 import ru.practicum.crm.user.api.dto.ActiveUserDto;
+import ru.practicum.crm.user.api.dto.UserContactDto;
 
 @Service
 public class AssignmentService {
@@ -66,6 +68,42 @@ public class AssignmentService {
         }
 
         return outcome.assignment();
+    }
+
+    /**
+     * Подбирает исполнителя по текущей нагрузке (T-051).
+     *
+     * <p>Кандидаты — активные пользователи арендатора с правом вести заявки: заблокированные и
+     * удалённые в выборку не попадают. Нагрузка — число незавершённых заявок каждого кандидата,
+     * посчитанное одним агрегирующим запросом. Назначение и запись в журнал выполняет та же
+     * операция, что и при ручном назначении, поэтому результат автоподбора виден в журнале
+     * изменений так же, как ручное.
+     *
+     * @throws ApiException {@code NO_ELIGIBLE_ASSIGNEE}, если кандидатов нет: заявка остаётся
+     *     без исполнителя, а клиенту объясняется причина
+     */
+    @Transactional
+    public RequestAssignmentDto autoAssign(UUID tenantId, UUID requestId, long expectedVersion,
+                                           UUID actorId) {
+        List<UserContactDto> candidates = userService.findActiveWithPermission(tenantId,
+                PermissionCode.REQUEST_STATUS_CHANGE.name());
+        Map<UUID, Long> workload = requestAssignmentService.activeWorkloadByAssignee(tenantId);
+
+        UserContactDto assignee = WorkloadBalancer.leastLoaded(candidates, workload)
+                .orElseThrow(AssignmentService::noEligibleAssignee);
+
+        RequestAssignmentDto result = requestAssignmentService.changeAssignee(tenantId, requestId,
+                assignee.id(), expectedVersion, actorId);
+
+        notifyAuthor(tenantId, result, new ActiveUserDto(assignee.id(), assignee.email()));
+
+        return result;
+    }
+
+    private static ApiException noEligibleAssignee() {
+        return new ApiException(ErrorCode.NO_ELIGIBLE_ASSIGNEE,
+                "Нет подходящего исполнителя: среди активных пользователей арендатора нет ни"
+                        + " одного с правом вести заявки.");
     }
 
     private ActiveUserDto requireCandidateEligible(
