@@ -1,6 +1,7 @@
 package ru.practicum.crm.request.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
@@ -22,6 +23,7 @@ import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.NotFoundException;
 import ru.practicum.crm.request.api.dto.RequestAssignmentDto;
+import ru.practicum.crm.request.api.dto.RequestAssignmentOutcome;
 import ru.practicum.crm.request.domain.Request;
 import ru.practicum.crm.request.domain.RequestStatus;
 import ru.practicum.crm.request.repository.RequestRepository;
@@ -89,9 +91,11 @@ class RequestAssignmentServiceImplTest {
         when(repository.findByIdAndTenantIdAndDeletedFalse(REQUEST_ID, TENANT_ID))
                 .thenReturn(Optional.of(request));
 
-        RequestAssignmentDto result = service.changeAssignee(TENANT_ID, REQUEST_ID, assigneeId,
-                0, ACTOR_ID);
+        RequestAssignmentOutcome outcome = service.changeAssignee(TENANT_ID, REQUEST_ID,
+                assigneeId, 0, ACTOR_ID);
+        RequestAssignmentDto result = outcome.assignment();
 
+        assertThat(outcome.changed()).isTrue();
         assertThat(result.requestId()).isEqualTo(REQUEST_ID);
         assertThat(result.authorId()).isEqualTo(AUTHOR_ID);
         assertThat(result.subject()).isEqualTo("Выгрузка");
@@ -110,10 +114,11 @@ class RequestAssignmentServiceImplTest {
         when(repository.findByIdAndTenantIdAndDeletedFalse(REQUEST_ID, TENANT_ID))
                 .thenReturn(Optional.of(request));
 
-        RequestAssignmentDto result = service.changeAssignee(TENANT_ID, REQUEST_ID, assigneeId,
-                0, ACTOR_ID);
+        RequestAssignmentOutcome outcome = service.changeAssignee(TENANT_ID, REQUEST_ID,
+                assigneeId, 0, ACTOR_ID);
 
-        assertThat(result.assignedAt()).isEqualTo(NOW.minusSeconds(60));
+        assertThat(outcome.changed()).isFalse();
+        assertThat(outcome.assignment().assignedAt()).isEqualTo(NOW.minusSeconds(60));
         verify(auditService, never()).record(any(), any(), any());
     }
 
@@ -124,12 +129,61 @@ class RequestAssignmentServiceImplTest {
         when(repository.findByIdAndTenantIdAndDeletedFalse(REQUEST_ID, TENANT_ID))
                 .thenReturn(Optional.of(request));
 
-        RequestAssignmentDto result = service.changeAssignee(TENANT_ID, REQUEST_ID, null, 0,
+        RequestAssignmentOutcome outcome = service.changeAssignee(TENANT_ID, REQUEST_ID, null, 0,
                 ACTOR_ID);
 
-        assertThat(result.assigneeId()).isNull();
-        assertThat(result.assignedAt()).isNull();
+        assertThat(outcome.changed()).isTrue();
+        assertThat(outcome.assignment().assigneeId()).isNull();
+        assertThat(outcome.assignment().assignedAt()).isNull();
         verify(auditService).record(eq(request), any(), eq(ACTOR_ID));
+    }
+
+    @Test
+    void requireUnassigned_whenRequestMissingForTenant_throwsNotFound() {
+        when(repository.findByIdAndTenantIdAndDeletedFalse(REQUEST_ID, TENANT_ID))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.requireUnassigned(TENANT_ID, REQUEST_ID, 0))
+                .isInstanceOf(NotFoundException.class)
+                .satisfies(ex -> assertThat(((NotFoundException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.NOT_FOUND));
+    }
+
+    @Test
+    void requireUnassigned_whenVersionStale_throwsOptimisticLockFailure() {
+        Request request = savedRequest(RequestStatus.NEW);
+        when(repository.findByIdAndTenantIdAndDeletedFalse(REQUEST_ID, TENANT_ID))
+                .thenReturn(Optional.of(request));
+
+        assertThatThrownBy(() -> service.requireUnassigned(TENANT_ID, REQUEST_ID,
+                request.getVersion() + 1))
+                .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+    }
+
+    @Test
+    void requireUnassigned_whenAssigneeAlreadySet_throwsAlreadyAssigned() {
+        Request request = savedRequest(RequestStatus.NEW);
+        UUID assigneeId = UUID.randomUUID();
+        request.changeAssignee(assigneeId, NOW.minusSeconds(60));
+        when(repository.findByIdAndTenantIdAndDeletedFalse(REQUEST_ID, TENANT_ID))
+                .thenReturn(Optional.of(request));
+
+        ApiException thrown = catchThrowableOfType(
+                () -> service.requireUnassigned(TENANT_ID, REQUEST_ID, 0), ApiException.class);
+
+        assertThat(thrown.getErrorCode()).isEqualTo(ErrorCode.REQUEST_ALREADY_ASSIGNED);
+        assertThat(thrown.getDetail()).contains(assigneeId.toString());
+        assertThat(request.getAssigneeId()).isEqualTo(assigneeId);
+    }
+
+    @Test
+    void requireUnassigned_whenRequestHasNoAssignee_passes() {
+        Request request = savedRequest(RequestStatus.NEW);
+        when(repository.findByIdAndTenantIdAndDeletedFalse(REQUEST_ID, TENANT_ID))
+                .thenReturn(Optional.of(request));
+
+        assertThatCode(() -> service.requireUnassigned(TENANT_ID, REQUEST_ID, 0))
+                .doesNotThrowAnyException();
     }
 
     private static Request savedRequest(RequestStatus status) {

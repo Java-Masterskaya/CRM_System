@@ -195,6 +195,24 @@ class AssignmentControllerTest {
     }
 
     @Test
+    void autoAssign_whenRequestAlreadyAssigned_propagatesAsConflictProblemDetail()
+            throws Exception {
+        when(tenantContext.getCurrentTenantId()).thenReturn(TENANT_ID);
+        when(userContext.getCurrentUserId()).thenReturn(ACTOR_ID);
+        when(assignmentService.autoAssign(TENANT_ID, REQUEST_ID, 0, ACTOR_ID))
+                .thenThrow(new ApiException(ErrorCode.REQUEST_ALREADY_ASSIGNED,
+                        "Заявка уже назначена исполнителю: используйте ручное назначение"));
+
+        mockMvc.perform(post("/admin/requests/{requestId}/auto-assign", REQUEST_ID)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":0}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("REQUEST_ALREADY_ASSIGNED"))
+                .andExpect(jsonPath("$.detail")
+                        .value("Заявка уже назначена исполнителю: используйте ручное назначение"));
+    }
+
+    @Test
     void autoAssign_whenNoEligibleAssignee_propagatesAsConflictProblemDetail() throws Exception {
         when(tenantContext.getCurrentTenantId()).thenReturn(TENANT_ID);
         when(userContext.getCurrentUserId()).thenReturn(ACTOR_ID);

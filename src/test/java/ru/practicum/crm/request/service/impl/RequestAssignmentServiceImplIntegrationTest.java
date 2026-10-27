@@ -91,9 +91,11 @@ class RequestAssignmentServiceImplIntegrationTest extends BaseIntegrationTest {
         UUID requestId = saveRequest(tenantA);
         UUID assigneeId = UUID.randomUUID();
 
-        RequestAssignmentDto result = transaction.execute(status ->
+        RequestAssignmentOutcome outcome = transaction.execute(status ->
                 service.changeAssignee(tenantA, requestId, assigneeId, 0, adminId));
+        RequestAssignmentDto result = outcome.assignment();
 
+        assertThat(outcome.changed()).isTrue();
         assertThat(result.assigneeId()).isEqualTo(assigneeId);
         assertThat(result.assignedAt()).isNotNull();
         Request reloaded = load(tenantA, requestId);
@@ -265,7 +267,7 @@ class RequestAssignmentServiceImplIntegrationTest extends BaseIntegrationTest {
         UUID existingOperator = UUID.randomUUID();
         UUID anotherOperator = UUID.randomUUID();
 
-        RequestAssignmentDto assigned = transaction.execute(status ->
+        RequestAssignmentOutcome assignedOutcome = transaction.execute(status ->
                 service.changeAssignee(
                         tenantA,
                         requestId,
@@ -273,6 +275,7 @@ class RequestAssignmentServiceImplIntegrationTest extends BaseIntegrationTest {
                         0,
                         adminId
                 ));
+        RequestAssignmentDto assigned = assignedOutcome.assignment();
 
         Request before = load(tenantA, requestId);
         int auditCountBefore = journal(tenantA, requestId).size();

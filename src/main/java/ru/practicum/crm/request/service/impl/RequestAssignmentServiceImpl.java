@@ -44,8 +44,8 @@ public class RequestAssignmentServiceImpl implements RequestAssignmentService {
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
-    public RequestAssignmentDto changeAssignee(UUID tenantId, UUID requestId, UUID assigneeId,
-                                               long expectedVersion, UUID actorId) {
+    public RequestAssignmentOutcome changeAssignee(UUID tenantId, UUID requestId, UUID assigneeId,
+                                                   long expectedVersion, UUID actorId) {
         Request request = repository.findByIdAndTenantIdAndDeletedFalse(requestId, tenantId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.NOT_FOUND,
                         "Заявка не найдена: id = " + requestId));
@@ -58,11 +58,29 @@ public class RequestAssignmentServiceImpl implements RequestAssignmentService {
         }
 
         RequestSnapshot before = RequestSnapshot.of(request);
-        if (request.changeAssignee(assigneeId, Instant.now(clock))) {
+        boolean changed = request.changeAssignee(assigneeId, Instant.now(clock));
+        if (changed) {
             auditService.record(request, before, actorId);
         }
 
-        return toDto(request);
+        return new RequestAssignmentOutcome(toDto(request), changed);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public void requireUnassigned(UUID tenantId, UUID requestId, long expectedVersion) {
+        Request request = repository.findByIdAndTenantIdAndDeletedFalse(requestId, tenantId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.NOT_FOUND,
+                        "Заявка не найдена: id = " + requestId));
+
+        request.requireVersion(expectedVersion);
+
+        if (request.getAssigneeId() != null) {
+            throw new ApiException(ErrorCode.REQUEST_ALREADY_ASSIGNED,
+                    "Заявка уже назначена исполнителю: id = " + request.getAssigneeId()
+                            + ". Автоподбор не переназначает исполнителя — используйте ручное"
+                            + " назначение.");
+        }
     }
 
     @Override

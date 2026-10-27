@@ -135,6 +135,32 @@ class AssignmentServiceIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    void assign_whenAssigneeUnchanged_doesNotPublishNotificationOrWriteAudit() {
+        TestTenant tenant = fixture.createTenant("tenant-assign-unchanged");
+        TestUser author = fixture.createUser(tenant, "author@example.com", "StrongPassword1!");
+        TestUser operator = operator(tenant, "operator@example.com");
+        UUID requestId = saveRequest(tenant.id(), author.id());
+
+        RequestAssignmentDto first = transaction.execute(status ->
+                service.assign(tenant.id(), requestId, operator.id(), 0, UUID.randomUUID()));
+
+        assertThat(first.assigneeId()).isEqualTo(operator.id());
+        assertThat(auditEntries(requestId)).hasSize(1);
+        assertThat(outboxEvents(tenant.id(), requestId)).hasSize(1);
+
+        long persistedVersion = versionOf(requestId);
+
+        RequestAssignmentDto repeated = transaction.execute(status ->
+                service.assign(tenant.id(), requestId, operator.id(), persistedVersion,
+                        UUID.randomUUID()));
+
+        assertThat(repeated.assigneeId()).isEqualTo(operator.id());
+        assertThat(versionOf(requestId)).isEqualTo(persistedVersion);
+        assertThat(auditEntries(requestId)).hasSize(1);
+        assertThat(outboxEvents(tenant.id(), requestId)).hasSize(1);
+    }
+
+    @Test
     void autoAssign_whenLoadsDiffer_assignsOperatorWithFewestUnfinishedRequests() {
         TestTenant tenant = fixture.createTenant("tenant-auto-least-loaded");
         TestUser author = fixture.createUser(tenant, "author@example.com", "StrongPassword1!");
@@ -149,6 +175,36 @@ class AssignmentServiceIntegrationTest extends BaseIntegrationTest {
 
         assertThat(result.assigneeId()).isEqualTo(free.id());
         assertThat(assigneeIdOf(requestId)).isEqualTo(free.id());
+    }
+
+    @Test
+    void autoAssign_whenRequestAlreadyAssigned_rejectsWithoutMovingAuditOrNotification() {
+        TestTenant tenant = fixture.createTenant("tenant-auto-already-assigned");
+        TestUser author = fixture.createUser(tenant, "author@example.com", "StrongPassword1!");
+        TestUser firstOperator = operator(tenant, "first@example.com");
+        TestUser secondOperator = operator(tenant, "second@example.com");
+        UUID requestId = saveRequest(tenant.id(), author.id());
+
+        RequestAssignmentDto assigned = transaction.execute(status ->
+                service.autoAssign(tenant.id(), requestId, 0, UUID.randomUUID()));
+
+        assertThat(assigned.assigneeId()).isIn(firstOperator.id(), secondOperator.id());
+
+        UUID assigneeBefore = assigneeIdOf(requestId);
+        long versionBefore = versionOf(requestId);
+        int auditBefore = auditEntries(requestId).size();
+        int outboxBefore = outboxEvents(tenant.id(), requestId).size();
+
+        assertThatThrownBy(() -> transaction.execute(status ->
+                service.autoAssign(tenant.id(), requestId, versionBefore, UUID.randomUUID())))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.REQUEST_ALREADY_ASSIGNED));
+
+        assertThat(assigneeIdOf(requestId)).isEqualTo(assigneeBefore);
+        assertThat(versionOf(requestId)).isEqualTo(versionBefore);
+        assertThat(auditEntries(requestId)).hasSize(auditBefore);
+        assertThat(outboxEvents(tenant.id(), requestId)).hasSize(outboxBefore);
     }
 
     @Test
@@ -343,6 +399,11 @@ class AssignmentServiceIntegrationTest extends BaseIntegrationTest {
     private UUID assigneeIdOf(UUID requestId) {
         return jdbcTemplate.queryForObject("SELECT assignee_id FROM requests WHERE id = ?",
                 UUID.class, requestId);
+    }
+
+    private long versionOf(UUID requestId) {
+        return jdbcTemplate.queryForObject("SELECT version FROM requests WHERE id = ?",
+                Long.class, requestId);
     }
 
     private Map<String, Object> singleOutboxEvent(UUID tenantId, UUID requestId) {
