@@ -17,6 +17,8 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
@@ -140,11 +142,13 @@ class RequestAssignmentServiceImplIntegrationTest extends BaseIntegrationTest {
         assertThat(load(tenantA, requestId).getAssigneeId()).isNull();
     }
 
-    @Test
-    void changeAssignee_whenRequestTerminal_isRejectedAsClosedAndNothingChanges() {
-        UUID requestId = saveRequest(tenantA, RequestStatus.DONE);
+    @ParameterizedTest
+    @EnumSource(value = RequestStatus.class, names = {"DONE", "REJECTED", "CANCELLED"})
+    void changeAssignee_whenRequestTerminal_isRejectedAsClosedAndNothingChanges(
+            RequestStatus status) {
+        UUID requestId = saveRequest(tenantA, status);
 
-        assertThatThrownBy(() -> transaction.execute(status ->
+        assertThatThrownBy(() -> transaction.execute(txStatus ->
                 service.changeAssignee(tenantA, requestId, UUID.randomUUID(), 0, adminId)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(ex -> assertThat(((ApiException) ex).getErrorCode())
@@ -169,6 +173,56 @@ class RequestAssignmentServiceImplIntegrationTest extends BaseIntegrationTest {
         assertThatThrownBy(() -> jdbcTemplate.update(
                 "UPDATE requests SET assignee_id = ? WHERE id = ?", UUID.randomUUID(), requestId))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void changeAssignee_chainOfTransfers_recordsEachStepInOrder() {
+        UUID requestId = saveRequest(tenantA);
+        UUID operatorA = UUID.randomUUID();
+        UUID operatorB = UUID.randomUUID();
+
+        transaction.executeWithoutResult(status ->
+                service.changeAssignee(tenantA, requestId, operatorA, 0, adminId));
+        transaction.executeWithoutResult(status ->
+                service.changeAssignee(tenantA, requestId, operatorB, 1, adminId));
+        transaction.executeWithoutResult(status ->
+                service.changeAssignee(tenantA, requestId, null, 2, adminId));
+
+        List<RequestAuditEntry> entries = journal(tenantA, requestId);
+
+        assertThat(entries).hasSize(3);
+        assertThat(entries.get(0).getOldValue()).isNull();
+        assertThat(entries.get(0).getNewValue()).isEqualTo(operatorA.toString());
+        assertThat(entries.get(1).getOldValue()).isEqualTo(operatorA.toString());
+        assertThat(entries.get(1).getNewValue()).isEqualTo(operatorB.toString());
+        assertThat(entries.get(2).getOldValue()).isEqualTo(operatorB.toString());
+        assertThat(entries.get(2).getNewValue()).isNull();
+        assertThat(entries).allSatisfy(entry ->
+                assertThat(entry.getAuthorId()).isEqualTo(adminId));
+        assertThat(load(tenantA, requestId).getAssigneeId()).isNull();
+    }
+
+    @Test
+    void changeAssignee_whenUnassignedAfterAssignment_isFindableWithoutExecutor() {
+        UUID requestId = saveRequest(tenantA);
+        UUID operator = UUID.randomUUID();
+        transaction.executeWithoutResult(status ->
+                service.changeAssignee(tenantA, requestId, operator, 0, adminId));
+
+        transaction.executeWithoutResult(status ->
+                service.changeAssignee(tenantA, requestId, null, 1, adminId));
+
+        assertThat(load(tenantA, requestId).getAssigneeId()).isNull();
+
+        UUID stillAssignedId = saveRequest(tenantA);
+        transaction.executeWithoutResult(status ->
+                service.changeAssignee(tenantA, stillAssignedId, UUID.randomUUID(), 0, adminId));
+
+        List<UUID> unassignedIds = jdbcTemplate.queryForList(
+                "SELECT id FROM requests WHERE tenant_id = ? AND assignee_id IS NULL"
+                        + " AND NOT deleted",
+                UUID.class, tenantA);
+        assertThat(unassignedIds).contains(requestId).doesNotContain(stillAssignedId);
     }
 
     @Test
