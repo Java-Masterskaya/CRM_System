@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.LongSummaryStatistics;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -402,8 +403,9 @@ class AssignmentServiceIntegrationTest extends BaseIntegrationTest {
     }
 
     private long versionOf(UUID requestId) {
-        return jdbcTemplate.queryForObject("SELECT version FROM requests WHERE id = ?",
-                Long.class, requestId);
+        return Objects.requireNonNull(
+                jdbcTemplate.queryForObject("SELECT version FROM requests WHERE id = ?",
+                        Long.class, requestId));
     }
 
     private Map<String, Object> singleOutboxEvent(UUID tenantId, UUID requestId) {

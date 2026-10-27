@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.within;
 
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -93,7 +94,7 @@ class RequestAssignmentServiceImplIntegrationTest extends BaseIntegrationTest {
 
         RequestAssignmentOutcome outcome = transaction.execute(status ->
                 service.changeAssignee(tenantA, requestId, assigneeId, 0, adminId));
-        RequestAssignmentDto result = outcome.assignment();
+        RequestAssignmentDto result = Objects.requireNonNull(outcome).assignment();
 
         assertThat(outcome.changed()).isTrue();
         assertThat(result.assigneeId()).isEqualTo(assigneeId);
@@ -275,7 +276,7 @@ class RequestAssignmentServiceImplIntegrationTest extends BaseIntegrationTest {
                         0,
                         adminId
                 ));
-        RequestAssignmentDto assigned = assignedOutcome.assignment();
+        RequestAssignmentDto assigned = Objects.requireNonNull(assignedOutcome).assignment();
 
         Request before = load(tenantA, requestId);
         int auditCountBefore = journal(tenantA, requestId).size();
