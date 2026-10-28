@@ -36,6 +36,9 @@ public enum ErrorCode {
             "Операция недоступна для заявки в терминальном статусе."),
     REQUEST_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "Заявка уже назначена",
             "Заявка уже назначена другому исполнителю."),
+    REQUEST_NOT_DELETED(HttpStatus.CONFLICT, "Заявка не удалена",
+            "Восстановить можно только мягко удаленную заявку"
+    ),
     NO_ELIGIBLE_ASSIGNEE(HttpStatus.CONFLICT, "Нет подходящего исполнителя",
             "Среди активных пользователей арендатора нет ни одного с правом вести заявки."),
     PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "Слишком большой запрос",
@@ -60,7 +63,7 @@ public enum ErrorCode {
     private static final Set<ErrorCode> DOMAIN_SPECIFIC = EnumSet.of(VALIDATION_FAILED,
             INVALID_CREDENTIALS, INVALID_TRANSITION, STALE_VERSION, ALREADY_EXISTS,
             REQUEST_CLOSED, REQUEST_ALREADY_ASSIGNED, NO_ELIGIBLE_ASSIGNEE,
-            IDEMPOTENCY_KEY_REUSED);
+            REQUEST_NOT_DELETED, IDEMPOTENCY_KEY_REUSED);
 
     private static final Set<ErrorCode> FALLBACK_ONLY = EnumSet.of(CLIENT_ERROR);
 

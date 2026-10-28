@@ -110,6 +110,11 @@ public class SecurityConfig {
                                 .hasAuthority(PermissionCode.REQUEST_ASSIGN.name())
                                 .requestMatchers(HttpMethod.GET, "/admin/requests")
                                 .authenticated()
+                                // (T-047); Права REQUEST_DELETE проверяет сервис(как у реестра)
+                                .requestMatchers(HttpMethod.DELETE, "/admin/requests/*")
+                                .authenticated()
+                                .requestMatchers(HttpMethod.POST, "/admin/requests/*/restore")
+                                .authenticated()
                                 .requestMatchers(
                                         HttpMethod.GET,
                                         "/admin/requests/*",

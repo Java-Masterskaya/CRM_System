@@ -12,5 +12,6 @@ public enum AuditedField {
     TYPE,
     DESIRED_DUE_AT,
     DESCRIPTION,
-    ASSIGNEE
+    ASSIGNEE,
+    DELETED
 }

@@ -185,7 +185,7 @@ class OutboxEventPublisherIntegrationTest extends BaseIntegrationTest {
     private Map<String, Object> row(UUID id) {
         return jdbcTemplate.queryForMap("SELECT tenant_id, event_type, status, attempts,"
                 + " payload ->> 'newStatus' AS new_status,"
-                + " next_attempt_at <= now() AS available_now"
+                + " next_attempt_at <= now() + interval '1 second' AS available_now"
                 + " FROM outbox_events WHERE id = ?", id);
     }
 

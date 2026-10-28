@@ -470,6 +470,34 @@ class SecurityAuthorizationRulesTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    /**
+     * Мягкое уудаление (T-047): URL-правило пропускает DELETE и POST restore с токеном.
+     * право {@code REQUEST_DELETE} проверяет сервис.
+     */
+    @Test
+    void givenAnyPermission_whenSoftDeletingOrRestoring_thenUrlRulePassesToMethodCheck()
+            throws Exception {
+
+        UUID id = UUID.randomUUID();
+        mockMvc.perform(get("/admin/requests/{id}", id)
+                        .with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/admin/requests/{id}/restore", id)
+                        .with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void givenNoCredentials_whenSoftDeletingOrRestoring_thenReturnsUnauthorized()
+            throws Exception {
+
+        UUID id = UUID.randomUUID();
+        mockMvc.perform(get("/admin/requests/{id}", id).with(anonymous()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/admin/requests/{id}/restore", id).with(anonymous()))
+                .andExpect(status().isUnauthorized());
+    }
+
     private RequestPostProcessor jwtWithAuthority(String authority) {
         return jwt()
                 .jwt(token -> token

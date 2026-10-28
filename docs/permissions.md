@@ -22,6 +22,7 @@
 | `REQUEST_ASSIGN` | Назначить, снять или переназначить исполнителя |
 | `REQUEST_EDIT` | Изменить операционные поля заявки |
 | `REQUEST_AUDIT_READ` | Читать журнал аудита с учётом доступной области заявок |
+| `REQUEST_DELETE` |Мягкое удалить и восстоновить заявку(только администратор) |
 | `COMMENT_PUBLIC_CREATE_OWN` | Добавить публичный комментарий к собственной заявке |
 | `COMMENT_PUBLIC_CREATE` | Добавить публичный комментарий оператором |
 | `COMMENT_INTERNAL_CREATE` | Добавить внутренний комментарий |
@@ -44,7 +45,7 @@
 
 | Раздел | `CLIENT` | `OPERATOR` | `ADMIN` |
 |---|---|---|---|
-| Заявки | `REQUEST_CREATE`, `REQUEST_READ_OWN`, `REQUEST_CANCEL_OWN` | `REQUEST_READ_ALL`, `REQUEST_STATUS_CHANGE`, `REQUEST_ASSIGN`, `REQUEST_EDIT`, `REQUEST_AUDIT_READ` | Права оператора |
+| Заявки | `REQUEST_CREATE`, `REQUEST_READ_OWN`, `REQUEST_CANCEL_OWN` | `REQUEST_READ_ALL`, `REQUEST_STATUS_CHANGE`, `REQUEST_ASSIGN`, `REQUEST_EDIT`, `REQUEST_AUDIT_READ` | Права оператора + `REQUEST_DELETE` |
 | Комментарии | `COMMENT_PUBLIC_CREATE_OWN` | `COMMENT_PUBLIC_CREATE`, `COMMENT_INTERNAL_CREATE` | Права оператора |
 | Вложения | `ATTACHMENT_CREATE_OWN`, `ATTACHMENT_READ_OWN` | `ATTACHMENT_MANAGE` | `ATTACHMENT_MANAGE` |
 | Профиль | `PROFILE_READ_OWN`, `PROFILE_EDIT_OWN` | `PROFILE_READ_OWN`, `PROFILE_EDIT_OWN` | `PROFILE_READ_OWN`, `PROFILE_EDIT_OWN` |

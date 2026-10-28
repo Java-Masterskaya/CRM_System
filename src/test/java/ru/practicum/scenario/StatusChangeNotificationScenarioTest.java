@@ -144,7 +144,8 @@ class StatusChangeNotificationScenarioTest extends BaseIntegrationTest {
         assertThat(MAIL_SERVER.getReceivedMessages()).isEmpty();
         assertThat(letterEvent(id)).containsEntry("status", "NEW").containsEntry("attempts", 1);
 
-        jdbcTemplate.update("UPDATE outbox_events SET next_attempt_at = now()"
+        jdbcTemplate.update("UPDATE outbox_events"
+                + " SET next_attempt_at = now() - interval '1 second'"
                 + " WHERE aggregate_id = ?", id);
         processor.processBatch();
 
