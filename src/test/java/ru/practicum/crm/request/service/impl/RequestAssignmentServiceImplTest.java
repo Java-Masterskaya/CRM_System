@@ -17,6 +17,8 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.util.ReflectionTestUtils;
 import ru.practicum.crm.common.error.ApiException;
@@ -69,9 +71,10 @@ class RequestAssignmentServiceImplTest {
         verify(auditService, never()).record(any(), any(), any());
     }
 
-    @Test
-    void changeAssignee_whenRequestInTerminalStatus_isRejectedAsClosed() {
-        Request request = savedRequest(RequestStatus.DONE);
+    @ParameterizedTest
+    @EnumSource(value = RequestStatus.class, names = {"DONE", "REJECTED", "CANCELLED"})
+    void changeAssignee_whenRequestInTerminalStatus_isRejectedAsClosed(RequestStatus status) {
+        Request request = savedRequest(status);
         when(repository.findByIdAndTenantIdAndDeletedFalse(REQUEST_ID, TENANT_ID))
                 .thenReturn(Optional.of(request));
 
