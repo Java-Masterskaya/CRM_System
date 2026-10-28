@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.crm.common.error.ApiException;
@@ -23,8 +24,9 @@ import ru.practicum.crm.sla.repository.HolidayRepository;
  * Справочник нерабочих дней арендатора (T-057): добавление нерабочих и рабочих дат, удаление и
  * просмотр. Календарь учитывает справочник в {@link WorkingCalendarService#calendar}.
  *
- * <p>Кто вправе менять справочник, решает вызывающий код: по ТЗ §6.3 это администратор
- * арендатора — права (T-030). Все операции работают в пределах арендатора.
+ * <p>Смотреть и менять справочник может только носитель права {@code SLA_POLICY_MANAGE} — по
+ * ТЗ §6.3 это администратор арендатора; без права — 403. Все операции работают в пределах
+ * арендатора.
  *
  * <p>Одна запись на дату гарантирована базой — уникальностью {@code holidays_date_unique}.
  * Сервис проверяет повтор заранее, а нарушение уникальности от одновременного запроса переводит
@@ -59,6 +61,7 @@ public class HolidayService {
      * @throws ApiException {@code VALIDATION_FAILED} с перечнем полей, если не указана дата или
      *     описание; {@code ALREADY_EXISTS}, если дата уже есть в справочнике
      */
+    @PreAuthorize("hasAuthority('SLA_POLICY_MANAGE')")
     @Transactional
     public Holiday createDayOff(UUID tenantId, LocalDate date, String description) {
         List<ValidationError> errors = new ArrayList<>();
@@ -75,6 +78,7 @@ public class HolidayService {
      *     описание или часы, или начало не раньше конца; {@code ALREADY_EXISTS}, если дата уже
      *     есть в справочнике
      */
+    @PreAuthorize("hasAuthority('SLA_POLICY_MANAGE')")
     @Transactional
     public Holiday createWorkingDay(UUID tenantId, LocalDate date, String description,
             LocalTime start, LocalTime end) {
@@ -98,6 +102,7 @@ public class HolidayService {
      *
      * @throws ApiException {@code NOT_FOUND}, если у арендатора такой записи нет
      */
+    @PreAuthorize("hasAuthority('SLA_POLICY_MANAGE')")
     @Transactional
     public void delete(UUID tenantId, UUID id) {
         Holiday holiday = repository.findByIdAndTenantId(id, tenantId)
@@ -112,6 +117,7 @@ public class HolidayService {
      * @param pageable номер и размер страницы; ограничения — в
      *     {@link PageRequests#requireBounded}
      */
+    @PreAuthorize("hasAuthority('SLA_POLICY_MANAGE')")
     @Transactional(readOnly = true)
     public Page<Holiday> holidays(UUID tenantId, Pageable pageable) {
         return repository.findByTenantIdOrderByDateAsc(tenantId,

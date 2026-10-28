@@ -7,6 +7,7 @@ import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.crm.common.error.ApiException;
@@ -23,8 +24,9 @@ import ru.practicum.crm.sla.repository.SlaPolicyRepository;
  * Политики сроков арендатора (T-055): создание, изменение сроков, просмотр и выбор политики
  * для заявки.
  *
- * <p>Кто вправе управлять политиками, решает вызывающий код: по ТЗ §6.3 это только
- * администратор арендатора — права (T-030). Все операции работают в пределах арендатора.
+ * <p>Управлять политиками может только носитель права {@code SLA_POLICY_MANAGE} — по ТЗ §6.3
+ * это администратор арендатора; без права — 403. {@link #resolve} права не проверяет: его
+ * вызывает расчёт сроков при создании заявки. Все операции работают в пределах арендатора.
  *
  * <p>Существует ли тип заявки у этого арендатора, проверяет база: пакет сроков не зависит от
  * пакета заявок, а внешний ключ {@code sla_policies_type_fkey} не даст сослаться на чужой или
@@ -59,6 +61,7 @@ public class SlaPolicyService {
      *     приоритет, тип не найден у арендатора или сроки заданы неверно;
      *     {@code ALREADY_EXISTS}, если политика для этой пары уже есть
      */
+    @PreAuthorize("hasAuthority('SLA_POLICY_MANAGE')")
     @Transactional
     public SlaPolicy create(UUID tenantId, UUID typeId, RequestPriority priority,
             SlaTerms terms) {
@@ -84,6 +87,7 @@ public class SlaPolicyService {
      * @throws ApiException {@code VALIDATION_FAILED}, если сроки заданы неверно;
      *     {@code ALREADY_EXISTS}, если политика по умолчанию у арендатора уже есть
      */
+    @PreAuthorize("hasAuthority('SLA_POLICY_MANAGE')")
     @Transactional
     public SlaPolicy createDefault(UUID tenantId, SlaTerms terms) {
         List<ValidationError> errors = new ArrayList<>();
@@ -102,6 +106,7 @@ public class SlaPolicyService {
      * @throws ApiException {@code NOT_FOUND}, если у арендатора такой политики нет;
      *     {@code VALIDATION_FAILED}, если сроки заданы неверно
      */
+    @PreAuthorize("hasAuthority('SLA_POLICY_MANAGE')")
     @Transactional
     public SlaPolicy changeTerms(UUID tenantId, UUID id, SlaTerms terms) {
         List<ValidationError> errors = new ArrayList<>();
@@ -120,6 +125,7 @@ public class SlaPolicyService {
      * @param pageable номер и размер страницы; ограничения — в
      *     {@link PageRequests#requireBounded}
      */
+    @PreAuthorize("hasAuthority('SLA_POLICY_MANAGE')")
     @Transactional(readOnly = true)
     public Page<SlaPolicy> policies(UUID tenantId, Pageable pageable) {
         return repository.findByTenantIdOrderByCreatedAtAscIdAsc(tenantId,

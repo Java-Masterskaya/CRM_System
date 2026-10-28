@@ -82,11 +82,30 @@ public class SecurityConfig {
                         // которого нет в этом списке, по-прежнему закрыт (T-022).
                         authorize.requestMatchers("/admin/tenant/settings")
                                 .authenticated()
+                                // Справочник типов заявок (T-034): просмотр, создание, изменение,
+                                // отключение и включение; клиенту — список действующих типов.
+                                .requestMatchers(HttpMethod.GET, "/admin/request-types")
+                                .authenticated()
+                                .requestMatchers(HttpMethod.POST, "/admin/request-types",
+                                        "/admin/request-types/*/deactivate",
+                                        "/admin/request-types/*/activate")
+                                .authenticated()
+                                .requestMatchers(HttpMethod.PUT, "/admin/request-types/*")
+                                .authenticated()
+                                .requestMatchers(HttpMethod.GET, "/client/request-types")
+                                .authenticated()
                                 .requestMatchers(HttpMethod.PUT, "/admin/requests/*/status")
                                 .authenticated()
                                 .requestMatchers(
                                         HttpMethod.PUT,
                                         "/admin/requests/*/assignee"
+                                )
+                                .hasAuthority(PermissionCode.REQUEST_ASSIGN.name())
+                                // Автоподбор исполнителя по нагрузке (T-051) — та же операция
+                                // назначения, поэтому и право то же.
+                                .requestMatchers(
+                                        HttpMethod.POST,
+                                        "/admin/requests/*/auto-assign"
                                 )
                                 .hasAuthority(PermissionCode.REQUEST_ASSIGN.name())
                                 .requestMatchers(HttpMethod.GET, "/admin/requests")
@@ -105,6 +124,20 @@ public class SecurityConfig {
                                 .authenticated()
                                 .requestMatchers(HttpMethod.GET, "/admin/queue")
                                 .authenticated()
+                                // Настройки сроков (T-055–T-057): политики, рабочие часы и
+                                // нерабочие дни арендатора.
+                                .requestMatchers(HttpMethod.GET, "/admin/sla-policies",
+                                        "/admin/calendar/working-hours",
+                                        "/admin/calendar/holidays")
+                                .authenticated()
+                                .requestMatchers(HttpMethod.POST, "/admin/sla-policies",
+                                        "/admin/calendar/holidays")
+                                .authenticated()
+                                .requestMatchers(HttpMethod.PUT, "/admin/sla-policies/*",
+                                        "/admin/calendar/working-hours")
+                                .authenticated()
+                                .requestMatchers(HttpMethod.DELETE, "/admin/calendar/holidays/*")
+                                .authenticated()
                                 .requestMatchers("/analytics/**")
                                 .hasAuthority(PermissionCode.ANALYTICS_READ.name())
                                 .requestMatchers(HttpMethod.GET, "/client/requests/*")
@@ -114,6 +147,8 @@ public class SecurityConfig {
                                         "/client/requests"
                                 )
                                 .hasAuthority(PermissionCode.REQUEST_CREATE.name())
+                                .requestMatchers(HttpMethod.PUT, "/admin/requests/*")
+                                .hasAuthority(PermissionCode.REQUEST_EDIT.name())
                                 .requestMatchers(HttpMethod.POST, "/admin/requests/*/take")
                                 .authenticated()
                                 .requestMatchers(

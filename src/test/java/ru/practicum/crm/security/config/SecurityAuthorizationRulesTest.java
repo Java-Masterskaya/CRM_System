@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -137,6 +138,51 @@ class SecurityAuthorizationRulesTest {
     }
 
     /**
+     * Справочник типов заявок (T-034): маршруты пропускают любой запрос с токеном, право
+     * проверяет сервис. Открыты только операции справочника: удаления у него нет, и
+     * {@code DELETE} по-прежнему закрыт.
+     */
+    @Test
+    void givenAnyPermission_whenManagingRequestTypes_thenUrlRulesPassOnlyDirectoryOperations()
+            throws Exception {
+        UUID id = UUID.randomUUID();
+        mockMvc.perform(get("/admin/request-types").with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/admin/request-types").with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(put("/admin/request-types/{id}", id)
+                        .with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/admin/request-types/{id}/deactivate", id)
+                        .with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/admin/request-types/{id}/activate", id)
+                        .with(jwtWithAuthority("REQUEST_READ_OWN")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/admin/request-types/{id}", id)
+                        .with(jwtWithAuthority("REQUEST_TYPE_MANAGE")))
+                .andExpect(status().isForbidden());
+    }
+
+    /** Клиентский список типов (T-034): открыто только чтение, право проверяет сервис. */
+    @Test
+    void givenAnyPermission_whenListingRequestTypesAsClient_thenUrlRulePassesOnlyGet()
+            throws Exception {
+        mockMvc.perform(get("/client/request-types").with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/client/request-types").with(jwtWithAuthority("REQUEST_CREATE")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenNoCredentials_whenCallingRequestTypes_thenReturnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/admin/request-types").with(anonymous()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/client/request-types").with(anonymous()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /**
      * Смена статуса заявки (T-044) — так же, как настройки: маршрут пропускает любой запрос с
      * токеном, право {@code REQUEST_STATUS_CHANGE} проверяет сервис. Открыт только {@code PUT}:
      * другой метод на том же пути по-прежнему закрыт.
@@ -198,6 +244,56 @@ class SecurityAuthorizationRulesTest {
                 .andExpect(status().isForbidden());
     }
 
+    /**
+     * Настройки сроков (T-055–T-057): маршруты пропускают любой запрос с токеном, право
+     * {@code SLA_POLICY_MANAGE} проверяет сервис. Открыты только операции настроек: удалить
+     * политику или календарь нельзя, изменить запись справочника — тоже.
+     */
+    @Test
+    void givenAnyPermission_whenManagingSlaSettings_thenUrlRulesPassOnlySettingsOperations()
+            throws Exception {
+        UUID id = UUID.randomUUID();
+        for (String path : List.of("/admin/sla-policies", "/admin/calendar/working-hours",
+                "/admin/calendar/holidays")) {
+            mockMvc.perform(get(path).with(jwtWithAuthority("REQUEST_READ_ALL")))
+                    .andExpect(status().isNotFound());
+        }
+        mockMvc.perform(post("/admin/sla-policies").with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(put("/admin/sla-policies/{id}", id)
+                        .with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(put("/admin/calendar/working-hours")
+                        .with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/admin/calendar/holidays")
+                        .with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/admin/calendar/holidays/{id}", id)
+                        .with(jwtWithAuthority("REQUEST_READ_ALL")))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(delete("/admin/sla-policies/{id}", id)
+                        .with(jwtWithAuthority("SLA_POLICY_MANAGE")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(delete("/admin/calendar/working-hours")
+                        .with(jwtWithAuthority("SLA_POLICY_MANAGE")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/admin/calendar/holidays/{id}", id)
+                        .with(jwtWithAuthority("SLA_POLICY_MANAGE")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenNoCredentials_whenCallingSlaSettings_thenReturnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/admin/sla-policies").with(anonymous()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/admin/calendar/working-hours").with(anonymous()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/admin/calendar/holidays").with(anonymous()))
+                .andExpect(status().isUnauthorized());
+    }
+
     @Test
     void givenStatusChangePermission_whenAssigningExecutor_thenReturnsForbidden()
             throws Exception {
@@ -209,6 +305,25 @@ class SecurityAuthorizationRulesTest {
     @Test
     void givenAssignPermission_whenAssigningExecutor_thenReachesMvcLookup() throws Exception {
         mockMvc.perform(put("/admin/requests/{id}/assignee", UUID.randomUUID())
+                        .with(jwtWithAuthority("REQUEST_ASSIGN")))
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * Автоподбор исполнителя (T-051) — та же операция назначения, поэтому и право то же:
+     * {@code REQUEST_STATUS_CHANGE} для неё недостаточно.
+     */
+    @Test
+    void givenStatusChangePermission_whenAutoAssigningExecutor_thenReturnsForbidden()
+            throws Exception {
+        mockMvc.perform(post("/admin/requests/{id}/auto-assign", UUID.randomUUID())
+                        .with(jwtWithAuthority("REQUEST_STATUS_CHANGE")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void givenAssignPermission_whenAutoAssigningExecutor_thenReachesMvcLookup() throws Exception {
+        mockMvc.perform(post("/admin/requests/{id}/auto-assign", UUID.randomUUID())
                         .with(jwtWithAuthority("REQUEST_ASSIGN")))
                 .andExpect(status().isNotFound());
     }
@@ -259,19 +374,30 @@ class SecurityAuthorizationRulesTest {
     }
 
     /**
-     * Карточка заявки (T-041): маршрут пропускает любой запрос с токеном, право
-     * {@code REQUEST_READ_ALL} проверяет сервис. Открыто только чтение: другой метод на том же
-     * пути по-прежнему закрыт.
+     * Карточка заявки (T-041) и редактирование заявки (T-042):
+     * GET и PUT требуют разные права доступа.
      */
     @Test
-    void givenAnyPermission_whenReadingRequestCard_thenUrlRulePassesOnlyGetToMethodCheck()
+    void givenPermissions_whenAccessingRequestCard_thenUrlRulesCheckRequiredPermission()
             throws Exception {
         String route = "/admin/requests/" + UUID.randomUUID();
 
         mockMvc.perform(get(route).with(jwtWithAuthority("REQUEST_READ_OWN")))
                 .andExpect(status().isNotFound());
+
         mockMvc.perform(put(route).with(jwtWithAuthority("REQUEST_READ_ALL")))
                 .andExpect(status().isForbidden());
+
+        mockMvc.perform(put(route).with(jwtWithAuthority("REQUEST_EDIT")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void givenNoCredentials_whenEditingRequest_thenReturnsUnauthorized()
+            throws Exception {
+        mockMvc.perform(put("/admin/requests/" + UUID.randomUUID())
+                        .with(anonymous()))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

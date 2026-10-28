@@ -187,6 +187,33 @@ public interface RequestRepository extends Repository<Request, UUID> {
             value = "UPDATE requests SET resolution_escalated = TRUE WHERE id IN (:ids)")
     int markResolutionEscalated(@Param("ids") Collection<UUID> ids);
 
+    /**
+     * Текущая нагрузка исполнителей арендатора (T-051): сколько у каждого незавершённых
+     * заявок. Один агрегирующий запрос с группировкой по исполнителю: выбирать заявки каждого
+     * кандидата по очереди нельзя — это запрос в цикле.
+     *
+     * <p>Условия совпадают с {@link #takeIfUnassigned}: удалённые заявки и завершённые статусы
+     * нагрузкой не считаются. Начало индекса {@code idx_requests_tenant_assignee_queue} —
+     * {@code (tenant_id, assignee_id)} — покрывает группировку.
+     *
+     * @param tenantId арендатор
+     * @param openStatuses незавершённые статусы; список задаёт вызывающий, чтобы правило
+     *     «заявка ещё в работе» жило в {@link RequestStatus}
+     * @return по строке на исполнителя; исполнителей без незавершённых заявок в ответе нет
+     */
+    @Query(value =
+            """
+            SELECT r.assigneeId AS assigneeId, COUNT(r) AS activeRequests
+            FROM Request r
+            WHERE r.tenantId = :tenantId
+              AND r.deleted = false
+              AND r.assigneeId IS NOT NULL
+              AND r.status IN :openStatuses
+            GROUP BY r.assigneeId
+            """)
+    List<AssigneeWorkload> findWorkloadByAssignee(@Param("tenantId") UUID tenantId,
+            @Param("openStatuses") Collection<RequestStatus> openStatuses);
+
     @Transactional(propagation = Propagation.MANDATORY)
     @Modifying(
             flushAutomatically = true,

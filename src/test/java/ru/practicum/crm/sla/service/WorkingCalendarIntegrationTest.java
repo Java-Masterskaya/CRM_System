@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.test.context.support.WithMockUser;
 import ru.practicum.crm.base.BaseIntegrationTest;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.error.NotFoundException;
@@ -32,7 +33,11 @@ import ru.practicum.crm.sla.domain.WorkingDay;
  * <p>Арендаторы и их настройки создаются запросами SQL: пакет сроков не зависит от пакета
  * арендаторов, кроме его {@code api}. Что {@code TenantService} наполняет календарь при
  * создании арендатора, проверяет {@code TenantServiceIntegrationTest}.
+ *
+ * <p>Операции настройки сроков проверяют право {@code SLA_POLICY_MANAGE}; тест вызывает
+ * сервисы напрямую, поэтому выполняется от имени пользователя с этим правом.
  */
+@WithMockUser(authorities = "SLA_POLICY_MANAGE")
 class WorkingCalendarIntegrationTest extends BaseIntegrationTest {
 
     private static final String MIGRATION_VERSION = "202610041730";

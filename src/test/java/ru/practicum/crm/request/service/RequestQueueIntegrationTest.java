@@ -3,6 +3,7 @@ package ru.practicum.crm.request.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -162,6 +163,29 @@ class RequestQueueIntegrationTest extends BaseIntegrationTest {
         }
     }
 
+    @Test
+    void queue_afterReassignment_movesFromOldOperatorToNew() throws Exception {
+        UUID secondOperatorId = insertUser(tenant, "operator2@example.com", "OPERATOR");
+        UUID requestId = insertRequest(tenant, "NEW", "NORMAL", operatorId, daysAgo(1));
+
+        assertThat(idsFor(operatorToken)).contains(id(requestId));
+
+        reassign(requestId, secondOperatorId);
+        String secondOperatorToken = login(tenant, "operator2@example.com");
+
+        assertThat(idsFor(operatorToken)).doesNotContain(id(requestId));
+        assertThat(idsFor(secondOperatorToken)).contains(id(requestId));
+    }
+
+    private void reassign(UUID requestId, UUID assigneeId) throws Exception {
+        mockMvc.perform(put("/admin/requests/{id}/assignee", requestId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + operatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("assigneeId", assigneeId, "version", 0))))
+                .andExpect(status().isOk());
+    }
+
     /** DoD: список отдаётся страницами с общим количеством. */
     @Test
     void queue_isPagedWithTotals() throws Exception {
@@ -257,7 +281,11 @@ class RequestQueueIntegrationTest extends BaseIntegrationTest {
 
     /** Идентификаторы заявок первой страницы очереди оператора в порядке выдачи. */
     private List<String> ids(String... params) throws Exception {
-        String body = queue(operatorToken, params)
+        return idsFor(operatorToken, params);
+    }
+
+    private List<String> idsFor(String accessToken, String... params) throws Exception {
+        String body = queue(accessToken, params)
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         List<String> ids = new ArrayList<>();

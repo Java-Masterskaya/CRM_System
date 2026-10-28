@@ -1,23 +1,36 @@
 package ru.practicum.crm.request.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import ru.practicum.crm.common.error.ApiException;
 import ru.practicum.crm.common.error.ErrorCode;
 import ru.practicum.crm.common.model.RequestPriority;
+import ru.practicum.crm.common.pagination.PageRequests;
 import ru.practicum.crm.request.domain.RequestType;
 import ru.practicum.crm.request.repository.RequestTypeRepository;
 
@@ -40,7 +53,8 @@ class RequestTypeServiceTest {
     @Test
     void create_whenNameIsFree_savesActiveType() {
         when(repository.existsByTenantIdAndNameIgnoreCase(TENANT_ID, "Выгрузка")).thenReturn(false);
-        when(repository.save(any(RequestType.class))).thenAnswer(call -> call.getArgument(0));
+        when(repository.saveAndFlush(any(RequestType.class)))
+                .thenAnswer(call -> call.getArgument(0));
 
         RequestType created = service.create(TENANT_ID, "Выгрузка", "Выгрузка отчётов",
                 RequestPriority.HIGH);
@@ -60,7 +74,35 @@ class RequestTypeServiceTest {
                 () -> service.create(TENANT_ID, "Выгрузка", null, null), ApiException.class);
 
         assertThat(thrown.getErrorCode()).isEqualTo(ErrorCode.ALREADY_EXISTS);
-        verify(repository, never()).save(any());
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /**
+     * Параллельный запрос успел создать тип с тем же названием после проверки: повтор ловит
+     * уникальный индекс, и ответ тот же, что у проверки, — 409, а не 500.
+     */
+    @Test
+    void create_whenSameNameCreatedConcurrently_isRejectedAsAlreadyExists() {
+        when(repository.existsByTenantIdAndNameIgnoreCase(TENANT_ID, "Выгрузка")).thenReturn(false);
+        when(repository.saveAndFlush(any(RequestType.class)))
+                .thenThrow(violationOf("request_types_name_unique"));
+
+        ApiException thrown = catchThrowableOfType(
+                () -> service.create(TENANT_ID, "Выгрузка", null, null), ApiException.class);
+
+        assertThat(thrown.getErrorCode()).isEqualTo(ErrorCode.ALREADY_EXISTS);
+        assertThat(thrown.getDetail()).isEqualTo("Тип заявки с таким названием уже есть.");
+    }
+
+    /** Нарушение другого ограничения — не повтор названия: оно не маскируется под 409. */
+    @Test
+    void create_whenOtherConstraintViolated_rethrowsDatabaseError() {
+        when(repository.existsByTenantIdAndNameIgnoreCase(TENANT_ID, "Выгрузка")).thenReturn(false);
+        DataIntegrityViolationException violation = violationOf("request_types_tenant_id_fkey");
+        when(repository.saveAndFlush(any(RequestType.class))).thenThrow(violation);
+
+        assertThatThrownBy(() -> service.create(TENANT_ID, "Выгрузка", null, null))
+                .isSameAs(violation);
     }
 
     @Test
@@ -72,14 +114,15 @@ class RequestTypeServiceTest {
                 ApiException.class);
 
         assertThat(thrown.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
-        verify(repository, never()).save(any());
+        verify(repository, never()).saveAndFlush(any());
     }
 
     @Test
     void update_whenNameUnchanged_doesNotComplainAboutDuplicate() {
         RequestType stored = new RequestType(TENANT_ID, "Выгрузка");
         when(repository.findByIdAndTenantId(TYPE_ID, TENANT_ID)).thenReturn(Optional.of(stored));
-        when(repository.save(any(RequestType.class))).thenAnswer(call -> call.getArgument(0));
+        when(repository.saveAndFlush(any(RequestType.class)))
+                .thenAnswer(call -> call.getArgument(0));
 
         RequestType updated = service.update(TENANT_ID, TYPE_ID, "Выгрузка", "Новое пояснение",
                 RequestPriority.LOW);
@@ -93,7 +136,8 @@ class RequestTypeServiceTest {
     void update_whenOnlyLetterCaseChanged_renamesWithoutTreatingTypeAsItsOwnDuplicate() {
         RequestType stored = new RequestType(TENANT_ID, "выгрузка");
         when(repository.findByIdAndTenantId(TYPE_ID, TENANT_ID)).thenReturn(Optional.of(stored));
-        when(repository.save(any(RequestType.class))).thenAnswer(call -> call.getArgument(0));
+        when(repository.saveAndFlush(any(RequestType.class)))
+                .thenAnswer(call -> call.getArgument(0));
 
         RequestType updated = service.update(TENANT_ID, TYPE_ID, "Выгрузка", null, null);
 
@@ -113,7 +157,23 @@ class RequestTypeServiceTest {
 
         assertThat(thrown.getErrorCode()).isEqualTo(ErrorCode.ALREADY_EXISTS);
         assertThat(stored.getName()).isEqualTo("Выгрузка");
-        verify(repository, never()).save(any());
+        verify(repository, never()).saveAndFlush(any());
+    }
+
+    /** Переименование, которое опередил параллельный запрос, — тоже 409, а не 500. */
+    @Test
+    void update_whenNewNameTakenConcurrently_isRejectedAsAlreadyExists() {
+        RequestType stored = new RequestType(TENANT_ID, "Выгрузка");
+        when(repository.findByIdAndTenantId(TYPE_ID, TENANT_ID)).thenReturn(Optional.of(stored));
+        when(repository.existsByTenantIdAndNameIgnoreCase(TENANT_ID, "Импорт")).thenReturn(false);
+        when(repository.saveAndFlush(any(RequestType.class)))
+                .thenThrow(violationOf("request_types_name_unique"));
+
+        ApiException thrown = catchThrowableOfType(
+                () -> service.update(TENANT_ID, TYPE_ID, "Импорт", null, null),
+                ApiException.class);
+
+        assertThat(thrown.getErrorCode()).isEqualTo(ErrorCode.ALREADY_EXISTS);
     }
 
     @Test
@@ -139,22 +199,46 @@ class RequestTypeServiceTest {
         assertThat(result.isActive()).isTrue();
     }
 
+    /**
+     * Список действующих типов — только у арендатора и только действующие; страница — из запроса,
+     * порядок — всегда по названию, затем по {@code id}.
+     */
     @Test
-    void listActive_whenCalled_asksRepositoryOnlyForActiveTypesOfTenant() {
+    void activeTypes_whenCalled_asksRepositoryForActiveTypesOfTenantByName() {
         RequestType stored = new RequestType(TENANT_ID, "Выгрузка");
-        when(repository.findByTenantIdAndActiveTrueOrderByNameAsc(TENANT_ID))
-                .thenReturn(List.of(stored));
+        when(repository.findByTenantIdAndActiveTrue(eq(TENANT_ID), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(stored)));
 
-        assertThat(service.listActive(TENANT_ID)).containsExactly(stored);
+        Page<RequestType> page = service.activeTypes(TENANT_ID, PageRequest.of(2, 30));
+
+        assertThat(page.getContent()).containsExactly(stored);
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(repository).findByTenantIdAndActiveTrue(eq(TENANT_ID), pageable.capture());
+        assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(30);
+        assertThat(pageable.getValue().getSort())
+                .containsExactly(Sort.Order.asc("name"), Sort.Order.asc("id"));
     }
 
     @Test
-    void listAll_whenCalled_returnsDisabledTypesToo() {
+    void types_whenCalled_returnsDisabledTypesToo() {
         RequestType disabled = new RequestType(TENANT_ID, "Старый тип");
         disabled.deactivate();
-        when(repository.findByTenantIdOrderByNameAsc(TENANT_ID)).thenReturn(List.of(disabled));
+        when(repository.findByTenantId(eq(TENANT_ID), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(disabled)));
 
-        assertThat(service.listAll(TENANT_ID)).containsExactly(disabled);
+        assertThat(service.types(TENANT_ID, PageRequest.of(0, 20)).getContent())
+                .containsExactly(disabled);
+    }
+
+    /** Страница больше допустимой не уходит в базу, даже если её передали в обход API. */
+    @Test
+    void types_whenPageIsTooLarge_isRejectedBeforeQuery() {
+        assertThatThrownBy(() -> service.types(TENANT_ID,
+                PageRequest.of(0, PageRequests.MAX_SIZE + 1)))
+                .isInstanceOf(ApiException.class);
+
+        verifyNoInteractions(repository);
     }
 
     @Test
@@ -180,5 +264,12 @@ class RequestTypeServiceTest {
                     assertThat(error.pointer()).isEqualTo("#/typeId");
                     assertThat(error.detail()).isEqualTo("тип заявки отключён");
                 });
+    }
+
+    /** Отказ базы в том виде, в каком его передаёт Spring: имя ограничения — в причине. */
+    private static DataIntegrityViolationException violationOf(String constraint) {
+        return new DataIntegrityViolationException("could not execute statement",
+                new ConstraintViolationException("could not execute statement",
+                        new SQLException("violates constraint"), constraint));
     }
 }
