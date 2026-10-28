@@ -37,7 +37,7 @@ public enum ErrorCode {
     REQUEST_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "Заявка уже назначена",
             "Заявка уже назначена другому исполнителю."),
     REQUEST_NOT_DELETED(HttpStatus.CONFLICT, "Заявка не удалена",
-            "Восстоновить можно только мягко удаленную заявку"
+            "Восстановить можно только мягко удаленную заявку"
     ),
     NO_ELIGIBLE_ASSIGNEE(HttpStatus.CONFLICT, "Нет подходящего исполнителя",
             "Среди активных пользователей арендатора нет ни одного с правом вести заявки."),

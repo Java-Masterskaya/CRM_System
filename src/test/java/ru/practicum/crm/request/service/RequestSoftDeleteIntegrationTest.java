@@ -306,6 +306,7 @@ public class RequestSoftDeleteIntegrationTest extends BaseIntegrationTest {
     private Map<String, Object> lastAudit(UUID id) {
         return jdbcTemplate.queryForMap(
                 "SELECT field, old_value, new_value FROM request_audit_log "
-                        + "WHERE request_id = ? ORDER BY created_at DESC, id DESC LIMIT 1", id);
+                        + "WHERE request_id = ? AND field = 'DELETED' "
+                        + "ORDER BY created_at DESC, id DESC LIMIT 1", id);
     }
 }

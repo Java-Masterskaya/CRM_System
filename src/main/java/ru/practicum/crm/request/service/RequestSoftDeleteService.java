@@ -66,7 +66,7 @@ public class RequestSoftDeleteService {
                     .orElseThrow(RequestSoftDeleteService::requestNotFound);
             if (!request.isDeleted()) {
                 throw new ApiException(ErrorCode.REQUEST_NOT_DELETED,
-                        "Заявка не удаленна. Восстанавливать не чего.");
+                        "Заявка не удаленна. Восстанавливать нечего.");
             }
             final RequestSnapshot before = RequestSnapshot.of(request);
             request.restore();

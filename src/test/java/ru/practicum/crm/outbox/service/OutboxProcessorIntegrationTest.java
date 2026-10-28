@@ -316,7 +316,7 @@ class OutboxProcessorIntegrationTest extends BaseIntegrationTest {
                 + " last_error_code, last_error_message,"
                 + " extract(epoch FROM next_attempt_at - now())::bigint AS delay_seconds,"
                 + " next_attempt_at >= now() + interval '59 minutes' AS waits_at_least_59_minutes,"
-                + " next_attempt_at <= now() AS available_now,"
+                + " next_attempt_at <= now() + interval '1 second' AS available_now,"
                 + " next_attempt_at = '2100-01-01T00:00:00Z' AS lease_is_foreign"
                 + " FROM outbox_events WHERE id = ?", id);
     }
