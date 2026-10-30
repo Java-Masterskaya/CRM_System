@@ -43,6 +43,23 @@ class RequestSnapshotTest {
     }
 
     @Test
+    void changesTo_whenSoftDeletedOrRestored_recordsDeletedFlag() {
+        final RequestSnapshot before = RequestSnapshot.of(request);
+        request.softDelete(DUE_AT);
+
+        assertThat(before.changesTo(RequestSnapshot.of(request))).containsExactly(
+                new FieldChange(AuditedField.DELETED, "false", "true")
+        );
+
+        final RequestSnapshot deleted = RequestSnapshot.of(request);
+        request.restore();
+
+        assertThat(deleted.changesTo(RequestSnapshot.of(request))).containsExactly(
+                new FieldChange(AuditedField.DELETED, "true", "false")
+        );
+    }
+
+    @Test
     void changesTo_whenFieldCleared_recordsEmptyNewValue() {
         request.changeAssignee(OPERATOR_ID, DUE_AT);
         final RequestSnapshot before = RequestSnapshot.of(request);

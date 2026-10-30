@@ -43,6 +43,7 @@ class RequestTest {
     void newRequest_whenCreated_isNeitherOverdueNorDeletedAndHasNoAssignee() {
         assertThat(request.isOverdue()).isFalse();
         assertThat(request.isDeleted()).isFalse();
+        assertThat(request.getDeletedAt()).isNull();
         assertThat(request.getAssigneeId()).isNull();
         assertThat(request.getTypeId()).isNull();
         assertThat(request.getPriority()).isEqualTo(RequestPriority.NORMAL);

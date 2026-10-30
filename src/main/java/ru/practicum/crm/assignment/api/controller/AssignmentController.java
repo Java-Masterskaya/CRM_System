@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.practicum.crm.assignment.api.dto.AssignExecutorRequest;
+import ru.practicum.crm.assignment.api.dto.AutoAssignExecutorRequest;
 import ru.practicum.crm.assignment.service.AssignmentService;
 import ru.practicum.crm.request.api.dto.RequestAssignmentDto;
 import ru.practicum.crm.tenant.api.TenantContext;
@@ -43,6 +44,13 @@ public class AssignmentController {
                                        @Valid @RequestBody AssignExecutorRequest request) {
         return assignmentService.assign(tenantContext.getCurrentTenantId(), requestId,
                 request.assigneeId(), request.version(), userContext.getCurrentUserId());
+    }
+
+    @PostMapping("/auto-assign")
+    public RequestAssignmentDto autoAssign(@PathVariable UUID requestId,
+            @Valid @RequestBody AutoAssignExecutorRequest request) {
+        return assignmentService.autoAssign(tenantContext.getCurrentTenantId(), requestId,
+                request.version(), userContext.getCurrentUserId());
     }
 
     @PostMapping("/take")

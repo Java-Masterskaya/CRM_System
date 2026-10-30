@@ -40,13 +40,21 @@ public interface RequestRepository extends Repository<Request, UUID> {
 
     Optional<Request> findByIdAndTenantIdAndDeletedFalse(UUID id, UUID tenantId);
 
+    Optional<Request> findByIdAndTenantId(UUID id, UUID tenantId);
+
+    /**
+     * Заявка арендатора без отсечения удаленных - для мягкого восстоновления.
+     */
     Optional<Request> findByIdAndTenantIdAndAuthorIdAndDeletedFalse(
             UUID id, UUID tenantId, UUID authorId);
 
     Page<Request> findByTenantIdAndDeletedFalse(UUID tenantId, Pageable pageable);
 
+    Page<Request> findByTenantIdAndAuthorIdAndDeletedFalse(UUID tenantId, UUID authorId,
+                                                           Pageable pageable);
+
     Page<Request> findByTenantIdAndStatusAndDeletedFalse(UUID tenantId, RequestStatus status,
-            Pageable pageable);
+                                                         Pageable pageable);
 
     boolean existsByIdAndTenantIdAndDeletedFalse(UUID id, UUID tenantId);
 
@@ -197,6 +205,33 @@ public interface RequestRepository extends Repository<Request, UUID> {
     int reopenEscalations(@Param("id") UUID id, @Param("firstResponse") boolean firstResponse,
             @Param("resolution") boolean resolution);
 
+    /**
+     * Текущая нагрузка исполнителей арендатора (T-051): сколько у каждого незавершённых
+     * заявок. Один агрегирующий запрос с группировкой по исполнителю: выбирать заявки каждого
+     * кандидата по очереди нельзя — это запрос в цикле.
+     *
+     * <p>Условия совпадают с {@link #takeIfUnassigned}: удалённые заявки и завершённые статусы
+     * нагрузкой не считаются. Начало индекса {@code idx_requests_tenant_assignee_queue} —
+     * {@code (tenant_id, assignee_id)} — покрывает группировку.
+     *
+     * @param tenantId арендатор
+     * @param openStatuses незавершённые статусы; список задаёт вызывающий, чтобы правило
+     *     «заявка ещё в работе» жило в {@link RequestStatus}
+     * @return по строке на исполнителя; исполнителей без незавершённых заявок в ответе нет
+     */
+    @Query(value =
+            """
+            SELECT r.assigneeId AS assigneeId, COUNT(r) AS activeRequests
+            FROM Request r
+            WHERE r.tenantId = :tenantId
+              AND r.deleted = false
+              AND r.assigneeId IS NOT NULL
+              AND r.status IN :openStatuses
+            GROUP BY r.assigneeId
+            """)
+    List<AssigneeWorkload> findWorkloadByAssignee(@Param("tenantId") UUID tenantId,
+            @Param("openStatuses") Collection<RequestStatus> openStatuses);
+
     @Transactional(propagation = Propagation.MANDATORY)
     @Modifying(
             flushAutomatically = true,
@@ -205,18 +240,18 @@ public interface RequestRepository extends Repository<Request, UUID> {
     @Query(
             nativeQuery = true,
             value =
-                """
-                UPDATE requests
-                SET assignee_id = :actorId,
-                    assigned_at = :assignedAt,
-                    updated_at = CURRENT_TIMESTAMP,
-                    version = version + 1
-                WHERE id = :requestId
-                  AND tenant_id = :tenantId
-                  AND deleted = FALSE
-                  AND assignee_id IS NULL
-                  AND status NOT IN ('DONE', 'REJECTED', 'CANCELLED')
-                """
+                    """
+                    UPDATE requests
+                    SET assignee_id = :actorId,
+                        assigned_at = :assignedAt,
+                        updated_at = CURRENT_TIMESTAMP,
+                        version = version + 1
+                    WHERE id = :requestId
+                      AND tenant_id = :tenantId
+                      AND deleted = FALSE
+                      AND assignee_id IS NULL
+                      AND status NOT IN ('DONE', 'REJECTED', 'CANCELLED')
+                    """
     )
     int takeIfUnassigned(
             @Param("tenantId") UUID tenantId,

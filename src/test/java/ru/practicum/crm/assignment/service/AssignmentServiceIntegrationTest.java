@@ -6,8 +6,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.HashMap;
 import java.util.List;
+import java.util.LongSummaryStatistics;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -132,6 +135,227 @@ class AssignmentServiceIntegrationTest extends BaseIntegrationTest {
         assertThat(outboxEvents(tenant.id(), requestId)).hasSize(1);
     }
 
+    @Test
+    void assign_whenAssigneeUnchanged_doesNotPublishNotificationOrWriteAudit() {
+        TestTenant tenant = fixture.createTenant("tenant-assign-unchanged");
+        TestUser author = fixture.createUser(tenant, "author@example.com", "StrongPassword1!");
+        TestUser operator = operator(tenant, "operator@example.com");
+        UUID requestId = saveRequest(tenant.id(), author.id());
+
+        RequestAssignmentDto first = transaction.execute(status ->
+                service.assign(tenant.id(), requestId, operator.id(), 0, UUID.randomUUID()));
+
+        assertThat(first.assigneeId()).isEqualTo(operator.id());
+        assertThat(auditEntries(requestId)).hasSize(1);
+        assertThat(outboxEvents(tenant.id(), requestId)).hasSize(1);
+
+        long persistedVersion = versionOf(requestId);
+
+        RequestAssignmentDto repeated = transaction.execute(status ->
+                service.assign(tenant.id(), requestId, operator.id(), persistedVersion,
+                        UUID.randomUUID()));
+
+        assertThat(repeated.assigneeId()).isEqualTo(operator.id());
+        assertThat(versionOf(requestId)).isEqualTo(persistedVersion);
+        assertThat(auditEntries(requestId)).hasSize(1);
+        assertThat(outboxEvents(tenant.id(), requestId)).hasSize(1);
+    }
+
+    @Test
+    void autoAssign_whenLoadsDiffer_assignsOperatorWithFewestUnfinishedRequests() {
+        TestTenant tenant = fixture.createTenant("tenant-auto-least-loaded");
+        TestUser author = fixture.createUser(tenant, "author@example.com", "StrongPassword1!");
+        TestUser loaded = operator(tenant, "loaded@example.com");
+        TestUser free = operator(tenant, "free@example.com");
+        saveRequest(tenant.id(), author.id(), loaded.id(), "NEW");
+        saveRequest(tenant.id(), author.id(), loaded.id(), "IN_PROGRESS");
+        UUID requestId = saveRequest(tenant.id(), author.id());
+
+        RequestAssignmentDto result = transaction.execute(status ->
+                service.autoAssign(tenant.id(), requestId, 0, UUID.randomUUID()));
+
+        assertThat(result.assigneeId()).isEqualTo(free.id());
+        assertThat(assigneeIdOf(requestId)).isEqualTo(free.id());
+    }
+
+    @Test
+    void autoAssign_whenRequestAlreadyAssigned_rejectsWithoutMovingAuditOrNotification() {
+        TestTenant tenant = fixture.createTenant("tenant-auto-already-assigned");
+        TestUser author = fixture.createUser(tenant, "author@example.com", "StrongPassword1!");
+        TestUser firstOperator = operator(tenant, "first@example.com");
+        TestUser secondOperator = operator(tenant, "second@example.com");
+        UUID requestId = saveRequest(tenant.id(), author.id());
+
+        RequestAssignmentDto assigned = transaction.execute(status ->
+                service.autoAssign(tenant.id(), requestId, 0, UUID.randomUUID()));
+
+        assertThat(assigned.assigneeId()).isIn(firstOperator.id(), secondOperator.id());
+
+        UUID assigneeBefore = assigneeIdOf(requestId);
+        long versionBefore = versionOf(requestId);
+        int auditBefore = auditEntries(requestId).size();
+        int outboxBefore = outboxEvents(tenant.id(), requestId).size();
+
+        assertThatThrownBy(() -> transaction.execute(status ->
+                service.autoAssign(tenant.id(), requestId, versionBefore, UUID.randomUUID())))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.REQUEST_ALREADY_ASSIGNED));
+
+        assertThat(assigneeIdOf(requestId)).isEqualTo(assigneeBefore);
+        assertThat(versionOf(requestId)).isEqualTo(versionBefore);
+        assertThat(auditEntries(requestId)).hasSize(auditBefore);
+        assertThat(outboxEvents(tenant.id(), requestId)).hasSize(outboxBefore);
+    }
+
+    @Test
+    void autoAssign_whenFinishedRequestsLoaded_doesNotCountThemAsWorkload() {
+        TestTenant tenant = fixture.createTenant("tenant-auto-finished");
+        TestUser author = fixture.createUser(tenant, "author@example.com", "StrongPassword1!");
+        TestUser withFinishedOnly = operator(tenant, "finished@example.com");
+        TestUser withOneOpen = operator(tenant, "open@example.com");
+        saveRequest(tenant.id(), author.id(), withFinishedOnly.id(), "DONE");
+        saveRequest(tenant.id(), author.id(), withFinishedOnly.id(), "CANCELLED");
+        saveRequest(tenant.id(), author.id(), withOneOpen.id(), "NEW");
+        UUID requestId = saveRequest(tenant.id(), author.id());
+
+        RequestAssignmentDto result = transaction.execute(status ->
+                service.autoAssign(tenant.id(), requestId, 0, UUID.randomUUID()));
+
+        assertThat(result.assigneeId()).isEqualTo(withFinishedOnly.id());
+    }
+
+    @Test
+    void autoAssign_whenOperatorIsBlockedOrDeleted_neverPicksThem() {
+        TestTenant tenant = fixture.createTenant("tenant-auto-inactive");
+        TestUser author = fixture.createUser(tenant, "author@example.com", "StrongPassword1!");
+        TestUser blocked = operator(tenant, "blocked@example.com");
+        TestUser deleted = operator(tenant, "deleted@example.com");
+        TestUser active = operator(tenant, "active@example.com");
+        fixture.blockUser(tenant.id(), blocked.id());
+        fixture.deleteUser(tenant.id(), deleted.id());
+        saveRequest(tenant.id(), author.id(), active.id(), "NEW");
+        saveRequest(tenant.id(), author.id(), active.id(), "NEW");
+        UUID requestId = saveRequest(tenant.id(), author.id());
+
+        RequestAssignmentDto result = transaction.execute(status ->
+                service.autoAssign(tenant.id(), requestId, 0, UUID.randomUUID()));
+
+        assertThat(result.assigneeId()).isEqualTo(active.id());
+    }
+
+    @Test
+    void autoAssign_whenOnlyBlockedOperatorHasRight_returnsExplainedConflictWithoutAssignee() {
+        TestTenant tenant = fixture.createTenant("tenant-auto-no-candidates");
+        TestUser author = fixture.createUser(tenant, "author@example.com", "StrongPassword1!");
+        TestUser blocked = operator(tenant, "blocked@example.com");
+        fixture.blockUser(tenant.id(), blocked.id());
+        UUID requestId = saveRequest(tenant.id(), author.id());
+
+        assertThatThrownBy(() -> transaction.execute(status ->
+                service.autoAssign(tenant.id(), requestId, 0, UUID.randomUUID())))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.NO_ELIGIBLE_ASSIGNEE));
+
+        assertThat(assigneeIdOf(requestId)).isNull();
+        assertThat(auditEntries(requestId)).isEmpty();
+        assertThat(outboxEvents(tenant.id(), requestId)).isEmpty();
+    }
+
+    @Test
+    void autoAssign_whenTenantHasNoOperators_returnsExplainedConflictKeepingRequestOpen() {
+        TestTenant tenant = fixture.createTenant("tenant-auto-no-operators");
+        TestUser author = fixture.createUser(tenant, "author@example.com", "StrongPassword1!");
+        UUID requestId = saveRequest(tenant.id(), author.id());
+
+        assertThatThrownBy(() -> transaction.execute(status ->
+                service.autoAssign(tenant.id(), requestId, 0, UUID.randomUUID())))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> assertThat(((ApiException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.NO_ELIGIBLE_ASSIGNEE));
+
+        assertThat(assigneeIdOf(requestId)).isNull();
+    }
+
+    @Test
+    void autoAssign_whenAnotherTenantHasFreeOperator_keepsSelectionInsideTenant() {
+        TestTenant ownTenant = fixture.createTenant("tenant-auto-own");
+        TestTenant otherTenant = fixture.createTenant("tenant-auto-other");
+        TestUser author = fixture.createUser(ownTenant, "author@example.com",
+                "StrongPassword1!");
+        TestUser ownOperator = operator(ownTenant, "own@example.com");
+        operator(otherTenant, "other@example.com");
+        saveRequest(ownTenant.id(), author.id(), ownOperator.id(), "NEW");
+        saveRequest(ownTenant.id(), author.id(), ownOperator.id(), "NEW");
+        UUID requestId = saveRequest(ownTenant.id(), author.id());
+
+        RequestAssignmentDto result = transaction.execute(status ->
+                service.autoAssign(ownTenant.id(), requestId, 0, UUID.randomUUID()));
+
+        assertThat(result.assigneeId()).isEqualTo(ownOperator.id());
+    }
+
+    @Test
+    void autoAssign_whenSucceeded_writesAssigneeChangeToAuditLogLikeManualAssignment() {
+        TestTenant tenant = fixture.createTenant("tenant-auto-audit");
+        TestUser author = fixture.createUser(tenant, "author@example.com", "StrongPassword1!");
+        final TestUser operator = operator(tenant, "operator@example.com");
+        UUID requestId = saveRequest(tenant.id(), author.id());
+        UUID actorId = UUID.randomUUID();
+
+        transaction.execute(status ->
+                service.autoAssign(tenant.id(), requestId, 0, actorId));
+
+        List<Map<String, Object>> audit = auditEntries(requestId);
+        assertThat(audit).hasSize(1);
+        assertThat(audit.get(0).get("field")).isEqualTo("ASSIGNEE");
+        assertThat(audit.get(0).get("old_value")).isNull();
+        assertThat(audit.get(0).get("new_value")).isEqualTo(operator.id().toString());
+        assertThat(audit.get(0).get("author_id")).isEqualTo(actorId);
+        assertThat(outboxEvents(tenant.id(), requestId)).hasSize(1);
+    }
+
+    @Test
+    void autoAssign_whenTenRequestsOnThreeOperators_keepsSpreadWithinOneRequest() {
+        TestTenant tenant = fixture.createTenant("tenant-auto-balance");
+        final TestUser author = fixture.createUser(tenant, "author@example.com",
+                "StrongPassword1!");
+        operator(tenant, "operator-a@example.com");
+        operator(tenant, "operator-b@example.com");
+        operator(tenant, "operator-c@example.com");
+        List<UUID> requests = List.of(
+                saveRequest(tenant.id(), author.id()),
+                saveRequest(tenant.id(), author.id()),
+                saveRequest(tenant.id(), author.id()),
+                saveRequest(tenant.id(), author.id()),
+                saveRequest(tenant.id(), author.id()),
+                saveRequest(tenant.id(), author.id()),
+                saveRequest(tenant.id(), author.id()),
+                saveRequest(tenant.id(), author.id()),
+                saveRequest(tenant.id(), author.id()),
+                saveRequest(tenant.id(), author.id()));
+
+        for (UUID requestId : requests) {
+            transaction.execute(status ->
+                    service.autoAssign(tenant.id(), requestId, 0, UUID.randomUUID()));
+        }
+
+        LongSummaryStatistics load = loadByAssignee(tenant.id()).values().stream()
+                .mapToLong(Long::longValue)
+                .summaryStatistics();
+
+        assertThat(load.getCount()).isEqualTo(3);
+        assertThat(load.getSum()).isEqualTo(10);
+        assertThat(load.getMax() - load.getMin()).isLessThanOrEqualTo(1);
+    }
+
+    private TestUser operator(TestTenant tenant, String email) {
+        TestUser operator = fixture.createUser(tenant, email, "StrongPassword1!");
+        fixture.grantPermission(tenant, operator, "REQUEST_STATUS_CHANGE");
+        return operator;
+    }
+
     private UUID saveRequest(UUID tenantId, UUID authorId) {
         UUID requestId = UUID.randomUUID();
         jdbcTemplate.update(
@@ -143,9 +367,45 @@ class AssignmentServiceIntegrationTest extends BaseIntegrationTest {
         return requestId;
     }
 
+    private UUID saveRequest(UUID tenantId, UUID authorId, UUID assigneeId, String status) {
+        UUID requestId = UUID.randomUUID();
+        jdbcTemplate.update(
+                "INSERT INTO requests (id, tenant_id, author_id, subject, description, status,"
+                        + " assignee_id, assigned_at, created_at, updated_at)"
+                        + " VALUES (?, ?, ?, 'Выгрузка за квартал', 'Нужен отчёт', ?, ?,"
+                        + " now(), now(), now())",
+                requestId, tenantId, authorId, status, assigneeId);
+        return requestId;
+    }
+
+    private Map<UUID, Long> loadByAssignee(UUID tenantId) {
+        Map<UUID, Long> load = new HashMap<>();
+        for (Map<String, Object> row : jdbcTemplate.queryForList(
+                "SELECT assignee_id, count(*) AS active FROM requests"
+                        + " WHERE tenant_id = ? AND NOT deleted AND assignee_id IS NOT NULL"
+                        + " GROUP BY assignee_id",
+                tenantId)) {
+            load.put((UUID) row.get("assignee_id"), ((Number) row.get("active")).longValue());
+        }
+        return load;
+    }
+
+    private List<Map<String, Object>> auditEntries(UUID requestId) {
+        return jdbcTemplate.queryForList(
+                "SELECT field, old_value, new_value, author_id FROM request_audit_log"
+                        + " WHERE request_id = ?",
+                requestId);
+    }
+
     private UUID assigneeIdOf(UUID requestId) {
         return jdbcTemplate.queryForObject("SELECT assignee_id FROM requests WHERE id = ?",
                 UUID.class, requestId);
+    }
+
+    private long versionOf(UUID requestId) {
+        return Objects.requireNonNull(
+                jdbcTemplate.queryForObject("SELECT version FROM requests WHERE id = ?",
+                        Long.class, requestId));
     }
 
     private Map<String, Object> singleOutboxEvent(UUID tenantId, UUID requestId) {

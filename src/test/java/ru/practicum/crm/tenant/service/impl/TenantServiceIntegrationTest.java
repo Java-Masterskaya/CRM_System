@@ -63,7 +63,7 @@ class TenantServiceIntegrationTest extends BaseIntegrationTest {
                 "SELECT COUNT(*) FROM permissions WHERE tenant_id = ?",
                 Integer.class,
                 tenantId
-        )).isEqualTo(25);
+        )).isEqualTo(26);
         assertThat(jdbcTemplate.queryForList(
                 "SELECT day_of_week FROM working_hours WHERE tenant_id = ?"
                 + " AND start_time = '09:00' AND end_time = '18:00'",
