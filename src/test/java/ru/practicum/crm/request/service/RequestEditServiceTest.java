@@ -4,6 +4,7 @@ package ru.practicum.crm.request.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -11,7 +12,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +28,7 @@ import ru.practicum.crm.common.model.RequestPriority;
 import ru.practicum.crm.common.security.CurrentUser;
 import ru.practicum.crm.request.api.dto.EditRequestRequest;
 import ru.practicum.crm.request.api.dto.RequestCardResponse;
+import ru.practicum.crm.request.domain.ReopenedDeadlines;
 import ru.practicum.crm.request.domain.Request;
 import ru.practicum.crm.request.domain.RequestSnapshot;
 import ru.practicum.crm.request.domain.RequestStatus;
@@ -40,15 +44,18 @@ class RequestEditServiceTest {
     private static final UUID OLD_TYPE_ID = UUID.randomUUID();
     private static final UUID NEW_TYPE_ID = UUID.randomUUID();
     private static final long VERSION = 3L;
+    private static final Instant NOW = Instant.parse("2026-10-25T12:00:00Z");
 
     private final RequestRepository requests = mock(RequestRepository.class);
     private final RequestTypeService requestTypes = mock(RequestTypeService.class);
     private final RequestAuditService audit = mock(RequestAuditService.class);
     private final CurrentUser currentUser = mock(CurrentUser.class);
     private final TenantContext tenantContext = mock(TenantContext.class);
+    private final RequestDeadlineAssigner deadlines = mock(RequestDeadlineAssigner.class);
+    private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
     private final RequestEditService service = new RequestEditService(
-            requests, requestTypes, audit, currentUser, tenantContext);
+            requests, requestTypes, audit, currentUser, tenantContext, deadlines, clock);
 
     private Request request;
 
@@ -56,6 +63,7 @@ class RequestEditServiceTest {
     void setUp() {
         when(tenantContext.getCurrentTenantId()).thenReturn(TENANT_ID);
         when(currentUser.id()).thenReturn(OPERATOR_ID);
+        when(deadlines.reassignDeadlines(any(), any())).thenReturn(ReopenedDeadlines.NONE);
 
         // Имитируем увеличение @Version при сохранении Hibernate.
         when(requests.saveAndFlush(any())).thenAnswer(invocation -> {
@@ -267,6 +275,64 @@ class RequestEditServiceTest {
         order.verify(requests).saveAndFlush(request);
         order.verify(audit).record(
                 eq(request), any(RequestSnapshot.class), eq(OPERATOR_ID));
+    }
+
+    /**
+     * T-062: сменился приоритет — сроки пересчитываются в момент правки, до сохранения: в базу и
+     * в журнал аудита попадают уже новые сроки.
+     */
+    @Test
+    void edit_whenPriorityChanges_recalculatesDeadlinesBeforeSaving() {
+        service.edit(REQUEST_ID, command(differentPriority(request.getPriority()), OLD_TYPE_ID,
+                request.getDesiredDueAt(), "Старое описание", VERSION));
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(deadlines, requests, audit);
+        order.verify(deadlines).reassignDeadlines(request, NOW);
+        order.verify(requests).saveAndFlush(request);
+        order.verify(audit).record(eq(request), any(RequestSnapshot.class), eq(OPERATOR_ID));
+    }
+
+    @Test
+    void edit_whenTypeChanges_recalculatesDeadlines() {
+        service.edit(REQUEST_ID, command(request.getPriority(), NEW_TYPE_ID,
+                request.getDesiredDueAt(), "Старое описание", VERSION));
+
+        verify(deadlines).reassignDeadlines(request, NOW);
+    }
+
+    /** Приоритет и тип прежние — политика та же, пересчитывать нечего. */
+    @Test
+    void edit_whenPriorityAndTypeKept_doesNotRecalculateDeadlines() {
+        service.edit(REQUEST_ID, command(request.getPriority(), OLD_TYPE_ID,
+                request.getDesiredDueAt(), "Новое описание", VERSION));
+
+        verifyNoInteractions(deadlines);
+        verify(requests, never()).reopenEscalations(any(), anyBoolean(), anyBoolean());
+    }
+
+    /**
+     * #200: пересчёт снял признак просрочки срока решения — после сохранения заявки снимается и
+     * его отметка эскалации, только этого срока.
+     */
+    @Test
+    void edit_whenRecalculationReopensDeadline_reopensItsEscalationAfterSaving() {
+        when(deadlines.reassignDeadlines(request, NOW))
+                .thenReturn(new ReopenedDeadlines(false, true));
+
+        service.edit(REQUEST_ID, command(differentPriority(request.getPriority()), OLD_TYPE_ID,
+                request.getDesiredDueAt(), "Старое описание", VERSION));
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(requests);
+        order.verify(requests).saveAndFlush(request);
+        order.verify(requests).reopenEscalations(REQUEST_ID, false, true);
+    }
+
+    @Test
+    void edit_whenRecalculationReopensNothing_leavesEscalationsAlone() {
+        service.edit(REQUEST_ID, command(differentPriority(request.getPriority()), OLD_TYPE_ID,
+                request.getDesiredDueAt(), "Старое описание", VERSION));
+
+        verify(requests, never()).reopenEscalations(any(), anyBoolean(), anyBoolean());
     }
 
     private static EditRequestRequest command(

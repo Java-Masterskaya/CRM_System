@@ -188,6 +188,24 @@ public interface RequestRepository extends Repository<Request, UUID> {
     int markResolutionEscalated(@Param("ids") Collection<UUID> ids);
 
     /**
+     * Снимает отметку об эскалации у сроков, которые после переноса снова не нарушены (#200):
+     * когда перенесённый срок истечёт, фоновая проверка эскалирует заявку заново, ровно одним
+     * письмом. Отметки другого срока не меняются. Версия не растёт — как и при постановке
+     * отметки, сущность её не видит.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    @Modifying
+    @Query(nativeQuery = true, value =
+            """
+            UPDATE requests
+            SET first_response_escalated = first_response_escalated AND NOT :firstResponse,
+                resolution_escalated = resolution_escalated AND NOT :resolution
+            WHERE id = :id
+            """)
+    int reopenEscalations(@Param("id") UUID id, @Param("firstResponse") boolean firstResponse,
+            @Param("resolution") boolean resolution);
+
+    /**
      * Текущая нагрузка исполнителей арендатора (T-051): сколько у каждого незавершённых
      * заявок. Один агрегирующий запрос с группировкой по исполнителю: выбирать заявки каждого
      * кандидата по очереди нельзя — это запрос в цикле.

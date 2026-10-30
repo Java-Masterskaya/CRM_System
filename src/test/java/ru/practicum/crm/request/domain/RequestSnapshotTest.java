@@ -69,6 +69,22 @@ class RequestSnapshotTest {
                 new FieldChange(AuditedField.ASSIGNEE, OPERATOR_ID.toString(), null));
     }
 
+    /** T-062: пересчитанные сроки попадают в журнал — прежние и новые значения обоих. */
+    @Test
+    void changesTo_whenDeadlinesMoved_listsBothDeadlines() {
+        request.setFirstResponseDueAt(DUE_AT);
+        request.setResolutionDueAt(DUE_AT);
+        final RequestSnapshot before = RequestSnapshot.of(request);
+        request.moveDeadlines(Instant.parse("2026-10-01T10:00:00Z"),
+                Instant.parse("2026-10-02T09:00:00Z"), DUE_AT);
+
+        assertThat(before.changesTo(RequestSnapshot.of(request))).containsExactly(
+                new FieldChange(AuditedField.FIRST_RESPONSE_DUE_AT, "2026-10-01T09:00:00Z",
+                        "2026-10-01T10:00:00Z"),
+                new FieldChange(AuditedField.RESOLUTION_DUE_AT, "2026-10-01T09:00:00Z",
+                        "2026-10-02T09:00:00Z"));
+    }
+
     @Test
     void changesTo_whenOnlyInsignificantFieldsChanged_isEmpty() {
         final RequestSnapshot before = RequestSnapshot.of(request);

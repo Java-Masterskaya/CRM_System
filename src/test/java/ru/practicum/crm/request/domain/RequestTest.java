@@ -17,6 +17,10 @@ class RequestTest {
 
     private static final UUID TENANT_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID AUTHOR_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
+    private static final Instant NOW = Instant.parse("2026-10-25T12:00:00Z");
+    private static final Instant EARLIER = NOW.minusSeconds(3600);
+    private static final Instant LATER = NOW.plusSeconds(3600);
+    private static final Instant MUCH_LATER = NOW.plusSeconds(8 * 3600);
 
     private Request request;
 
@@ -253,5 +257,72 @@ class RequestTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(request.getAssigneeId()).isNull();
         assertThat(request.getAssignedAt()).isNull();
+    }
+
+    /**
+     * #200: оба срока перенесены в будущее — признаки просрочки сняты, и вызывающему сказано
+     * снять отметки эскалации у обоих.
+     */
+    @Test
+    void moveDeadlines_whenNewDeadlinesAhead_reopensBothOverdueDeadlines() {
+        Request overdue = overdueRequest(RequestStatus.NEW);
+
+        ReopenedDeadlines reopened = overdue.moveDeadlines(LATER, MUCH_LATER, NOW);
+
+        assertThat(reopened).isEqualTo(new ReopenedDeadlines(true, true));
+        assertThat(overdue.getFirstResponseDueAt()).isEqualTo(LATER);
+        assertThat(overdue.getResolutionDueAt()).isEqualTo(MUCH_LATER);
+        assertThat(overdue.isFirstResponseOverdue()).isFalse();
+        assertThat(overdue.isResolutionOverdue()).isFalse();
+        assertThat(overdue.isOverdue()).isFalse();
+    }
+
+    /** Новый срок тоже уже прошёл — нарушение остаётся нарушением, эскалация не повторяется. */
+    @Test
+    void moveDeadlines_whenNewDeadlineAlsoPassed_keepsItsOverdueFlag() {
+        Request overdue = overdueRequest(RequestStatus.NEW);
+
+        ReopenedDeadlines reopened = overdue.moveDeadlines(EARLIER, MUCH_LATER, NOW);
+
+        assertThat(reopened).isEqualTo(new ReopenedDeadlines(false, true));
+        assertThat(overdue.getFirstResponseDueAt()).isEqualTo(EARLIER);
+        assertThat(overdue.isFirstResponseOverdue()).isTrue();
+    }
+
+    /**
+     * Ответ уже дан: срок первого ответа сыграл и не переносится, его признак — факт о том, как
+     * ответили. Срок решения ещё считается и переносится.
+     */
+    @Test
+    void moveDeadlines_afterFirstResponse_movesOnlyResolution() {
+        Request answered = overdueRequest(RequestStatus.CONTACTED);
+
+        ReopenedDeadlines reopened = answered.moveDeadlines(LATER, MUCH_LATER, NOW);
+
+        assertThat(reopened).isEqualTo(new ReopenedDeadlines(false, true));
+        assertThat(answered.getFirstResponseDueAt()).isEqualTo(EARLIER);
+        assertThat(answered.isFirstResponseOverdue()).isTrue();
+        assertThat(answered.getResolutionDueAt()).isEqualTo(MUCH_LATER);
+    }
+
+    /** Признака не было — снимать нечего, хотя срок перенесён. */
+    @Test
+    void moveDeadlines_whenNothingWasOverdue_reopensNothing() {
+        Request onTime = new Request(UUID.randomUUID(), UUID.randomUUID(), "Тема", "Описание",
+                RequestStatus.NEW);
+
+        assertThat(onTime.moveDeadlines(LATER, MUCH_LATER, NOW).any()).isFalse();
+        assertThat(onTime.getResolutionDueAt()).isEqualTo(MUCH_LATER);
+    }
+
+    /** Заявка, по которой оба срока истекли и помечены фоновой проверкой. */
+    private static Request overdueRequest(RequestStatus status) {
+        Request overdue = new Request(UUID.randomUUID(), UUID.randomUUID(), "Тема", "Описание",
+                status);
+        overdue.setFirstResponseDueAt(EARLIER);
+        overdue.setResolutionDueAt(EARLIER);
+        overdue.setFirstResponseOverdue(true);
+        overdue.setResolutionOverdue(true);
+        return overdue;
     }
 }

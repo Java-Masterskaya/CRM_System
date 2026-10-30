@@ -104,7 +104,9 @@ public class RequestAssignmentServiceImpl implements RequestAssignmentService {
                     request.getDesiredDueAt(),
                     request.getDescription(),
                     null,
-                    false
+                    false,
+                    request.getFirstResponseDueAt(),
+                    request.getResolutionDueAt()
             );
 
             auditService.record(request, before, actorId);

@@ -15,12 +15,14 @@ import ru.practicum.crm.common.model.RequestPriority;
  * цикла сущности их уже не знает.
  */
 public record RequestSnapshot(RequestPriority priority, UUID typeId, Instant desiredDueAt,
-        String description, UUID assigneeId, boolean deleted) {
+        String description, UUID assigneeId, boolean deleted, Instant firstResponseDueAt,
+        Instant resolutionDueAt) {
 
     public static RequestSnapshot of(Request request) {
         return new RequestSnapshot(request.getPriority(), request.getTypeId(),
                 request.getDesiredDueAt(), request.getDescription(), request.getAssigneeId(),
-        request.isDeleted());
+                request.isDeleted(), request.getFirstResponseDueAt(),
+                request.getResolutionDueAt());
     }
 
     /** Изменения от этого снимка к {@code after} — по одному на каждое изменённое поле. */
@@ -32,6 +34,10 @@ public record RequestSnapshot(RequestPriority priority, UUID typeId, Instant des
         addIfChanged(changes, AuditedField.DESCRIPTION, description, after.description);
         addIfChanged(changes, AuditedField.ASSIGNEE, assigneeId, after.assigneeId);
         addIfChanged(changes, AuditedField.DELETED, deleted, after.deleted);
+        addIfChanged(changes, AuditedField.FIRST_RESPONSE_DUE_AT, firstResponseDueAt,
+                after.firstResponseDueAt);
+        addIfChanged(changes, AuditedField.RESOLUTION_DUE_AT, resolutionDueAt,
+                after.resolutionDueAt);
         return changes;
     }
 
