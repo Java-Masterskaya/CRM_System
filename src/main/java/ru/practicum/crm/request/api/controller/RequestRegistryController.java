@@ -48,13 +48,14 @@ public class RequestRegistryController {
             @RequestParam(required = false) Instant createdFrom,
             @RequestParam(required = false) Instant createdTo,
             @RequestParam(defaultValue = "false") boolean overdue,
+            @RequestParam(defaultValue = "false") boolean unassigned,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
             HttpServletRequest request) {
         Pageable pageable = PageRequests.toPageable(page, size, sortOf(request),
                 RequestRegistryService.SORT_FIELDS.keySet());
         return service.list(new RequestRegistryFilter(status, typeId, priority, createdFrom,
-                createdTo, overdue), pageable);
+                createdTo, overdue, unassigned), pageable);
     }
 
     /**

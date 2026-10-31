@@ -1,5 +1,6 @@
 package ru.practicum.crm.request.service;
 
+import java.time.Instant;
 import ru.practicum.crm.request.api.dto.RequestRegistryItem;
 import ru.practicum.crm.request.domain.Request;
 
@@ -13,9 +14,14 @@ final class RequestListItems {
     }
 
     static RequestRegistryItem of(Request request) {
+        return of(request, Instant.now());
+    }
+
+    static RequestRegistryItem of(Request request, Instant now) {
         return new RequestRegistryItem(request.getId(), request.getSubject(), request.getStatus(),
                 request.getPriority(), request.getTypeId(), request.getAuthorId(),
                 request.getAssigneeId(), request.getCreatedAt(), request.getFirstResponseDueAt(),
-                request.getResolutionDueAt(), request.isOverdue(), request.getVersion());
+                request.getResolutionDueAt(), request.isOverdue(), request.getVersion(),
+                request.assignmentWait(now));
     }
 }
