@@ -111,4 +111,11 @@ public final class RequestSpecifications {
                 cb.and(root.get("status").in(NOT_FINISHED),
                         cb.isTrue(root.get("resolutionOverdue"))));
     }
+
+    /**
+     * Без исполнителя (T-053). Вместе с {@link #notFinished()} совпадает с частичным индексом
+     * {@code idx_requests_tenant_unassigned}. В нем только нераспределенные незавершенные заявки.*/
+    public static Specification<Request> unassigned() {
+        return ((root, query, cb) -> cb.isNull(root.get("assigneeId")));
+    }
 }
