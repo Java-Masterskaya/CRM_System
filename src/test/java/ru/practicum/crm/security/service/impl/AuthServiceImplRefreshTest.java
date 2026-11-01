@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -23,10 +26,13 @@ import ru.practicum.crm.security.service.JwtTokenService;
 import ru.practicum.crm.security.service.LoginRateLimiter;
 import ru.practicum.crm.security.service.RefreshTokenRotation;
 import ru.practicum.crm.security.service.RefreshTokenService;
+import ru.practicum.crm.security.service.RefreshTokenSubject;
 import ru.practicum.crm.tenant.api.TenantActiveChecker;
 import ru.practicum.crm.tenant.api.TenantService;
+import ru.practicum.crm.user.api.UserAccessTokenState;
 import ru.practicum.crm.user.api.UserPermissionService;
 import ru.practicum.crm.user.api.UserService;
+import ru.practicum.crm.user.api.dto.UserTokenState;
 
 /**
  * Обмен refresh-токена в сервисе входа без базы: обмен токена — заглушка, транзакция —
@@ -46,21 +52,25 @@ class AuthServiceImplRefreshTest {
             mock(LoginRateLimiter.class);
     private final TenantActiveChecker tenants = mock(TenantActiveChecker.class);
     private final SimpleTransactionStatus transaction = new SimpleTransactionStatus();
+    private final UserAccessTokenState tokenState = mock(UserAccessTokenState.class);
     private final AuthServiceImpl service = new AuthServiceImpl(mock(TenantService.class), users,
             permissions, jwtTokens, refreshTokens, loginRateLimiter,
-            tenants, inTransaction(transaction));
+            tenants, inTransaction(transaction), tokenState);
 
     @BeforeEach
     void userAndTenantCanWork() {
         when(tenants.isActive(TENANT_ID)).thenReturn(true);
-        when(users.canLogIn(TENANT_ID, USER_ID)).thenReturn(true);
+        when(refreshTokens.findSubject(any())).thenReturn(
+                Optional.of(new RefreshTokenSubject(USER_ID, TENANT_ID)));
+        when(tokenState.lockForIssuance(TENANT_ID, USER_ID))
+                .thenReturn(Optional.of(new UserTokenState(0, true)));
     }
 
     @Test
     void refresh_whenTokenExchanged_returnsAccessTokenWithCurrentPermissionsAndNewRefresh() {
         exchanged("old");
         when(permissions.getUserPermissionCodes(USER_ID)).thenReturn(Set.of("REQUEST_READ"));
-        when(jwtTokens.createAccessToken(USER_ID, TENANT_ID, Set.of("REQUEST_READ")))
+        when(jwtTokens.createAccessToken(USER_ID, TENANT_ID, Set.of("REQUEST_READ"), 0))
                 .thenReturn("access");
 
         assertThat(service.refresh("old")).isEqualTo(new AuthResponse("access", "new"));
@@ -82,27 +92,30 @@ class AuthServiceImplRefreshTest {
     }
 
     /**
-     * Заблокирован после входа: тот же отказ, что при входе, а ротация откатывается.
+     * Заблокирован после входа: отказ до ротации, поэтому откатывать изменения не требуется.
      */
     @Test
-    void refresh_whenUserBlockedAfterLogin_isUnauthenticatedAndRollsRotationBack() {
+    void refresh_whenUserBlockedAfterLogin_isUnauthenticatedWithoutRotation() {
         exchanged("old");
-        when(users.canLogIn(TENANT_ID, USER_ID)).thenReturn(false);
+        when(tokenState.lockForIssuance(TENANT_ID, USER_ID))
+                .thenReturn(Optional.of(new UserTokenState(1, false)));
 
         assertUnauthenticated("old");
 
-        assertThat(transaction.isRollbackOnly()).isTrue();
+        assertThat(transaction.isRollbackOnly()).isFalse();
+        verify(refreshTokens, never()).rotate("old");
         verifyNoInteractions(permissions, jwtTokens);
     }
 
     @Test
-    void refresh_whenTenantDeactivatedAfterLogin_isUnauthenticatedAndRollsRotationBack() {
+    void refresh_whenTenantDeactivatedAfterLogin_isUnauthenticatedWithoutRotation() {
         exchanged("old");
         when(tenants.isActive(TENANT_ID)).thenReturn(false);
 
         assertUnauthenticated("old");
 
-        assertThat(transaction.isRollbackOnly()).isTrue();
+        assertThat(transaction.isRollbackOnly()).isFalse();
+        verify(refreshTokens, never()).rotate("old");
         verifyNoInteractions(permissions, jwtTokens);
     }
 
@@ -113,7 +126,7 @@ class AuthServiceImplRefreshTest {
     @Test
     void refresh_whenAccessTokenCannotBeIssued_failsInsideTransaction() {
         exchanged("old");
-        when(jwtTokens.createAccessToken(any(), any(), any()))
+        when(jwtTokens.createAccessToken(any(), any(), any(), anyLong()))
                 .thenThrow(new IllegalStateException("ключ недоступен"));
 
         assertThatThrownBy(() -> service.refresh("old"))

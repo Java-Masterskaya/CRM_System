@@ -3,6 +3,7 @@ package ru.practicum.crm.security.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.reset;
 
@@ -113,7 +114,7 @@ class RefreshTokenHardeningIntegrationTest extends BaseIntegrationTest {
     void refresh_whenAccessTokenCannotBeIssued_rollsRotationBack() {
         String token = login();
         doThrow(new IllegalStateException("ключ недоступен"))
-                .when(jwtTokenService).createAccessToken(any(), any(), any());
+                .when(jwtTokenService).createAccessToken(any(), any(), any(), anyLong());
 
         assertThatThrownBy(() -> authService.refresh(token))
                 .isInstanceOf(IllegalStateException.class);

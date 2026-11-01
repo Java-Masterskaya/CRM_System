@@ -7,6 +7,9 @@ public interface RefreshTokenService {
 
     String create(UUID userId, UUID tenantId);
 
+    /** Только определяет владельца; действительность токена проверяет rotate. */
+    Optional<RefreshTokenSubject> findSubject(String rawRefreshToken);
+
     /**
      * Обменивает действующий refresh-токен на новый той же цепочки входа (T-027).
      *

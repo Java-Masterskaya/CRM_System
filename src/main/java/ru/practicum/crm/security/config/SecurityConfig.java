@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -16,6 +17,7 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
@@ -28,6 +30,7 @@ import ru.practicum.crm.common.error.ProblemDetailFactory;
 import ru.practicum.crm.security.api.PermissionCode;
 import ru.practicum.crm.security.system.SystemSecretFilter;
 import ru.practicum.crm.tenant.api.TenantContextFilter;
+import ru.practicum.crm.user.api.UserAccessTokenState;
 
 @Configuration
 @EnableMethodSecurity
@@ -40,6 +43,7 @@ public class SecurityConfig {
             SystemSecretFilter systemSecretFilter,
             ObjectMapper objectMapper,
             BearerTokenResolver bearerTokenResolver,
+            JwtAuthenticationConverter jwtAuthenticationConverter,
             @Value("${app.security.authorization.enabled:false}")
             boolean authorizationEnabled
     ) throws Exception {
@@ -53,7 +57,7 @@ public class SecurityConfig {
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .bearerTokenResolver(bearerTokenResolver)
                         .jwt(jwt -> jwt
-                                .jwtAuthenticationConverter(jwtAuthenticationConverter())
+                                .jwtAuthenticationConverter(jwtAuthenticationConverter)
                         )
                         .authenticationEntryPoint((request, response, exception) ->
                                 writeProblem(
@@ -68,6 +72,14 @@ public class SecurityConfig {
                     authorize.requestMatchers(HttpMethod.POST,
                                     "/auth/register", "/auth/login", "/auth/refresh",
                                     "/auth/logout").permitAll()
+                            .requestMatchers(HttpMethod.GET, "/admin/users")
+                            .hasAuthority(PermissionCode.USER_READ.name())
+                            .requestMatchers(HttpMethod.POST, "/admin/users")
+                            .hasAuthority(PermissionCode.USER_MANAGE.name())
+                            .requestMatchers(HttpMethod.PATCH, "/admin/users/*/status")
+                            .hasAuthority(PermissionCode.USER_MANAGE.name())
+                            .requestMatchers(HttpMethod.PUT, "/admin/users/*/roles")
+                            .hasAuthority(PermissionCode.USER_MANAGE.name())
                             // Право на профиль проверяет @PreAuthorize на методе сервиса
                             // (T-030); здесь маршрут только требует токен.
                             .requestMatchers("/client/profile").authenticated()
@@ -231,7 +243,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    public JwtAuthenticationConverter jwtAuthenticationConverter() {
+    public JwtAuthenticationConverter jwtAuthenticationConverter(UserAccessTokenState tokenState) {
         JwtGrantedAuthoritiesConverter authoritiesConverter =
                 new JwtGrantedAuthoritiesConverter();
 
@@ -239,7 +251,18 @@ public class SecurityConfig {
         authoritiesConverter.setAuthorityPrefix("");
 
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(authoritiesConverter);
+        converter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            Object claim = jwt.getClaims().get("access_version");
+            if (claim != null && !(claim instanceof Long || claim instanceof Integer)) {
+                throw new InvalidBearerTokenException("Требуется аутентификация.");
+            }
+            long version = claim == null ? 0 : ((Number) claim).longValue();
+            if (tokenState.isRevoked(UUID.fromString(jwt.getClaimAsString("tenant_id")),
+                    UUID.fromString(jwt.getSubject()), version)) {
+                throw new InvalidBearerTokenException("Требуется аутентификация.");
+            }
+            return authoritiesConverter.convert(jwt);
+        });
 
         return converter;
     }

@@ -32,6 +32,11 @@ public enum ErrorCode {
             "Объект изменён другим пользователем. Обновите данные и повторите изменения."),
     ALREADY_EXISTS(HttpStatus.CONFLICT, "Ресурс уже существует",
             "Объект с такими данными уже создан."),
+    USER_SELF_BLOCK_FORBIDDEN(HttpStatus.CONFLICT, "Нельзя заблокировать себя",
+            "Администратор не может заблокировать собственную учётную запись."),
+    USER_SELF_ADMIN_ROLE_REMOVAL_FORBIDDEN(HttpStatus.CONFLICT,
+            "Нельзя снять с себя административную роль",
+            "В собственном наборе ролей необходимо сохранить ADMIN."),
     REQUEST_CLOSED(HttpStatus.CONFLICT, "Заявка закрыта",
             "Операция недоступна для заявки в терминальном статусе."),
     REQUEST_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "Заявка уже назначена",
@@ -63,7 +68,8 @@ public enum ErrorCode {
     private static final Set<ErrorCode> DOMAIN_SPECIFIC = EnumSet.of(VALIDATION_FAILED,
             INVALID_CREDENTIALS, INVALID_TRANSITION, STALE_VERSION, ALREADY_EXISTS,
             REQUEST_CLOSED, REQUEST_ALREADY_ASSIGNED, NO_ELIGIBLE_ASSIGNEE,
-            REQUEST_NOT_DELETED, IDEMPOTENCY_KEY_REUSED);
+            REQUEST_NOT_DELETED, IDEMPOTENCY_KEY_REUSED,
+            USER_SELF_BLOCK_FORBIDDEN, USER_SELF_ADMIN_ROLE_REMOVAL_FORBIDDEN);
 
     private static final Set<ErrorCode> FALLBACK_ONLY = EnumSet.of(CLIENT_ERROR);
 

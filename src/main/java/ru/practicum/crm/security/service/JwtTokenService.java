@@ -5,4 +5,7 @@ import java.util.UUID;
 
 public interface JwtTokenService {
     String createAccessToken(UUID userId, UUID tenantId, Collection<String> permissions);
+
+    String createAccessToken(UUID userId, UUID tenantId, Collection<String> permissions,
+            long accessVersion);
 }

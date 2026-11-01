@@ -37,6 +37,7 @@ import ru.practicum.crm.common.health.HealthController;
 import ru.practicum.crm.security.system.SystemFilterConfig;
 import ru.practicum.crm.tenant.api.TenantActiveChecker;
 import ru.practicum.crm.tenant.api.TenantContext;
+import ru.practicum.crm.user.api.UserAccessTokenState;
 
 @WebMvcTest(controllers = HealthController.class)
 @TestPropertySource(properties = {
@@ -66,6 +67,9 @@ class SecurityAuthorizationRulesTest {
 
     @MockBean
     private JwtDecoder jwtDecoder;
+
+    @MockBean
+    private UserAccessTokenState tokenState;
 
     private static final UUID TENANT_ID =
             UUID.fromString("11111111-1111-1111-1111-111111111111");

@@ -20,6 +20,13 @@ public interface RefreshTokenRepository extends Repository<RefreshToken, UUID> {
 
     Optional<RefreshToken> findByTokenHash(String tokenHash);
 
+    @Query(
+            """
+            SELECT token.userId AS userId, token.tenantId AS tenantId
+            FROM RefreshToken token WHERE token.tokenHash = :tokenHash
+            """)
+    Optional<RefreshTokenOwner> findOwnerByTokenHash(@Param("tokenHash") String tokenHash);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select token from RefreshToken token where token.tokenHash = :tokenHash")
     Optional<RefreshToken> findByTokenHashForUpdate(
