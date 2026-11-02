@@ -23,6 +23,7 @@ import ru.practicum.crm.security.domain.RefreshToken;
 import ru.practicum.crm.security.repository.RefreshTokenRepository;
 import ru.practicum.crm.security.service.RefreshTokenRotation;
 import ru.practicum.crm.security.service.RefreshTokenService;
+import ru.practicum.crm.security.service.RefreshTokenSubject;
 
 @Service
 @RequiredArgsConstructor
@@ -37,6 +38,16 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     private final Clock clock;
 
     private final SecureRandom secureRandom = new SecureRandom();
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<RefreshTokenSubject> findSubject(String rawRefreshToken) {
+        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+            return Optional.empty();
+        }
+        return refreshTokenRepository.findOwnerByTokenHash(hash(rawRefreshToken))
+                .map(token -> new RefreshTokenSubject(token.getUserId(), token.getTenantId()));
+    }
 
     @Override
     @Transactional

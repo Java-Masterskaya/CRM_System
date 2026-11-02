@@ -67,6 +67,13 @@ public class JwtConfig {
             String subject = jwt.getSubject();
             Object tenantClaim = jwt.getClaims().get("tenant_id");
             Object permissionsClaim = jwt.getClaims().get("permissions");
+            Object versionClaim = jwt.getClaims().get("access_version");
+
+            if (versionClaim != null && (!(versionClaim instanceof Long
+                    || versionClaim instanceof Integer)
+                    || ((Number) versionClaim).longValue() < 0)) {
+                return invalidClaims();
+            }
 
             if (subject == null
                     || subject.isBlank()

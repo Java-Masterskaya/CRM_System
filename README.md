@@ -15,6 +15,7 @@
 | [docs/SPEC.md](docs/SPEC.md) | Техническая спецификация: архитектура, ключевые решения, соглашения, процесс |
 | [docs/PLAN.md](docs/PLAN.md) | План: карта эпиков, распределение по парам, критический путь (задачи — на доске) |
 | [docs/validation.md](docs/validation.md) | Памятка по валидации входных данных: аннотации, лимиты, сообщения, тесты |
+| [docs/API_T111_TENANT_USER_MANAGEMENT.md](docs/API_T111_TENANT_USER_MANAGEMENT.md) | Управление пользователями арендатора: API, права, идемпотентность и отзыв токенов |
 
 **Задачи:** доска [CRM_System_kanban](https://github.com/orgs/Java-Masterskaya/projects/11).
 

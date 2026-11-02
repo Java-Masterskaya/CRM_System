@@ -29,6 +29,9 @@ public class UserEntity extends TenantScopedEntity {
     @Column(name = "status", nullable = false)
     private UserStatus status;
 
+    @Column(name = "access_token_version", nullable = false)
+    private long accessTokenVersion;
+
     @Column(name = "deleted_at")
     private OffsetDateTime deletedAt;
 
@@ -90,7 +93,19 @@ public class UserEntity extends TenantScopedEntity {
     }
 
     public void setStatus(UserStatus status) {
-        this.status = status;
+        if (status == UserStatus.BLOCKED) {
+            block();
+        } else {
+            this.status = status;
+        }
+    }
+
+    public long getAccessTokenVersion() {
+        return accessTokenVersion;
+    }
+
+    public void revokeAccessTokens() {
+        accessTokenVersion = Math.incrementExact(accessTokenVersion);
     }
 
     public OffsetDateTime getDeletedAt() {
@@ -102,7 +117,10 @@ public class UserEntity extends TenantScopedEntity {
     }
 
     public void block() {
-        this.status = UserStatus.BLOCKED;
+        if (status != UserStatus.BLOCKED) {
+            status = UserStatus.BLOCKED;
+            revokeAccessTokens();
+        }
     }
 
     public void delete() {

@@ -28,6 +28,15 @@ public class JwtTokenServiceImpl implements JwtTokenService {
     @Override
     public String createAccessToken(UUID userId, UUID tenantId,
                                     Collection<String> permissions) {
+        return createAccessToken(userId, tenantId, permissions, 0);
+    }
+
+    @Override
+    public String createAccessToken(UUID userId, UUID tenantId,
+            Collection<String> permissions, long accessVersion) {
+        if (accessVersion < 0) {
+            throw new IllegalArgumentException("Версия доступа не может быть отрицательной");
+        }
         Instant issuedAt = clock.instant();
         Instant expiresAt = issuedAt.plus(properties.accessTtl());
 
@@ -35,6 +44,7 @@ public class JwtTokenServiceImpl implements JwtTokenService {
                 .subject(userId.toString())
                 .claim(CLAIM_TENANT_ID, tenantId.toString())
                 .claim(CLAIM_PERMISSIONS, List.copyOf(permissions))
+                .claim("access_version", accessVersion)
                 .issuedAt(issuedAt)
                 .expiresAt(expiresAt)
                 .build();

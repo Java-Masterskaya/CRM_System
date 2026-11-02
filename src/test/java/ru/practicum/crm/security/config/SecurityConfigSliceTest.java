@@ -40,6 +40,7 @@ import ru.practicum.crm.security.system.SystemSecretProperties;
 import ru.practicum.crm.tenant.api.TenantActiveChecker;
 import ru.practicum.crm.tenant.api.TenantContext;
 import ru.practicum.crm.tenant.api.TenantContextFilter;
+import ru.practicum.crm.user.api.UserAccessTokenState;
 
 @WebMvcTest(controllers = {
         SecurityConfigSliceTest.TestController.class,
@@ -69,6 +70,9 @@ class SecurityConfigSliceTest {
 
     @MockBean
     private JwtDecoder jwtDecoder;
+
+    @MockBean
+    private UserAccessTokenState tokenState;
 
     @Autowired
     private BearerTokenResolver resolver;
