@@ -6,6 +6,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -274,6 +275,16 @@ public class Request extends TenantScopedEntity {
             resolutionOverdue = resolutionOverdue && !resolutionReopened;
         }
         return new ReopenedDeadlines(firstResponseReopened, resolutionReopened);
+    }
+
+    /**
+     * Сколько заявка ждет назначения исполнителя: от создания до {@code now}. {@code null}, если
+     * исполнитель уже есть - тогда ждать не чего. */
+    public Duration assignmentWait(Instant now) {
+        if (assigneeId != null || getCreatedAt() == null || now == null) {
+            return null;
+        }
+        return Duration.between(getCreatedAt().toInstant(), now);
     }
 
     @Override

@@ -3,6 +3,7 @@ package ru.practicum.crm.request.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -48,6 +49,7 @@ import ru.practicum.testsupport.AuthTestFixture;
 class RequestRegistryIntegrationTest extends BaseIntegrationTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(RequestRegistryIntegrationTest.class);
+    private static final String MIGRATION_VERSION = "202610291846";
     private static final String REGISTRY = "/admin/requests";
     private static final String PASSWORD = "StrongPassword1!";
     private static final String OPERATOR = "operator@example.com";
@@ -66,6 +68,7 @@ class RequestRegistryIntegrationTest extends BaseIntegrationTest {
 
     private AuthTestFixture.TestTenant tenant;
     private AuthTestFixture.TestTenant other;
+    private UUID operatorId;
     private String operatorToken;
     private UUID export;
     private UUID removal;
@@ -75,11 +78,24 @@ class RequestRegistryIntegrationTest extends BaseIntegrationTest {
     void setUp() throws Exception {
         tenant = insertTenant();
         other = insertTenant();
-        insertUser(tenant, OPERATOR, "OPERATOR");
+        operatorId = insertUser(tenant, OPERATOR, "OPERATOR");
         operatorToken = login(tenant, OPERATOR);
         export = insertType(tenant, "Выгрузка данных");
         removal = insertType(tenant, "Удаление данных");
         now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+    }
+
+    @Test
+    void migrate_whenApplied_createsUnassignedIndex() {
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT success FROM flyway_schema_history WHERE version = ?",
+                Boolean.class, MIGRATION_VERSION
+        )).isTrue();
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT indexname FROM pg_indexes "
+                        + "WHERE schemaname = current_schema() AND tablename = 'requests' "
+                        + "AND indexname = 'idx_requests_tenant_unassigned'", String.class
+        )).containsExactly("idx_requests_tenant_unassigned");
     }
 
     /**
@@ -134,6 +150,8 @@ class RequestRegistryIntegrationTest extends BaseIntegrationTest {
                 .containsExactly(id(newLow));
         assertThat(ids("createdFrom", daysAgo(5).toString(), "createdTo", daysAgo(2).toString()))
                 .containsExactly(id(inProgressHigh));
+        assertThat(ids("unassigned", "true")).as("без исполнителя - незавершенные")
+                .containsExactlyInAnyOrder(id(newLow), id(inProgressHigh), id(onHoldNormal));
     }
 
     /** DoD: фильтры сочетаются — заявка должна подойти под каждый. */
@@ -148,6 +166,7 @@ class RequestRegistryIntegrationTest extends BaseIntegrationTest {
         assertThat(ids("typeId", export.toString(), "priority", "LOW",
                 "createdTo", daysAgo(2).toString())).containsExactly(id(newLow));
         assertThat(ids("status", "NEW", "priority", "HIGH")).isEmpty();
+        assertThat(ids("unassigned", "true", "priority", "LOW")).containsExactly(id(newLow));
     }
 
     /**
@@ -179,6 +198,54 @@ class RequestRegistryIntegrationTest extends BaseIntegrationTest {
                 .containsEntry(id(doneLate), false);
     }
 
+    /**
+     * DoD: выборка 'без сполнителя' - только незавершенные без assignee, сначала дальше всех
+     * ожидающие. Назначенные, завершенные, удаленные и чужие в нее не входят.*/
+    @Test
+    void list_unassigned_returnsOpenUnassignedLongestWaitFirstWithWaitDuration() throws Exception {
+        final UUID oldest = insertRequest(tenant, "NEW", "LOW", export, daysAgo(5));
+        final UUID contacted = insertRequest(tenant, "CONTACTED", "NORMAL", export, daysAgo(4));
+        final UUID onHold = insertRequest(tenant, "ON_HOLD", "HIGH", export, daysAgo(3));
+        final UUID newest = insertRequest(tenant, "IN_PROGRESS", "URGENT", export, daysAgo(1));
+        insertAssigned(tenant, "NEW", daysAgo(2));
+        insertRequest(tenant, "DONE", "NORMAL", export, daysAgo(9));
+        insertRequest(tenant, "REJECTED", "NORMAL", export, daysAgo(8));
+        insertRequest(tenant, "CANCELLED", "NORMAL", export, daysAgo(7));
+        UUID deleted = insertRequest(tenant, "NEW", "NORMAL", export, daysAgo(6));
+        jdbcTemplate.update("UPDATE requests SET deleted = TRUE WHERE id = ?", deleted);
+        insertRequest(other, "NEW", "LOW", null, daysAgo(10));
+
+        assertThat(ids("unassigned", "true")).containsExactly(id(oldest), id(contacted),
+                id(onHold), id(newest));
+        assertThat(ids("unassigned", "false")).as("unassigned=false - фильтр не задан").hasSize(8);
+
+        Map<String, Duration> waits = assignmentWaits("unassigned", "true");
+        assertThat(waits.get(id(oldest))).isCloseTo(Duration.ofDays(5), Duration.ofMinutes(1));
+        assertThat(waits.get(id(newest))).isCloseTo(Duration.ofDays(1), Duration.ofMinutes(1));
+        assertThat(waits.get(id(oldest))).isGreaterThan(waits.get(id(contacted)))
+                .isGreaterThan(waits.get(id(newest)));
+    }
+
+    /**
+     * DoD: после назначения заявка исчезает из выборки при следующем запросе.*/
+    @Test
+    void list_unassigned_afterAssignment_requestLeavesTheSample() throws Exception {
+        UUID assignedAway = insertRequest(tenant, "NEW", "NORMAL", export, daysAgo(2));
+        UUID stillWaiting = insertRequest(tenant, "CONTACTED", "NORMAL", removal, daysAgo(1));
+
+        assertThat(ids("unassigned", "true")).containsExactly(id(assignedAway), id(stillWaiting));
+
+        mockMvc.perform(put("/admin/requests/{id}/assignee", assignedAway)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + operatorToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(
+                        Map.of("assigneeId", operatorId, "version", 0)
+                )))
+                .andExpect(status().isOk());
+
+        assertThat(ids("unassigned", "true")).containsExactly(id(stillWaiting));
+    }
+
     /** DoD: только заявки текущего арендатора — при любом сочетании фильтров. */
     @Test
     void list_anyFilterCombination_neverShowsOtherTenantRequests() throws Exception {
@@ -199,8 +266,9 @@ class RequestRegistryIntegrationTest extends BaseIntegrationTest {
                 new String[] {"priority", "URGENT"},
                 new String[] {"createdFrom", from},
                 new String[] {"overdue", "true"},
+                new String[] {"unassigned", "true"},
                 new String[] {"status", "NEW", "typeId", export.toString(), "priority", "URGENT",
-                    "createdFrom", from, "overdue", "true"});
+                    "createdFrom", from, "overdue", "true", "unassigned", "true"});
         for (String[] filters : combinations) {
             assertThat(ids(filters)).as(String.join(" ", filters)).containsExactly(id(own));
         }
@@ -229,6 +297,7 @@ class RequestRegistryIntegrationTest extends BaseIntegrationTest {
         "priority, MEGA",
         "createdFrom, вчера",
         "overdue, maybe",
+        "unassigned, maybe",
         "sort, subject",
         "sort, 'createdAt,up'",
         "size, 101",
@@ -288,6 +357,11 @@ class RequestRegistryIntegrationTest extends BaseIntegrationTest {
                 + " SELECT gen_random_uuid(), ?, 'Тема', 'Описание', 'DONE', 'LOW', 1, ?,"
                 + " gen_random_uuid(), ?::timestamptz, now() FROM generate_series(1, 20000)",
                 tenant.id(), removal, daysAgo(30).toString());
+        jdbcTemplate.update("INSERT INTO requests (id, tenant_id, subject, description, status, "
+                + "priority, priority_rank, author_id, assignee_id, assigned_at, created_at, "
+                + "updated_at) SELECT gen_random_uuid(), ?, 'Тема', 'Описание', 'IN_PROGRESS', "
+                + "'NORMAL', 2, gen_random_uuid(), gen_random_uuid(), now(), ?::timestamptz, now() "
+                + "FROM generate_series(1, 5000)", tenant.id(), daysAgo(10).toString());
         for (int i = 0; i < 5; i++) {
             UUID fresh = insertRequest(tenant, "NEW", "URGENT", export, now.minusSeconds(60));
             jdbcTemplate.update("UPDATE requests SET first_response_overdue = TRUE WHERE id = ?",
@@ -304,10 +378,16 @@ class RequestRegistryIntegrationTest extends BaseIntegrationTest {
                 "created_at >= '" + daysAgo(1) + "'::timestamptz", "idx_requests_tenant_created_at",
                 "((status = 'NEW' AND first_response_overdue) OR (status IN ('NEW', 'CONTACTED',"
                         + " 'IN_PROGRESS', 'ON_HOLD') AND resolution_overdue))",
-                "idx_requests_tenant_overdue");
+                "idx_requests_tenant_overdue",
+                "assignee_id IS NULL AND status IN ('NEW', 'CONTACTED', 'IN_PROGRESS', 'ON_HOLD')",
+                "idx_requests_tenant_unassigned");
+        String unassignedOrder = " ORDER BY created_at, id LIMIT 20";
+
         filters.forEach((condition, index) -> {
+            String queryOrder = index.equals("idx_requests_tenant_unassigned")
+                    ? unassignedOrder : order;
             String plan = plan("SELECT * FROM requests WHERE " + tenantOnly + " AND " + condition
-                    + order);
+                    + queryOrder);
             LOG.info("План реестра, условие {}:\n{}", condition, plan);
             assertThat(plan).as(condition).contains(index).doesNotContain("Seq Scan");
         });
@@ -412,11 +492,39 @@ class RequestRegistryIntegrationTest extends BaseIntegrationTest {
         return created;
     }
 
-    private void insertUser(AuthTestFixture.TestTenant tenantOfUser, String email,
+    private UUID insertUser(AuthTestFixture.TestTenant tenantOfUser, String email,
             String roleCode) {
         UUID id = authTestFixture.createUser(tenantOfUser, email, PASSWORD).id();
         jdbcTemplate.update("INSERT INTO user_roles (tenant_id, user_id, role_id)"
                 + " SELECT tenant_id, ?, id FROM roles WHERE tenant_id = ? AND code = ?",
                 id, tenantOfUser.id(), roleCode);
+        return id;
+    }
+
+    private Map<String, Duration> assignmentWaits(String... params) throws Exception {
+        Map<String, Duration> waits = new HashMap<>();
+        for (JsonNode item : content(params)) {
+            JsonNode wait = item.get("assignmentWait");
+            if (wait != null && !wait.isNull()) {
+                Duration duration = wait.isNumber()
+                        ? Duration.ofSeconds(wait.asLong())
+                        : Duration.parse(wait.asText());
+                waits.put(item.get("id").asText(), duration);
+            }
+        }
+
+        return waits;
+    }
+
+    private UUID insertAssigned(AuthTestFixture.TestTenant tenantOfRequest, String status,
+                                Instant createdAt) {
+        UUID id = UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO requests (id, tenant_id, subject, description, status,"
+                + " priority, priority_rank, author_id, assignee_id, assigned_at, created_at,"
+                + " updated_at) VALUES (?, ?, 'Выгрузка за квартал', 'Нужен отчёт', ?, 'NORMAL', 2,"
+                + " ?, ?, ?::timestamptz,"
+                + " ?::timestamptz, now())", id, tenantOfRequest.id(), status, UUID.randomUUID(),
+                UUID.randomUUID(), createdAt.toString(), createdAt.toString());
+        return id;
     }
 }

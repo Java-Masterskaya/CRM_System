@@ -1,5 +1,8 @@
 package ru.practicum.crm.request.api.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -12,6 +15,8 @@ import ru.practicum.crm.request.domain.RequestStatus;
  *
  * @param overdue просрочена сейчас — тот же признак, по которому работает фильтр «просроченные»
  * @param version версия заявки: с ней можно сразу менять статус из реестра (T-044, T-045)
+ * @param assignmentWait сколько заявка ждет исполнителя (T-053). Нет поля, если исполнитель
+ *           уже есть
  */
 public record RequestRegistryItem(
         UUID id,
@@ -25,6 +30,9 @@ public record RequestRegistryItem(
         Instant firstResponseDueAt,
         Instant resolutionDueAt,
         boolean overdue,
-        long version
+        long version,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        @JsonFormat(shape = JsonFormat.Shape.STRING)
+        Duration assignmentWait
 ) {
 }

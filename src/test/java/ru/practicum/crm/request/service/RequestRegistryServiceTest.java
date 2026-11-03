@@ -8,7 +8,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -41,13 +45,17 @@ import ru.practicum.crm.tenant.api.TenantContext;
 class RequestRegistryServiceTest {
 
     private static final UUID TENANT_ID = UUID.randomUUID();
+    private static final Instant NOW = Instant.parse("2026-10-29T12:00:00Z");
     private static final RequestRegistryFilter NO_FILTERS =
-            new RequestRegistryFilter(null, null, null, null, null, false);
+            new RequestRegistryFilter(null, null, null, null, null, false, false);
+    private static final RequestRegistryFilter UNASSIGNED =
+            new RequestRegistryFilter(null, null, null, null, null, false, true);
 
     private final RequestRepository requests = mock(RequestRepository.class);
     private final TenantContext tenantContext = mock(TenantContext.class);
+    private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
     private final RequestRegistryService service =
-            new RequestRegistryService(requests, tenantContext);
+            new RequestRegistryService(requests, tenantContext, clock);
 
     @BeforeEach
     void setUp() {
@@ -62,7 +70,7 @@ class RequestRegistryServiceTest {
 
         for (Instant end : List.of(moment, moment.minusSeconds(1))) {
             RequestRegistryFilter filter =
-                    new RequestRegistryFilter(null, null, null, moment, end, false);
+                    new RequestRegistryFilter(null, null, null, moment, end, false, false);
 
             assertThatThrownBy(() -> service.list(filter, PageRequest.of(0, 20)))
                     .isInstanceOfSatisfying(ApiException.class, ex -> {
@@ -137,14 +145,37 @@ class RequestRegistryServiceTest {
         assertThat(first.authorId()).isEqualTo(open.getAuthorId());
         assertThat(first.version()).isEqualTo(7);
         assertThat(first.overdue()).isTrue();
+        assertThat(first.assignmentWait()).isEqualTo(Duration.ofHours(6));
         assertThat(page.content().get(1).overdue()).isFalse();
+        assertThat(page.content().get(1).assignmentWait()).isEqualTo(Duration.ofHours(6));
+    }
+
+    /**
+     * Выборка 'Без исполнителя' всегда по времени ожидания: дольше всех ожидающая - первая, даже
+     * если в запросе просили другой порядок.
+     */
+    @Test
+    void list_whenUnassigned_sortsLongestWaitingFirst() {
+        Pageable fromApi = PageRequests.toPageable(2, 30, List.of("priority,desc"),
+                RequestRegistryService.SORT_FIELDS.keySet());
+
+        service.list(UNASSIGNED, fromApi);
+
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(requests).findAll(any(), pageable.capture());
+        assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(30);
+        assertThat(pageable.getValue().getSort()).containsExactly(
+                Sort.Order.asc("createdAt"),
+                Sort.Order.asc("id")
+        );
     }
 
     /** Страница больше допустимой не уходит в базу, даже если её передали в обход API. */
     @Test
     void list_whenPageIsTooLarge_isRejectedBeforeQuery() {
         assertThatThrownBy(() -> service.list(new RequestRegistryFilter(Set.of(), null, null,
-                null, null, false), PageRequest.of(0, PageRequests.MAX_SIZE + 1)))
+                null, null, false, false), PageRequest.of(0, PageRequests.MAX_SIZE + 1)))
                 .isInstanceOf(ApiException.class);
 
         verifyNoInteractions(requests);
@@ -155,6 +186,8 @@ class RequestRegistryServiceTest {
                 "Нужен отчёт", status);
         ReflectionTestUtils.setField(request, "id", UUID.randomUUID());
         ReflectionTestUtils.setField(request, "version", 7L);
+        ReflectionTestUtils.setField(request, "createdAt",
+                OffsetDateTime.ofInstant(NOW.minus(Duration.ofHours(6)), ZoneOffset.UTC));
         request.setTypeId(UUID.randomUUID());
         request.setPriority(priority);
         return request;

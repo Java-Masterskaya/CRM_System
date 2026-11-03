@@ -1,6 +1,7 @@
 package ru.practicum.crm.request.service;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import org.springframework.data.domain.Page;
@@ -46,7 +47,16 @@ public class RequestRegistryService {
     /** Порядок, если клиент его не задал: сначала новые заявки. */
     public static final String DEFAULT_SORT = "createdAt,desc";
 
+    /**
+     * Порядок выборки "без исполнителя" (T-053): дольше всех ожидающая - первая. Совпадает с
+     * индексом {@code idx_requests_tenant_unassigned}. */
+    static final Sort UNASSIGNED_ORDER = Sort.by(
+            Sort.Order.asc("createdAt"),
+            Sort.Order.asc(PageRequests.TIE_BREAKER_FIELD)
+    );
+
     private final RequestRepository requests;
+    private final Clock clock;
 
     @SuppressFBWarnings(
             value = "EI_EXPOSE_REP2",
@@ -54,8 +64,10 @@ public class RequestRegistryService {
                     + "SpotBugs считает его изменяемым из-за метода setTenantId")
     private final TenantContext tenantContext;
 
-    public RequestRegistryService(RequestRepository requests, TenantContext tenantContext) {
+    public RequestRegistryService(RequestRepository requests, TenantContext tenantContext,
+                                  Clock clock) {
         this.requests = requests;
+        this.clock = clock;
         this.tenantContext = tenantContext;
     }
 
@@ -77,9 +89,13 @@ public class RequestRegistryService {
                     List.of(ValidationError.ofParameter("createdTo",
                             "должно быть позже createdFrom")));
         }
-        Page<Request> page = requests.findAll(specificationOf(filter),
-                withEntityFields(PageRequests.requireBounded(pageable)));
-        return PageResponse.of(page.map(RequestListItems::of));
+        Pageable bounded = withEntityFields(PageRequests.requireBounded(pageable));
+        if (filter.unassignedOnly()) {
+            bounded = PageRequest.of(bounded.getPageNumber(), bounded.getPageSize(),
+                    UNASSIGNED_ORDER);
+        }
+        Page<Request> page = requests.findAll(specificationOf(filter), bounded);
+        return PageResponse.of(page.map(request -> RequestListItems.of(request, clock.instant())));
     }
 
     /** Арендатор — всегда; остальные условия — только заданные. */
@@ -105,6 +121,10 @@ public class RequestRegistryService {
         }
         if (filter.overdueOnly()) {
             specification = specification.and(RequestSpecifications.overdue());
+        }
+        if (filter.unassignedOnly()) {
+            specification = specification.and(RequestSpecifications.unassigned())
+                    .and(RequestSpecifications.notFinished());
         }
         return specification;
     }

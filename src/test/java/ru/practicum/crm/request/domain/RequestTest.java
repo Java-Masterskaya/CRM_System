@@ -3,7 +3,10 @@ package ru.practicum.crm.request.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -11,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.test.util.ReflectionTestUtils;
 import ru.practicum.crm.common.model.RequestPriority;
 
 class RequestTest {
@@ -190,6 +194,27 @@ class RequestTest {
         assertThat(RequestStatus.CONTACTED.isTerminal()).isFalse();
         assertThat(RequestStatus.IN_PROGRESS.isTerminal()).isFalse();
         assertThat(RequestStatus.ON_HOLD.isTerminal()).isFalse();
+    }
+
+    @Test
+    void assignmentWait_whenUnassigned_isTimeSinceCreation() {
+        Instant created = Instant.parse("2026-10-27T10:00:00Z");
+        Instant now = Instant.parse("2026-10-29T16:00:00Z");
+        ReflectionTestUtils.setField(request, "createdAt",
+                OffsetDateTime.ofInstant(created, ZoneOffset.UTC));
+
+        assertThat(request.assignmentWait(now)).isEqualTo(Duration.ofHours(54));
+    }
+
+    @Test
+    void assignmentWait_whenAssigned_isNull() {
+        Instant created = Instant.parse("2026-10-27T10:00:00Z");
+        Instant now = Instant.parse("2026-10-29T16:00:00Z");
+        ReflectionTestUtils.setField(request, "createdAt",
+                OffsetDateTime.ofInstant(created, ZoneOffset.UTC));
+
+        request.changeAssignee(UUID.randomUUID(), Instant.parse("2026-10-27T10:00:00Z"));
+        assertThat(request.assignmentWait(now)).isNull();
     }
 
     @Test
